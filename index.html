@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DJ Radio Webapp</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app">
+      <!-- Top Section: DJ Controls -->
+      <div class="dj-section">
+        <!-- Player A (Left) -->
+        <div class="player-deck" id="player-left">
+          <h3>Player A</h3>
+          <audio id="audio-left" preload="metadata"></audio>
+          <div class="track-info">
+            <div class="track-title" id="track-title-left">No Track Loaded</div>
+            <div class="track-artist" id="track-artist-left">-</div>
+          </div>
+                      <div class="player-controls">
+              <button class="restart-btn" data-player="A"><span class="material-icons">skip_previous</span></button>
+              <button class="play-pause-btn" data-player="A"><span class="material-icons">play_arrow</span></button>
+              <button class="eject-btn" data-player="A"><span class="material-icons">eject</span></button>
+            </div>
+          <div class="progress-bar" id="progress-bar-left">
+            <div class="progress" id="progress-left"></div>
+          </div>
+          <div class="volume-control">
+            <input type="range" min="0" max="100" value="80" id="volume-left">
+          </div>
+        </div>
+
+        <!-- Center Controls -->
+        <div class="center-controls">
+          <!-- Login Form Overlay -->
+          <div class="navidrome-login" id="navidrome-login">
+            <div class="login-form">
+              <h3>Navidrome Login</h3>
+              <input type="text" id="navidrome-server" placeholder="Server URL" value="https://musik.radio-endstation.de">
+              <input type="text" id="navidrome-username" placeholder="Username">
+              <input type="password" id="navidrome-password" placeholder="Password">
+              <button type="button" id="navidrome-login-btn">Login</button>
+            </div>
+          </div>
+          
+          <!-- DJ Controls (shown after login) -->
+          <div class="dj-controls" id="dj-controls" style="display: none;">
+            <div class="mic-controls">
+              <button class="broadcast-btn" id="broadcast-toggle"><span class="material-icons">radio</span> Broadcast</button>
+              <button class="mic-btn" id="mic-toggle"><span class="material-icons">mic</span> MIKROFON</button>
+            </div>
+            <div class="crossfader-container">
+              <label>Crossfader</label>
+              <input type="range" min="0" max="100" value="50" id="crossfader" class="crossfader">
+            </div>
+          </div>
+        </div>
+
+        <!-- Player B (Right) -->
+        <div class="player-deck" id="player-right">
+          <h3>Player B</h3>
+          <audio id="audio-right" preload="metadata"></audio>
+          <div class="track-info">
+            <div class="track-title" id="track-title-right">No Track Loaded</div>
+            <div class="track-artist" id="track-artist-right">-</div>
+          </div>
+          <div class="player-controls">
+            <button class="play-pause-btn" id="play-pause-right"><span class="material-icons">play_arrow</span></button>
+            <button class="eject-btn" id="eject-right"><span class="material-icons">eject</span></button>
+            <button class="restart-btn" id="restart-right"><span class="material-icons">skip_previous</span></button>
+          </div>
+          <div class="progress-bar" id="progress-bar-right">
+            <div class="progress" id="progress-right"></div>
+          </div>
+          <div class="volume-control">
+            <input type="range" min="0" max="100" value="80" id="volume-right">
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Section: Music Library -->
+      <div class="music-library">
+        <div class="tabs">
+          <button class="tab active" data-tab="search">Search</button>
+          <button class="tab" data-tab="songs">Songs</button>
+          <button class="tab" data-tab="albums">Albums</button>
+          <button class="tab" data-tab="artists">Artists</button>
+          
+          <!-- Search Container in Tab Bar -->
+          <div class="search-container" id="search-container" style="display: none;">
+            <input type="text" id="search-input" placeholder="Search music...">
+            <button id="search-btn"><span class="material-icons">search</span></button>
+          </div>
+        </div>
+        
+        <!-- Search Tab -->
+        <div class="tab-content active" id="tab-search">
+          <div class="content-main">
+            <!-- Search Results -->
+            <div class="search-results" id="search-results">
+              <div class="no-results">Enter search term to find music</div>
+            </div>
+          </div>
+          <div class="queue-panel">
+            <div class="queue-header">
+              <h3>Queue</h3>
+              <div class="auto-queue-controls">
+                <button class="auto-queue-btn" id="auto-queue-search">Auto A</button>
+                <button class="auto-queue-btn" id="auto-queue-search-b">Auto B</button>
+              </div>
+            </div>
+            <div class="queue-items" id="queue-list"></div>
+          </div>
+        </div>
+              
+                      <!-- Songs Tab -->
+        <div class="tab-content" id="tab-songs">
+          <div class="content-main">
+            <div class="songs-list" id="songs-list">
+              <div class="loading">Loading songs...</div>
+            </div>
+          </div>
+          <div class="queue-panel">
+            <div class="queue-header">
+              <h3>Queue</h3>
+              <div class="auto-queue-controls">
+                <button class="auto-queue-btn" id="auto-queue-songs">Auto A</button>
+                <button class="auto-queue-btn" id="auto-queue-songs-b">Auto B</button>
+              </div>
+            </div>
+            <div class="queue-items" id="queue-list-songs"></div>
+          </div>
+        </div>
+
+        <!-- Albums Tab -->
+        <div class="tab-content" id="tab-albums">
+          <div class="content-main">
+            <div class="albums-grid" id="albums-grid">
+              <div class="loading">Loading albums...</div>
+            </div>
+          </div>
+          <div class="queue-panel">
+            <div class="queue-header">
+              <h3>Queue</h3>
+              <div class="auto-queue-controls">
+                <button class="auto-queue-btn" id="auto-queue-albums">Auto A</button>
+                <button class="auto-queue-btn" id="auto-queue-albums-b">Auto B</button>
+              </div>
+            </div>
+            <div class="queue-items" id="queue-list-albums"></div>
+          </div>
+        </div>
+
+        <!-- Artists Tab -->
+        <div class="tab-content" id="tab-artists">
+          <div class="content-main">
+            <div class="artists-list" id="artists-list">
+              <div class="loading">Loading artists...</div>
+            </div>
+          </div>
+          <div class="queue-panel">
+            <div class="queue-header">
+              <h3>Queue</h3>
+              <div class="auto-queue-controls">
+                <button class="auto-queue-btn" id="auto-queue-artists">Auto A</button>
+                <button class="auto-queue-btn" id="auto-queue-artists-b">Auto B</button>
+              </div>
+            </div>
+            <div class="queue-items" id="queue-list-artists"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
