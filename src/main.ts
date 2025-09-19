@@ -1,7 +1,307 @@
 ﻿import "./style.css";
 import { NavidromeClient, type NavidromeSong, type NavidromeAlbum, type NavidromeArtist } from "./navidrome";
+import WaveSurfer from 'wavesurfer.js';
 
 console.log("DJ Radio Webapp loaded!");
+
+// Player Deck Fragment Template
+function createPlayerDeckHTML(side: 'left' | 'right'): string {
+  const playerLetter = side === 'left' ? 'A' : 'B';
+  
+  return `
+    <div class="player-header">
+      <h3>Player ${playerLetter}</h3>
+      <audio id="audio-${side}" preload="metadata"></audio>
+    </div>
+    
+    <div class="player-main">
+      <!-- Album Cover -->
+      <div class="album-cover" id="album-cover-${side}">
+        <div class="no-cover">
+          <span class="material-icons">music_note</span>
+        </div>
+      </div>
+      
+      <!-- Track Info & Controls -->
+      <div class="player-content">
+        <div class="track-info">
+          <div class="track-title" id="track-title-${side}">No Track Loaded</div>
+          <div class="track-artist" id="track-artist-${side}">-</div>
+        </div>
+        
+        <!-- Transport Controls -->
+        <div class="transport-controls">
+          <button class="play-pause-btn" id="play-pause-${side}" title="Play/Pause">
+            <span class="material-icons">play_arrow</span>
+          </button>
+          <button class="restart-btn" id="restart-${side}" title="Restart">
+            <span class="material-icons">skip_previous</span>
+          </button>
+          <button class="eject-btn" id="eject-${side}" title="Eject">
+            <span class="material-icons">eject</span>
+          </button>
+        </div>
+        
+        <!-- Rating Display -->
+        <div class="player-rating" id="player-rating-${side}"></div>
+        
+        <!-- Progress & Time Display -->
+        <div class="progress-section">
+          <div class="time-display" id="time-display-${side}">0:00 / 0:00</div>
+          <div class="progress-bar" id="progress-bar-${side}">
+            <div class="waveform" id="waveform-${side}"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Volume Control (Portrait: Right Side) -->
+      <div class="volume-section">
+        <div class="volume-control">
+          <input type="range" min="0" max="100" value="80" id="volume-${side}" orient="vertical">
+          <div class="volume-label">VOL</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Initialize Player Decks
+function initializePlayerDecks() {
+  const playerLeft = document.getElementById('player-left');
+  const playerRight = document.getElementById('player-right');
+  
+  if (playerLeft) {
+    playerLeft.innerHTML = createPlayerDeckHTML('left');
+  }
+  
+  if (playerRight) {
+    playerRight.innerHTML = createPlayerDeckHTML('right');
+  }
+  
+  console.log('Player decks initialized with professional layout');
+}
+
+// Update Album Cover Function
+function updateAlbumCover(side: 'left' | 'right', song: NavidromeSong) {
+  const albumCoverElement = document.getElementById(`album-cover-${side}`);
+  console.log(`🎨 Updating album cover for ${side} player:`, {
+    element: albumCoverElement,
+    song: song.title,
+    coverArt: song.coverArt,
+    navidromeClient: !!navidromeClient
+  });
+  
+  if (!albumCoverElement) {
+    console.error(`❌ Album cover element not found: album-cover-${side}`);
+    return;
+  }
+  
+  if (!navidromeClient) {
+    console.warn(`❌ Navidrome client not available`);
+    albumCoverElement.innerHTML = `
+      <div class="no-cover">
+        <span class="material-icons">music_note</span>
+      </div>
+    `;
+    return;
+  }
+  
+  if (song.coverArt) {
+    const coverUrl = navidromeClient.getCoverArtUrl(song.coverArt, 90);
+    console.log(`🖼️ Setting cover URL: ${coverUrl}`);
+    
+    const img = document.createElement('img');
+    img.src = coverUrl;
+    img.alt = 'Album Cover';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'cover';
+    
+    // Debug: Check if image loads
+    img.onload = () => {
+      console.log(`✅ Album cover loaded successfully for ${side}`);
+    };
+    img.onerror = (error) => {
+      console.error(`❌ Album cover failed to load for ${side}:`, error);
+      console.error(`Failed URL: ${coverUrl}`);
+      // Fallback to no-cover display
+      albumCoverElement.innerHTML = `
+        <div class="no-cover">
+          <span class="material-icons">music_note</span>
+        </div>
+      `;
+    };
+    
+    albumCoverElement.innerHTML = '';
+    albumCoverElement.appendChild(img);
+  } else {
+    console.log(`❓ No cover art for song: ${song.title}`);
+    albumCoverElement.innerHTML = `
+      <div class="no-cover">
+        <span class="material-icons">music_note</span>
+      </div>
+    `;
+  }
+}
+
+// Update Time Display Function
+function updateTimeDisplay(side: 'left' | 'right', currentTime: number, duration: number) {
+  const timeDisplay = document.getElementById(`time-display-${side}`);
+  if (!timeDisplay) return;
+  
+  const current = formatTime(currentTime);
+  const total = formatTime(duration);
+  timeDisplay.textContent = `${current} / ${total}`;
+}
+
+// Format time helper function
+function formatTime(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+// WaveSurfer instances for both players
+const waveSurfers: { [key in 'left' | 'right']?: WaveSurfer } = {};
+
+// Initialize WaveSurfer for a player
+function initializeWaveSurfer(side: 'left' | 'right'): WaveSurfer {
+  const container = document.getElementById(`waveform-${side}`);
+  if (!container) {
+    throw new Error(`Waveform container not found for ${side} player`);
+  }
+
+  // Destroy existing wavesurfer if it exists
+  if (waveSurfers[side]) {
+    waveSurfers[side]!.destroy();
+  }
+
+  // Create new WaveSurfer instance
+  const wavesurfer = WaveSurfer.create({
+    container: container,
+    waveColor: '#666',
+    progressColor: '#00ff88',
+    cursorColor: '#ffffff',
+    barWidth: 2,
+    barGap: 1,
+    height: 50,
+    normalize: true,
+    backend: 'WebAudio'
+  });
+
+  waveSurfers[side] = wavesurfer;
+  return wavesurfer;
+}
+
+// Reset WaveSurfer for a new track
+function resetWaveform(side: 'left' | 'right') {
+  const wavesurfer = waveSurfers[side];
+  if (wavesurfer) {
+    // Stop playback and reset to beginning
+    wavesurfer.stop();
+    wavesurfer.seekTo(0);
+    console.log(`Waveform reset for ${side} player`);
+  }
+}
+
+// Load audio file into WaveSurfer for a player
+function loadWaveform(side: 'left' | 'right', audioUrl: string) {
+  console.log(`Loading new waveform for ${side} player from: ${audioUrl}`);
+  
+  // Reset existing waveform first
+  resetWaveform(side);
+  
+  // Initialize WaveSurfer if not exists
+  if (!waveSurfers[side]) {
+    initializeWaveSurfer(side);
+  }
+  
+  const wavesurfer = waveSurfers[side]!;
+  
+  // Load the new audio file (this will reset the waveform)
+  wavesurfer.load(audioUrl);
+  
+  // Optional: Add event listeners
+  wavesurfer.on('ready', () => {
+    console.log(`New waveform ready for ${side} player - progress reset to 0`);
+    // Ensure we're at the beginning
+    wavesurfer.seekTo(0);
+  });
+  
+  wavesurfer.on('error', (error) => {
+    console.error(`Waveform error for ${side} player:`, error);
+  });
+}
+
+// Sync WaveSurfer with HTML audio element
+function syncWaveSurferWithAudio(side: 'left' | 'right', audio: HTMLAudioElement) {
+  const wavesurfer = waveSurfers[side];
+  if (!wavesurfer) return;
+  
+  // Flag to prevent sync loops
+  let syncing = false;
+  
+  // Store event handlers to properly remove them later
+  const eventHandlers = {
+    play: () => {
+      if (syncing) return;
+      syncing = true;
+      // Only sync if WaveSurfer is not already playing to avoid loop
+      if (!wavesurfer.isPlaying()) {
+        wavesurfer.play();
+      }
+      syncing = false;
+    },
+    pause: () => {
+      if (syncing) return;
+      syncing = true;
+      // Only sync if WaveSurfer is playing to avoid loop
+      if (wavesurfer.isPlaying()) {
+        wavesurfer.pause();
+      }
+      syncing = false;
+    },
+    seeked: () => {
+      if (syncing) return;
+      const progress = audio.currentTime / audio.duration;
+      wavesurfer.seekTo(progress || 0);
+    },
+    loadstart: () => {
+      resetWaveform(side);
+    }
+  };
+  
+  // Remove any existing listeners first
+  if ((audio as any)._wavesurferHandlers) {
+    const oldHandlers = (audio as any)._wavesurferHandlers;
+    audio.removeEventListener('play', oldHandlers.play);
+    audio.removeEventListener('pause', oldHandlers.pause);
+    audio.removeEventListener('seeked', oldHandlers.seeked);
+    audio.removeEventListener('loadstart', oldHandlers.loadstart);
+  }
+  
+  // Add fresh event listeners
+  audio.addEventListener('play', eventHandlers.play);
+  audio.addEventListener('pause', eventHandlers.pause);
+  audio.addEventListener('seeked', eventHandlers.seeked);
+  audio.addEventListener('loadstart', eventHandlers.loadstart);
+  
+  // Store handlers for later cleanup
+  (audio as any)._wavesurferHandlers = eventHandlers;
+}
+
+// Clean up WaveSurfer sync for a player
+function cleanupWaveSurferSync(side: 'left' | 'right') {
+  const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+  if (audio && (audio as any)._wavesurferHandlers) {
+    const handlers = (audio as any)._wavesurferHandlers;
+    audio.removeEventListener('play', handlers.play);
+    audio.removeEventListener('pause', handlers.pause);
+    audio.removeEventListener('seeked', handlers.seeked);
+    audio.removeEventListener('loadstart', handlers.loadstart);
+    delete (audio as any)._wavesurferHandlers;
+  }
+}
 
 // Navidrome Client (wird später mit echten Credentials initialisiert)
 let navidromeClient: NavidromeClient;
@@ -15,6 +315,9 @@ let autoQueueEnabled = true; // Auto-Queue standardmäßig aktiviert
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("DOM fully loaded and parsed");
+  
+  // Initialize Player Decks
+  initializePlayerDecks();
   
   // Login-Formular initialisieren
   initializeNavidromeLogin();
@@ -310,19 +613,19 @@ function createArtistLinks(song: NavidromeSong): string {
         `<span class="clickable-artist" draggable="false" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}" title="View artist details">${escapeHtml(artist.name)}</span>`
       ).join('<span class="artist-separator"> • </span>');
       
-      return `<div class="track-artist multi-artist">${artistLinks}</div>`;
+      return `<span class="multi-artist">${artistLinks}</span>`;
     }
   } else {
     // Fallback für alte API oder wenn artists Array nicht verfügbar
-    return `<div class="track-artist clickable-artist" draggable="false" data-artist-name="${escapeHtml(song.artist)}" title="View artist details">${escapeHtml(song.artist)}</div>`;
+    return `<span class="clickable-artist" draggable="false" data-artist-name="${escapeHtml(song.artist)}" title="View artist details">${escapeHtml(song.artist)}</span>`;
   }
 }
 function createSongHTMLOneline(song: NavidromeSong): string {
   const duration = formatDuration(song.duration);
-  const coverUrl = song.coverArt && navidromeClient ? navidromeClient.getCoverArtUrl(song.coverArt, 50) : '';
+  const coverUrl = song.coverArt && navidromeClient ? navidromeClient.getCoverArtUrl(song.coverArt, 60) : '';
   
   return `
-    <div class="track-item-oneline" draggable="true" data-song-id="${song.id}" data-type="song">
+    <div class="track-item-oneline" draggable="true" data-song-id="${song.id}" data-cover-art="${song.coverArt || ''}" data-type="song">
       <div class="track-cover">
         ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="no-cover"><span class="material-icons">music_note</span></div>'}
       </div>
@@ -390,12 +693,31 @@ function getCurrentSongId(player: string): string | null {
 
 // Album HTML erstellen
 function createAlbumHTML(album: NavidromeAlbum): string {
-  const coverUrl = album.coverArt && navidromeClient ? navidromeClient.getCoverArtUrl(album.coverArt, 200) : '';
+  const coverUrl = album.coverArt && navidromeClient ? navidromeClient.getCoverArtUrl(album.coverArt, 300) : '';
+  const year = (album as any).year || (album as any).date ? 
+    new Date((album as any).year || (album as any).date).getFullYear() : '';
+  const songCount = album.songCount || 0;
+  
   return `
-    <div class="album-item" data-album-id="${album.id}">
-      <div class="album-cover" style="background-image: url('${coverUrl}')"></div>
-      <div class="album-title">${escapeHtml(album.name)}</div>
-      <div class="album-artist">${escapeHtml(album.artist)}</div>
+    <div class="album-item-modern" draggable="true" data-album-id="${album.id}" data-type="album" data-cover-art="${album.coverArt || ''}">
+      <div class="album-cover-container">
+        <div class="album-cover-modern" style="background-image: url('${coverUrl}')">
+          ${!coverUrl ? '<div class="album-no-cover"><span class="material-icons">album</span></div>' : ''}
+          <div class="album-overlay">
+            <div class="album-play-button">
+              <span class="material-icons">play_arrow</span>
+            </div>
+            <div class="album-actions">
+              <span class="album-song-count">${songCount} tracks</span>
+              ${year ? `<span class="album-year">${year}</span>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="album-info-modern">
+        <div class="album-title-modern" title="${escapeHtml(album.name)}">${escapeHtml(album.name)}</div>
+        <div class="album-artist-modern" title="${escapeHtml(album.artist)}">${escapeHtml(album.artist)}</div>
+      </div>
     </div>
   `;
 }
@@ -403,7 +725,7 @@ function createAlbumHTML(album: NavidromeAlbum): string {
 // Artist HTML erstellen
 function createArtistHTML(artist: NavidromeArtist): string {
   return `
-    <div class="artist-item" data-artist-id="${artist.id}">
+    <div class="artist-item" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}">
       <div class="artist-name">${escapeHtml(artist.name)}</div>
       <div class="artist-info">${artist.albumCount} albums</div>
     </div>
@@ -478,14 +800,16 @@ function displaySearchResults(results: any) {
 // Drag & Drop Listeners hinzufügen
 function addDragListeners(container: Element) {
   const trackItems = container.querySelectorAll('.track-item, .track-item-oneline');
-  console.log(`Adding drag listeners to ${trackItems.length} track items`);
+  const albumItems = container.querySelectorAll('.album-item-modern[draggable="true"]');
+  
+  console.log(`Adding drag listeners to ${trackItems.length} track items and ${albumItems.length} album items`);
   
   trackItems.forEach((item, index) => {
     item.addEventListener('dragstart', (e: Event) => {
       const dragEvent = e as DragEvent;
       const target = e.target as HTMLElement;
       target.classList.add('dragging');
-      console.log(`Drag started for item ${index}, song ID: ${target.dataset.songId}`);
+      console.log(`Drag started for track item ${index}, song ID: ${target.dataset.songId}`);
       
       if (dragEvent.dataTransfer) {
         dragEvent.dataTransfer.setData('text/plain', target.dataset.songId || '');
@@ -496,7 +820,28 @@ function addDragListeners(container: Element) {
     item.addEventListener('dragend', (e) => {
       const target = e.target as HTMLElement;
       target.classList.remove('dragging');
-      console.log('Drag ended');
+      console.log('Drag ended for track item');
+    });
+  });
+  
+  // Album drag functionality
+  albumItems.forEach((item, index) => {
+    item.addEventListener('dragstart', (e: Event) => {
+      const dragEvent = e as DragEvent;
+      const target = e.target as HTMLElement;
+      target.classList.add('dragging');
+      console.log(`Drag started for album item ${index}, album ID: ${target.dataset.albumId}`);
+      
+      if (dragEvent.dataTransfer) {
+        dragEvent.dataTransfer.setData('application/x-album-id', target.dataset.albumId || '');
+        dragEvent.dataTransfer.effectAllowed = 'copy';
+      }
+    });
+    
+    item.addEventListener('dragend', (e) => {
+      const target = e.target as HTMLElement;
+      target.classList.remove('dragging');
+      console.log('Drag ended for album item');
     });
   });
 }
@@ -518,12 +863,15 @@ function addSongClickListeners(container: Element) {
       e.preventDefault();
       e.stopPropagation(); // Verhindert Drag-Start
       console.log(`Artist clicked from song: ${artistName} (ID: ${artistId})`);
+      console.log('Click event details:', { target: e.target, currentTarget: e.currentTarget });
       
       if (artistId) {
         // Wenn wir eine Artist ID haben, verwende diese direkt
-        await showArtistDetails(artistId);
+        console.log(`Calling showArtistDetails with ID: ${artistId} and name: ${artistName}`);
+        await showArtistDetails(artistId, artistName);
       } else if (artistName && navidromeClient) {
         // Fallback: Suche nach Artist by Name
+        console.log(`No artist ID found, searching by name: ${artistName}`);
         try {
           const searchResults = await navidromeClient.search(artistName);
           if (searchResults.artist && searchResults.artist.length > 0) {
@@ -533,6 +881,7 @@ function addSongClickListeners(container: Element) {
             ) || searchResults.artist[0];
             
             if (artist) {
+              console.log(`Found artist through search: ${artist.name} (ID: ${artist.id})`);
               await showArtistDetails(artist.id);
             } else {
               console.error('Artist not found in search results');
@@ -543,6 +892,8 @@ function addSongClickListeners(container: Element) {
         } catch (error) {
           console.error('Error searching for artist:', error);
         }
+      } else {
+        console.error('No artist ID or name found, or navidromeClient not available');
       }
     });
     
@@ -603,7 +954,8 @@ function addSongClickListeners(container: Element) {
 
 // Album Click Listeners hinzufügen
 function addAlbumClickListeners(container: Element) {
-  const albumItems = container.querySelectorAll('.album-item');
+  // Support both modern and legacy album items
+  const albumItems = container.querySelectorAll('.album-item, .album-item-modern');
   console.log(`Adding album click listeners to ${albumItems.length} albums in container:`, container);
   
   albumItems.forEach((item, index) => {
@@ -615,6 +967,16 @@ function addAlbumClickListeners(container: Element) {
     item.parentNode?.replaceChild(clonedItem, item);
     
     clonedItem.addEventListener('click', async (e) => {
+      // Check if clicked on play button - handle differently
+      const target = e.target as HTMLElement;
+      if (target.closest('.album-play-button')) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log(`Album play button clicked: ${albumId}`);
+        // TODO: Add play album functionality
+        return;
+      }
+      
       e.preventDefault();
       e.stopPropagation();
       console.log(`Album clicked: ${albumId} (click event fired)`);
@@ -640,7 +1002,8 @@ function addArtistClickListeners(container: Element) {
   
   artistItems.forEach((item, index) => {
     const artistId = (item as HTMLElement).dataset.artistId;
-    console.log(`Setting up artist ${index}: ID=${artistId}`);
+    const artistName = (item as HTMLElement).dataset.artistName;
+    console.log(`Setting up artist ${index}: ID=${artistId}, Name=${artistName}`);
     
     // Entferne vorherige Listener falls vorhanden
     const clonedItem = item.cloneNode(true);
@@ -649,10 +1012,12 @@ function addArtistClickListeners(container: Element) {
     clonedItem.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      console.log(`Artist clicked: ${artistId} (click event fired)`);
+      console.log(`Artist clicked from search results: ${artistId} (click event fired)`);
+      console.log('Click event details:', { target: e.target, currentTarget: e.currentTarget });
       
       if (artistId) {
-        await showArtistDetails(artistId);
+        console.log(`Calling showArtistDetails with ID: ${artistId} and name: ${artistName}`);
+        await showArtistDetails(artistId, artistName);
       } else {
         console.error('Artist ID not found on clicked element');
       }
@@ -737,15 +1102,47 @@ async function showAlbumSongs(albumId: string) {
 }
 
 // Artist Details anzeigen
-async function showArtistDetails(artistId: string) {
-  if (!navidromeClient) return;
+async function showArtistDetails(artistId: string, artistName?: string) {
+  if (!navidromeClient) {
+    console.error('Navidrome client not available');
+    return;
+  }
   
   try {
-    console.log(`Loading details for artist ${artistId}`);
-    const artist = currentArtists.find(a => a.id === artistId);
+    console.log(`Loading details for artist ${artistId} (name: ${artistName})`);
+    
+    // Versuche zuerst direkt per ID über die API
+    let artist = await navidromeClient.getArtist(artistId);
+    
+    if (!artist) {
+      console.log(`Artist with ID ${artistId} not found via direct API call`);
+      // Fallback: Suche in currentArtists (für cached Artists)
+      const cachedArtist = currentArtists.find(a => a.id === artistId);
+      if (cachedArtist) {
+        artist = cachedArtist;
+      } else if (artistName) {
+        // Letzter Fallback: search by name
+        console.log(`Trying to find artist by name: ${artistName}`);
+        const searchResults = await navidromeClient.search(artistName);
+        if (searchResults.artist && searchResults.artist.length > 0) {
+          artist = searchResults.artist.find((a: any) => 
+            a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
+          ) || searchResults.artist[0];
+        }
+      }
+      
+      if (!artist) {
+        console.error('Artist not found through any method');
+        showError(`Artist not found: ${artistName || artistId}`);
+        return;
+      }
+    }
+    
+    console.log(`Found artist: ${artist.name}`);
+    
     const artistSongs = await navidromeClient.getArtistSongs(artistId);
     const artistOwnAlbums = await navidromeClient.getArtistAlbums(artistId);  // Eigene Alben vom Artist-Endpoint
-    const allAlbumsWithArtist = await navidromeClient.getAllAlbumsWithArtist(artist?.name || '');  // Alle Alben mit Songs des Künstlers
+    const allAlbumsWithArtist = await navidromeClient.getAllAlbumsWithArtist(artist.name);  // Alle Alben mit Songs des Künstlers
     
     console.log('Artist own albums:', artistOwnAlbums.map(a => a.name));
     console.log('All albums with artist:', allAlbumsWithArtist.map(a => `${a.name} by ${a.artist}`));
@@ -1133,17 +1530,16 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
   const ejectBtn = document.getElementById(`eject-${side}`) as HTMLButtonElement;
   const restartBtn = document.getElementById(`restart-${side}`) as HTMLButtonElement;
   const volumeSlider = document.getElementById(`volume-${side}`) as HTMLInputElement;
-  const progressBar = document.getElementById(`progress-${side}`) as HTMLElement;
   const progressContainer = document.getElementById(`progress-bar-${side}`) as HTMLElement;
   const playerDeck = document.getElementById(`player-${side}`) as HTMLElement;
   
   // Audio Event Listeners
   audio.addEventListener('timeupdate', () => {
     if (audio.duration) {
-      const progress = (audio.currentTime / audio.duration) * 100;
-      if (progressBar) {
-        progressBar.style.width = `${progress}%`;
-      }
+      // Zeit-Anzeige aktualisieren
+      updateTimeDisplay(side, audio.currentTime, audio.duration);
+      
+      // WaveSurfer progress is automatically synced
     }
   });
   
@@ -1207,24 +1603,47 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
   
   // Control Button Event Listeners
   playPauseBtn?.addEventListener('click', () => {
-    if (audio.paused) {
-      if (audio.src) {
-        audio.play().catch(e => {
-          console.error(`❌ Play error on Player ${side}:`, e);
-          showError(`Cannot play on Player ${side.toUpperCase()}: ${e.message}`);
-        });
+    const wavesurfer = waveSurfers[side];
+    
+    // Prioritize WaveSurfer if available, disable HTML audio
+    if (wavesurfer) {
+      if (wavesurfer.isPlaying()) {
+        wavesurfer.pause();
         const icon = playPauseBtn.querySelector('.material-icons');
-        if (icon) icon.textContent = 'pause';
-        playPauseBtn.classList.add('playing');
+        if (icon) icon.textContent = 'play_arrow';
+        playPauseBtn.classList.remove('playing');
       } else {
-        console.log(`❓ No track loaded on Player ${side}`);
-        showError(`No track loaded on Player ${side.toUpperCase()}`);
+        try {
+          wavesurfer.play();
+          const icon = playPauseBtn.querySelector('.material-icons');
+          if (icon) icon.textContent = 'pause';
+          playPauseBtn.classList.add('playing');
+        } catch (e) {
+          console.error(`❌ WaveSurfer play error on Player ${side}:`, e);
+          showError(`Cannot play on Player ${side.toUpperCase()}: ${e instanceof Error ? e.message : 'Unknown error'}`);
+        }
       }
     } else {
-      audio.pause();
-      const icon = playPauseBtn.querySelector('.material-icons');
-      if (icon) icon.textContent = 'play_arrow';
-      playPauseBtn.classList.remove('playing');
+      // Fallback to HTML audio if WaveSurfer not available
+      if (audio.paused) {
+        if (audio.src) {
+          audio.play().catch(e => {
+            console.error(`❌ Play error on Player ${side}:`, e);
+            showError(`Cannot play on Player ${side.toUpperCase()}: ${e.message}`);
+          });
+          const icon = playPauseBtn.querySelector('.material-icons');
+          if (icon) icon.textContent = 'pause';
+          playPauseBtn.classList.add('playing');
+        } else {
+          console.log(`❓ No track loaded on Player ${side}`);
+          showError(`No track loaded on Player ${side.toUpperCase()}`);
+        }
+      } else {
+        audio.pause();
+        const icon = playPauseBtn.querySelector('.material-icons');
+        if (icon) icon.textContent = 'play_arrow';
+        playPauseBtn.classList.remove('playing');
+      }
     }
   });
   
@@ -1309,7 +1728,10 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   // Stream URL von Navidrome
   const streamUrl = navidromeClient.getStreamUrl(song.id);
   
-  // Vorherigen Track stoppen
+  // Reset WaveSurfer first (bevor neuer Track geladen wird)
+  resetWaveform(side);
+  
+  // Vorherigen Track stoppen und zurücksetzen
   audio.pause();
   audio.currentTime = 0;
   
@@ -1323,6 +1745,20 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   if (artistElement) {
     artistElement.textContent = `${song.artist} - ${song.album}`;
   }
+  
+  // Album Cover aktualisieren
+  updateAlbumCover(side, song);
+  
+  // Play-Button zurücksetzen (Track ist gestoppt)
+  const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
+  const icon = playPauseBtn?.querySelector('.material-icons');
+  if (icon) icon.textContent = 'play_arrow';
+  
+  // Load new waveform using WaveSurfer (lädt automatisch neue Waveform)
+  loadWaveform(side, audio.src);
+  
+  // Note: We don't sync WaveSurfer with audio to avoid double playback
+  // WaveSurfer handles playback directly via play button
   
   // Song ID für Rating-System speichern
   audio.dataset.songId = song.id;
@@ -1477,6 +1913,7 @@ function findSongById(songId: string): NavidromeSong | null {
         const titleElement = element.querySelector('.track-title');
         const artistElement = element.querySelector('.track-artist');
         const albumElement = element.querySelector('.track-album');
+        const coverArt = element.dataset.coverArt || undefined;
         
         if (titleElement && artistElement && albumElement) {
           return {
@@ -1487,7 +1924,8 @@ function findSongById(songId: string): NavidromeSong | null {
             duration: 0,
             size: 0,
             suffix: 'mp3',
-            bitRate: 0
+            bitRate: 0,
+            coverArt: coverArt // Cover Art aus DOM extrahieren
           };
         }
       }
@@ -1495,6 +1933,7 @@ function findSongById(songId: string): NavidromeSong | null {
       // Für alte Track-Items (Fallback)
       const titleElement = element.querySelector('h4');
       const infoElement = element.querySelector('p');
+      const coverArt = element.dataset.coverArt || undefined;
       
       if (titleElement && infoElement) {
         const title = titleElement.textContent || 'Unknown';
@@ -1509,7 +1948,8 @@ function findSongById(songId: string): NavidromeSong | null {
           duration: 0,
           size: 0,
           suffix: 'mp3',
-          bitRate: 0
+          bitRate: 0,
+          coverArt: coverArt // Cover Art auch für alte Items
         };
       }
     }

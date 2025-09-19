@@ -28,122 +28,283 @@ body {
   padding: 1.5rem;
   background: linear-gradient(135deg, #2a2a2a 0%, #3a3a3a 100%);
   border-bottom: 2px solid #4a4a4a;
+  flex-shrink: 0; /* Verhindert Shrinking */
+  position: relative;
+  z-index: 10;
 }
 
+/* Professional Player Deck Design */
 .player-deck {
   background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
   border: 2px solid #4a4a4a;
   border-radius: 12px;
-  padding: 1.5rem;
+  padding: 1rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   position: relative;
+  height: fit-content;
+  min-height: 160px;
 }
 
-.player-deck h3 {
-  text-align: center;
-  margin-bottom: 1rem;
+.player-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.player-header h3 {
   color: #00ff88;
-  font-size: 1.2em;
+  font-size: 1.1em;
   text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+  margin: 0;
+}
+
+.player-main {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 1rem;
+  align-items: start; /* Verhindert Stretching */
+}
+
+/* Album Cover */
+.album-cover {
+  width: 90px;
+  height: 90px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #333 0%, #444 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #555;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0; /* Verhindert Verformung */
+  min-width: 90px; /* Mindestbreite */
+  min-height: 90px; /* Mindesthöhe */
+  max-width: 90px; /* Maximale Breite */
+  max-height: 90px; /* Maximale Höhe */
+  position: relative; /* Für Debugging */
+  z-index: 1; /* Sicherstellen, dass es sichtbar ist */
+  aspect-ratio: 1; /* Erzwingt perfekt quadratisches Verhältnis */
+}
+
+.album-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Behält Aspect Ratio und füllt Container */
+  object-position: center;
+}
+
+.album-cover .no-cover {
+  color: #666;
+  font-size: 2rem;
+}
+
+/* Player Content */
+.player-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .track-info {
-  margin-bottom: 1rem;
-  text-align: center;
+  text-align: left;
 }
 
 .track-title {
   font-weight: bold;
-  margin-bottom: 0.5rem;
   color: #ffffff;
+  font-size: 0.95em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.25rem;
 }
 
 .track-artist {
   color: #aaaaaa;
-  font-size: 0.9em;
+  font-size: 0.8em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.player-controls {
+/* Transport Controls - Compact Side by Side */
+.transport-controls {
   display: flex;
-  justify-content: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 0;
+  margin: 0.5rem 0;
 }
 
-.player-controls button {
+.transport-controls button {
   background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
   border: none;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
+  border-radius: 0;
+  width: 36px;
+  height: 32px;
   color: #000;
-  font-size: 1.2em;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 255, 136, 0.3);
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 0.9rem;
 }
 
-.player-controls button .material-icons {
-  font-size: 24px;
+.transport-controls button:first-child {
+  border-radius: 4px 0 0 4px;
 }
 
-.player-controls button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.5);
+.transport-controls button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.transport-controls button .material-icons {
+  font-size: 18px;
+}
+
+.transport-controls button:hover {
+  background: linear-gradient(135deg, #00cc66 0%, #00aa55 100%);
+  transform: translateY(-1px);
 }
 
 .play-pause-btn {
-  background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
+  background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%) !important;
 }
 
-.eject-btn {
-  background: linear-gradient(135deg, #ff8800 0%, #cc6600 100%);
+/* Progress Section */
+.progress-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.restart-btn {
-  background: linear-gradient(135deg, #3399ff 0%, #0066cc 100%);
-}
-
-.play-pause-btn.playing {
-  background: linear-gradient(135deg, #ff4444 0%, #cc3333 100%);
+.time-display {
+  font-size: 0.75em;
+  color: #aaa;
+  white-space: nowrap;
+  min-width: 80px;
 }
 
 .progress-bar {
+  flex: 1;
+  height: 50px; /* Viel höher für bessere Waveform-Sichtbarkeit */
+  background: #444;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+}
+
+/* Waveform Container for WaveSurfer */
+.waveform {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: 8px;
-  background: #333;
-  border-radius: 4px;
-  margin-bottom: 1rem;
+  height: 100%;
+  border-radius: 8px;
+  background: #1a1a1a; /* Dunkler Hintergrund für WaveSurfer */
   overflow: hidden;
 }
 
-.progress {
+/* WaveSurfer specific styles */
+.waveform > div {
+  height: 100% !important;
+}
+
+/* Style WaveSurfer canvas */
+.waveform canvas {
+  border-radius: 8px !important;
+}
+
+/* Progress is now handled by WaveSurfer internally */
+
+/* Volume Section - Vertical for Portrait */
+.volume-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 90px;
+}
+
+.volume-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   height: 100%;
-  background: linear-gradient(90deg, #00ff88 0%, #00cc66 100%);
-  width: 0%;
-  transition: width 0.1s ease;
 }
 
 .volume-control input[type="range"] {
-  width: 100%;
-  height: 6px;
-  background: #333;
-  border-radius: 3px;
+  writing-mode: bt-lr; /* IE */
+  -webkit-appearance: slider-vertical; /* WebKit */
+  appearance: slider-vertical; /* Standard */
+  width: 6px;
+  height: 60px;
+  background: #444;
   outline: none;
-  -webkit-appearance: none;
-  appearance: none;
+  border-radius: 3px;
 }
 
 .volume-control input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  background: #00ff88;
+  appearance: none;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
+  background: #00ff88;
   cursor: pointer;
+  box-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
+}
+
+.volume-control input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00ff88;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
+}
+
+.volume-label {
+  font-size: 0.7em;
+  color: #888;
+  margin-top: 0.25rem;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+/* Responsive - Portrait Orientation */
+@media (orientation: portrait) {
+  .dj-section {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 1rem;
+  }
+  
+  .player-main {
+    grid-template-columns: 70px 1fr auto;
+    gap: 0.75rem;
+  }
+  
+  .album-cover {
+    width: 70px;
+    height: 70px;
+  }
+  
+  .volume-section {
+    height: 70px;
+  }
+  
+  .volume-control input[type="range"] {
+    height: 50px;
+  }
+}
+
+.eject-btn {
+  background: linear-gradient(135deg, #ff8800 0%, #cc6600 100%);
 }
 
 /* Center Controls */
@@ -359,9 +520,12 @@ body {
   grid-template-rows: auto 1fr;
   background: #1a1a1a;
   min-height: 0;
+  max-height: calc(100vh - 200px); /* Begrenzt die Höhe */
   overflow: hidden;
   gap: 1rem;
   padding: 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 .tabs {
@@ -705,11 +869,166 @@ body {
 
 .albums-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 0.75rem;
-  padding: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.5rem;
+  padding: 1.5rem;
 }
 
+/* Modern Album Grid Cards */
+.album-item-modern {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  position: relative;
+}
+
+.album-item-modern:hover {
+  transform: translateY(-8px) scale(1.02);
+  border-color: rgba(74, 144, 226, 0.4);
+  box-shadow: 0 12px 40px rgba(74, 144, 226, 0.2);
+  background: linear-gradient(135deg, rgba(74, 144, 226, 0.1) 0%, rgba(255, 255, 255, 0.1) 100%);
+}
+
+.album-cover-container {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+}
+
+.album-cover-modern {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 12px 12px 0 0;
+  position: relative;
+  transition: transform 0.3s ease;
+}
+
+.album-item-modern:hover .album-cover-modern {
+  transform: scale(1.05);
+}
+
+.album-no-cover {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 3rem;
+}
+
+.album-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.4) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-radius: 12px 12px 0 0;
+}
+
+.album-item-modern:hover .album-overlay {
+  opacity: 1;
+}
+
+.album-play-button {
+  background: rgba(74, 144, 226, 0.9);
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.album-play-button:hover {
+  background: rgba(74, 144, 226, 1);
+  transform: scale(1.1);
+}
+
+.album-play-button .material-icons {
+  color: white;
+  font-size: 2rem;
+  margin-left: 3px;
+}
+
+.album-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+}
+
+.album-song-count {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  backdrop-filter: blur(5px);
+  font-weight: 500;
+}
+
+.album-year {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+}
+
+.album-info-modern {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.album-title-modern {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.album-artist-modern {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  transition: color 0.3s ease;
+}
+
+.album-item-modern:hover .album-artist-modern {
+  color: rgba(74, 144, 226, 0.9);
+}
+
+.album-item-modern.dragging {
+  opacity: 0.5;
+  transform: rotate(5deg) scale(0.9);
+}
+
+/* Legacy Album Items */
 .album-item {
   background: #333;
   border: 1px solid #555;
@@ -734,7 +1053,7 @@ body {
 
 .album-cover {
   width: 100%;
-  height: 120px;
+  height: 140px;
   background: #444;
   border-radius: 4px;
   margin-bottom: 0.5rem;

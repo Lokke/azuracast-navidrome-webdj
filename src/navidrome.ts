@@ -432,6 +432,17 @@ class NavidromeClient {
     return response.artist?.album || [];
   }
 
+  // Get single artist by ID
+  async getArtist(artistId: string): Promise<NavidromeArtist | null> {
+    try {
+      const response = await this.makeRequest('getArtist', { id: artistId });
+      return response.artist || null;
+    } catch (error) {
+      console.error('Error getting artist by ID:', error);
+      return null;
+    }
+  }
+
   // Alle Alben finden, auf denen ein Künstler vorkommt (auch Sampler)
   async getAllAlbumsWithArtist(artistName: string): Promise<NavidromeAlbum[]> {
     try {

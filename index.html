@@ -12,25 +12,7 @@
       <!-- Top Section: DJ Controls -->
       <div class="dj-section">
         <!-- Player A (Left) -->
-        <div class="player-deck" id="player-left">
-          <h3>Player A</h3>
-          <audio id="audio-left" preload="metadata"></audio>
-          <div class="track-info">
-            <div class="track-title" id="track-title-left">No Track Loaded</div>
-            <div class="track-artist" id="track-artist-left">-</div>
-            <div class="player-rating" id="player-rating-left"></div>
-          </div>
-                      <div class="player-controls">
-              <button class="play-pause-btn" id="play-pause-left"><span class="material-icons">play_arrow</span></button>
-              <button class="restart-btn" id="restart-left"><span class="material-icons">skip_previous</span></button>
-              <button class="eject-btn" id="eject-left"><span class="material-icons">eject</span></button>
-            </div>
-          <div class="progress-bar" id="progress-bar-left">
-            <div class="progress" id="progress-left"></div>
-          </div>
-          <div class="volume-control">
-            <input type="range" min="0" max="100" value="80" id="volume-left">
-          </div>
+        <div class="player-deck" id="player-left" data-player-side="left">
         </div>
 
         <!-- Center Controls -->
@@ -60,25 +42,7 @@
         </div>
 
         <!-- Player B (Right) -->
-        <div class="player-deck" id="player-right">
-          <h3>Player B</h3>
-          <audio id="audio-right" preload="metadata"></audio>
-          <div class="track-info">
-            <div class="track-title" id="track-title-right">No Track Loaded</div>
-            <div class="track-artist" id="track-artist-right">-</div>
-            <div class="player-rating" id="player-rating-right"></div>
-          </div>
-          <div class="player-controls">
-            <button class="play-pause-btn" id="play-pause-right"><span class="material-icons">play_arrow</span></button>
-            <button class="restart-btn" id="restart-right"><span class="material-icons">skip_previous</span></button>
-            <button class="eject-btn" id="eject-right"><span class="material-icons">eject</span></button>
-          </div>
-          <div class="progress-bar" id="progress-bar-right">
-            <div class="progress" id="progress-right"></div>
-          </div>
-          <div class="volume-control">
-            <input type="range" min="0" max="100" value="80" id="volume-right">
-          </div>
+        <div class="player-deck" id="player-right" data-player-side="right">
         </div>
       </div>
 
