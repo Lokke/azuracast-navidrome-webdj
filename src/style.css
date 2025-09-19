@@ -351,11 +351,17 @@ body {
 /* Music Library Section (Bottom) */
 .music-library {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-areas: 
+    "search search"
+    "content queue";
+  grid-template-columns: 1fr 350px;
+  grid-template-rows: auto 1fr;
   background: #1a1a1a;
   min-height: 0;
   overflow: hidden;
+  gap: 1rem;
+  padding: 1rem;
 }
 
 .tabs {
@@ -388,22 +394,28 @@ body {
   color: white;
 }
 
+.tab:last-of-type {
+  border-right: none;
+}
+
 .search-container {
+  grid-area: search;
   display: flex;
   gap: 0.5rem;
-  margin-left: auto;
-  padding: 0.5rem 1rem;
   align-items: center;
+  background: linear-gradient(135deg, #2d3748, #4a5568);
+  padding: 1rem;
+  border-radius: 8px;
 }
 
 .search-container input {
-  padding: 0.5rem 0.75rem;
+  flex: 1;
+  padding: 0.75rem 1rem;
   border: 2px solid #4a4a4a;
   border-radius: 6px;
   background: #333;
   color: white;
-  font-size: 0.9rem;
-  width: 250px;
+  font-size: 1rem;
   transition: border-color 0.3s ease;
 }
 
@@ -452,12 +464,30 @@ body {
 }
 
 .content-main {
-  flex: 1;
+  grid-area: content;
   display: flex;
   flex-direction: column;
-  padding: 1rem;
   overflow: hidden;
   min-height: 0;
+}
+
+/* Library Content - scrollable container */
+.library-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+/* Search Results - scrollable */
+.search-results {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#search-content {
+  min-height: 100%;
 }
 
 .navidrome-login {
@@ -558,9 +588,10 @@ body {
 }
 
 .queue-panel {
-  width: 280px;
-  background: #2a2a2a;
-  border-left: 2px solid #4a4a4a;
+  grid-area: queue;
+  background: linear-gradient(135deg, #2a2a2a, #3a3a3a);
+  border: 2px solid #4a4a4a;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -578,6 +609,38 @@ body {
   color: #00ff88;
   margin-bottom: 0.5rem;
   font-size: 1.1em;
+}
+
+/* No Search State */
+.no-search-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+}
+
+.search-prompt {
+  text-align: center;
+  color: #718096;
+  padding: 2rem;
+}
+
+.search-prompt .material-icons {
+  font-size: 64px;
+  color: #4a5568;
+  margin-bottom: 1rem;
+}
+
+.search-prompt h3 {
+  color: #a0aec0;
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.search-prompt p {
+  color: #718096;
+  font-size: 1rem;
 }
 
 .auto-queue-controls {
@@ -969,6 +1032,15 @@ body {
   border-bottom: 2px solid #333;
 }
 
+/* Distinguish between artist's albums and appearances */
+.artist-section:nth-of-type(3) h4 {
+  color: #4a9eff; /* Blue for artist's own albums */
+}
+
+.artist-section:nth-of-type(4) h4 {
+  color: #ff8c42; /* Orange for "Appears On" albums */
+}
+
 /* Album/Artist Items Clickable */
 .album-item,
 .artist-item {
@@ -999,4 +1071,261 @@ body {
 
 .player-deck.playing .track-title {
   color: #00ff88;
+}
+
+/* Rating System Styles */
+.rating-container {
+  margin-top: 0.5rem;
+}
+
+.rating-stars {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.star {
+  font-size: 16px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.star:hover {
+  color: #ffd700;
+  transform: scale(1.2);
+}
+
+.star.filled {
+  color: #ffd700;
+  text-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
+}
+
+.star.hover-preview {
+  color: #ffed4a;
+}
+
+/* Player Rating Styles */
+.player-rating {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.player-rating .star {
+  font-size: 18px;
+  margin: 0 1px;
+}
+
+/* Track Item Rating */
+.track-item .rating-container {
+  margin-top: 0.3rem;
+  margin-left: 0.5rem;
+}
+
+.track-item .star {
+  font-size: 14px;
+}
+
+/* Songs Table Styles (One-line view for search results) */
+.songs-table-header {
+  display: grid;
+  grid-template-columns: 60px 2fr 1.5fr 1.5fr 120px 80px;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #2d3748, #4a5568);
+  border-radius: 8px 8px 0 0;
+  font-weight: bold;
+  color: #00ff88;
+  font-size: 0.9rem;
+  border-bottom: 2px solid #333;
+}
+
+.songs-table {
+  background: rgba(26, 32, 44, 0.8);
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+
+.track-item-oneline {
+  display: grid;
+  grid-template-columns: 60px 2fr 1.5fr 1.5fr 120px 80px;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #333;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  align-items: center;
+}
+
+.track-item-oneline:hover {
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.track-item-oneline:last-child {
+  border-bottom: none;
+}
+
+/* Track Cover */
+.track-cover {
+  width: 50px;
+  height: 50px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+}
+
+.track-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.track-cover .no-cover {
+  color: #666;
+  font-size: 20px;
+}
+
+/* Track Info Columns */
+.track-title {
+  font-weight: bold;
+  color: #fff;
+  font-size: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-artist {
+  color: #a0aec0;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-album {
+  color: #718096;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Klickbare Artist und Album Elemente */
+.clickable-artist,
+.clickable-album {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.clickable-artist:hover {
+  color: #00ff88;
+  background: rgba(0, 255, 136, 0.1);
+  text-shadow: 0 0 6px rgba(0, 255, 136, 0.3);
+  transform: translateY(-1px);
+}
+
+.clickable-album:hover {
+  color: #ff8800;
+  background: rgba(255, 136, 0, 0.1);
+  text-shadow: 0 0 6px rgba(255, 136, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Multi-Artist Styling */
+.multi-artist {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+}
+
+.artist-separator {
+  color: #718096;
+  margin: 0 2px;
+  pointer-events: none;
+}
+
+/* Ensure clickable elements work on draggable parents */
+.track-item-oneline .clickable-artist,
+.track-item-oneline .clickable-album {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.track-rating {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+}
+
+.track-rating .star {
+  font-size: 14px;
+}
+
+.track-duration {
+  color: #a0aec0;
+  font-size: 0.9rem;
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+
+/* Drag and Drop Styles */
+.track-item-oneline.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+.track-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+/* Player Drop Zone Styles */
+.player-deck.drag-over {
+  background: rgba(0, 255, 136, 0.1);
+  border: 2px solid #00ff88;
+  transform: scale(1.02);
+}
+
+/* Queue Drop Zone Styles */
+.queue-items.drag-over {
+  background: rgba(0, 255, 136, 0.1);
+  border: 2px solid #00ff88;
+}
+
+/* Scrollbar Styling for Search Results */
+.library-content::-webkit-scrollbar,
+.search-results::-webkit-scrollbar {
+  width: 8px;
+}
+
+.library-content::-webkit-scrollbar-track,
+.search-results::-webkit-scrollbar-track {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+.library-content::-webkit-scrollbar-thumb,
+.search-results::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 4px;
+}
+
+.library-content::-webkit-scrollbar-thumb:hover,
+.search-results::-webkit-scrollbar-thumb:hover {
+  background: #00ff88;
 }

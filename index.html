@@ -18,11 +18,12 @@
           <div class="track-info">
             <div class="track-title" id="track-title-left">No Track Loaded</div>
             <div class="track-artist" id="track-artist-left">-</div>
+            <div class="player-rating" id="player-rating-left"></div>
           </div>
                       <div class="player-controls">
-              <button class="restart-btn" data-player="A"><span class="material-icons">skip_previous</span></button>
-              <button class="play-pause-btn" data-player="A"><span class="material-icons">play_arrow</span></button>
-              <button class="eject-btn" data-player="A"><span class="material-icons">eject</span></button>
+              <button class="play-pause-btn" id="play-pause-left"><span class="material-icons">play_arrow</span></button>
+              <button class="restart-btn" id="restart-left"><span class="material-icons">skip_previous</span></button>
+              <button class="eject-btn" id="eject-left"><span class="material-icons">eject</span></button>
             </div>
           <div class="progress-bar" id="progress-bar-left">
             <div class="progress" id="progress-left"></div>
@@ -65,11 +66,12 @@
           <div class="track-info">
             <div class="track-title" id="track-title-right">No Track Loaded</div>
             <div class="track-artist" id="track-artist-right">-</div>
+            <div class="player-rating" id="player-rating-right"></div>
           </div>
           <div class="player-controls">
             <button class="play-pause-btn" id="play-pause-right"><span class="material-icons">play_arrow</span></button>
-            <button class="eject-btn" id="eject-right"><span class="material-icons">eject</span></button>
             <button class="restart-btn" id="restart-right"><span class="material-icons">skip_previous</span></button>
+            <button class="eject-btn" id="eject-right"><span class="material-icons">eject</span></button>
           </div>
           <div class="progress-bar" id="progress-bar-right">
             <div class="progress" id="progress-right"></div>
@@ -82,94 +84,40 @@
 
       <!-- Bottom Section: Music Library -->
       <div class="music-library">
-        <div class="tabs">
-          <button class="tab active" data-tab="search">Search</button>
-          <button class="tab" data-tab="songs">Songs</button>
-          <button class="tab" data-tab="albums">Albums</button>
-          <button class="tab" data-tab="artists">Artists</button>
-          
-          <!-- Search Container in Tab Bar -->
-          <div class="search-container" id="search-container" style="display: none;">
-            <input type="text" id="search-input" placeholder="Search music...">
-            <button id="search-btn"><span class="material-icons">search</span></button>
+        <!-- Search Bar -->
+        <div class="search-container">
+          <input type="text" id="search-input" placeholder="Search music...">
+          <button id="search-btn"><span class="material-icons">search</span></button>
+        </div>
+        
+        <!-- Main Content Area -->
+        <div class="content-main">
+          <!-- Search Results -->
+          <div class="library-content" id="library-content">
+            <div class="search-results" id="search-results" style="display: none;">
+              <h3>Search Results</h3>
+              <div id="search-content"></div>
+            </div>
+            <div class="no-search-state" id="no-search-state">
+              <div class="search-prompt">
+                <span class="material-icons">search</span>
+                <h3>Search for music</h3>
+                <p>Enter a song, album or artist name to find music</p>
+              </div>
+            </div>
           </div>
         </div>
         
-        <!-- Search Tab -->
-        <div class="tab-content active" id="tab-search">
-          <div class="content-main">
-            <!-- Search Results -->
-            <div class="search-results" id="search-results">
-              <div class="no-results">Enter search term to find music</div>
+        <!-- Queue Panel -->
+        <div class="queue-panel">
+          <div class="queue-header">
+            <h3>Queue</h3>
+            <div class="auto-queue-controls">
+              <button class="auto-queue-btn" id="auto-queue-a">Auto A</button>
+              <button class="auto-queue-btn" id="auto-queue-b">Auto B</button>
             </div>
           </div>
-          <div class="queue-panel">
-            <div class="queue-header">
-              <h3>Queue</h3>
-              <div class="auto-queue-controls">
-                <button class="auto-queue-btn" id="auto-queue-search">Auto A</button>
-                <button class="auto-queue-btn" id="auto-queue-search-b">Auto B</button>
-              </div>
-            </div>
-            <div class="queue-items" id="queue-list"></div>
-          </div>
-        </div>
-              
-                      <!-- Songs Tab -->
-        <div class="tab-content" id="tab-songs">
-          <div class="content-main">
-            <div class="songs-list" id="songs-list">
-              <div class="loading">Loading songs...</div>
-            </div>
-          </div>
-          <div class="queue-panel">
-            <div class="queue-header">
-              <h3>Queue</h3>
-              <div class="auto-queue-controls">
-                <button class="auto-queue-btn" id="auto-queue-songs">Auto A</button>
-                <button class="auto-queue-btn" id="auto-queue-songs-b">Auto B</button>
-              </div>
-            </div>
-            <div class="queue-items" id="queue-list-songs"></div>
-          </div>
-        </div>
-
-        <!-- Albums Tab -->
-        <div class="tab-content" id="tab-albums">
-          <div class="content-main">
-            <div class="albums-grid" id="albums-grid">
-              <div class="loading">Loading albums...</div>
-            </div>
-          </div>
-          <div class="queue-panel">
-            <div class="queue-header">
-              <h3>Queue</h3>
-              <div class="auto-queue-controls">
-                <button class="auto-queue-btn" id="auto-queue-albums">Auto A</button>
-                <button class="auto-queue-btn" id="auto-queue-albums-b">Auto B</button>
-              </div>
-            </div>
-            <div class="queue-items" id="queue-list-albums"></div>
-          </div>
-        </div>
-
-        <!-- Artists Tab -->
-        <div class="tab-content" id="tab-artists">
-          <div class="content-main">
-            <div class="artists-list" id="artists-list">
-              <div class="loading">Loading artists...</div>
-            </div>
-          </div>
-          <div class="queue-panel">
-            <div class="queue-header">
-              <h3>Queue</h3>
-              <div class="auto-queue-controls">
-                <button class="auto-queue-btn" id="auto-queue-artists">Auto A</button>
-                <button class="auto-queue-btn" id="auto-queue-artists-b">Auto B</button>
-              </div>
-            </div>
-            <div class="queue-items" id="queue-list-artists"></div>
-          </div>
+          <div class="queue-items" id="queue-list"></div>
         </div>
       </div>
     </div>

@@ -13,11 +13,17 @@ interface NavidromeAuth {
   salt: string;
 }
 
+interface NavidromeArtistRef {
+  id: string;
+  name: string;
+}
+
 interface NavidromeSong {
   id: string;
   title: string;
-  artist: string;
+  artist: string;  // Fallback string für Kompatibilität
   album: string;
+  albumId?: string;  // Album ID falls verfügbar
   duration: number;
   size: number;
   suffix: string;
@@ -25,6 +31,11 @@ interface NavidromeSong {
   year?: number;
   genre?: string;
   coverArt?: string;
+  userRating?: number;  // 1-5 stars rating
+  artists?: NavidromeArtistRef[];  // Array von Artists mit ID und Name
+  albumArtists?: NavidromeArtistRef[];  // Array von Album Artists
+  displayArtist?: string;  // Anzeige-String für Artists
+  displayAlbumArtist?: string;  // Anzeige-String für Album Artists
 }
 
 interface NavidromeAlbum {
@@ -421,6 +432,61 @@ class NavidromeClient {
     return response.artist?.album || [];
   }
 
+  // Alle Alben finden, auf denen ein Künstler vorkommt (auch Sampler)
+  async getAllAlbumsWithArtist(artistName: string): Promise<NavidromeAlbum[]> {
+    try {
+      // Suche nach Songs des Künstlers, um alle Alben zu finden
+      const searchResponse = await this.makeRequest('search3', { 
+        query: artistName,
+        songCount: 500,  // Mehr Songs für bessere Abdeckung
+        albumCount: 200
+      });
+      
+      const songs = searchResponse.searchResult3?.song || [];
+      
+      // Sammle alle Album-Namen aus Songs wo der Künstler beteiligt ist
+      const albumNames = new Set<string>();
+      
+      songs.forEach((song: NavidromeSong) => {
+        // Prüfe ob der Künstler in Artist-Field vorkommt (exakter Match oder Teil)
+        if (song.artist && song.artist.toLowerCase().includes(artistName.toLowerCase())) {
+          if (song.album) {
+            albumNames.add(song.album);
+          }
+        }
+      });
+      
+      // Jetzt suche nach jedem Album-Namen um die Album-Details zu bekommen
+      const albums: NavidromeAlbum[] = [];
+      const albumSet = new Set<string>(); // Duplikate vermeiden
+      
+      for (const albumName of albumNames) {
+        try {
+          const albumSearchResponse = await this.makeRequest('search3', { 
+            query: albumName,
+            albumCount: 50
+          });
+          
+          const foundAlbums = albumSearchResponse.searchResult3?.album || [];
+          foundAlbums.forEach((album: NavidromeAlbum) => {
+            // Nur hinzufügen wenn exakter Album-Name Match
+            if (album.name.toLowerCase() === albumName.toLowerCase() && !albumSet.has(album.id)) {
+              albums.push(album);
+              albumSet.add(album.id);
+            }
+          });
+        } catch (error) {
+          console.warn(`Failed to search for album ${albumName}:`, error);
+        }
+      }
+      
+      return albums;
+    } catch (error) {
+      console.error('Error searching for albums with artist:', error);
+      return [];
+    }
+  }
+
   // Album-Informationen abrufen
   async getAlbumInfo(albumId: string): Promise<NavidromeAlbum | null> {
     const response = await this.makeRequest('getAlbum', { id: albumId });
@@ -480,6 +546,51 @@ class NavidromeClient {
     });
 
     return `${this.config.serverUrl}/rest/download?${params.toString()}`;
+  }
+
+  // Rating für einen Song setzen (1-5 Sterne)
+  async setRating(songId: string, rating: number): Promise<boolean> {
+    try {
+      if (rating < 1 || rating > 5) {
+        throw new Error('Rating must be between 1 and 5');
+      }
+
+      await this.makeRequest('setRating', { 
+        id: songId, 
+        rating: rating.toString() 
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Error setting rating:', error);
+      return false;
+    }
+  }
+
+  // Rating für einen Song abrufen
+  async getRating(songId: string): Promise<number | null> {
+    try {
+      const response = await this.makeRequest('getSong', { id: songId });
+      return response.song?.userRating || null;
+    } catch (error) {
+      console.error('Error getting rating:', error);
+      return null;
+    }
+  }
+
+  // Neueste Alben abrufen
+  async getNewestAlbums(size = 20): Promise<NavidromeAlbum[]> {
+    try {
+      const response = await this.makeRequest('getAlbumList2', { 
+        type: 'newest',
+        size: size.toString()
+      });
+      
+      return response.albumList2?.album || [];
+    } catch (error) {
+      console.error('Error getting newest albums:', error);
+      return [];
+    }
   }
 }
 

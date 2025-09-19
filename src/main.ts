@@ -88,6 +88,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   
   // Audio Player initialisieren
   initializeAudioPlayers();
+  
+  // Rating-Event-Listeners initialisieren
+  initializeRatingListeners();
 });
 
 // Musikbibliothek initialisieren
@@ -174,7 +177,12 @@ function initializeSearch() {
     }
     
     const query = searchInput.value.trim();
-    if (!query) return;
+    
+    // Wenn Suchfeld leer ist, zeige No Search State
+    if (!query) {
+      showNoSearchState();
+      return;
+    }
     
     console.log('Searching for:', query);
     
@@ -194,6 +202,14 @@ function initializeSearch() {
       performSearch();
     }
   });
+  
+  // Bei Eingabe-Änderungen auch prüfen
+  searchInput?.addEventListener('input', () => {
+    // Wenn Feld geleert wird, zeige No Search State
+    if (!searchInput.value.trim()) {
+      showNoSearchState();
+    }
+  });
 }
 
 // Songs laden
@@ -208,8 +224,20 @@ async function loadSongs() {
     currentSongs = await navidromeClient.getSongs(100);
     console.log(`Loaded ${currentSongs.length} songs`);
     
-    songsContainer.innerHTML = currentSongs.map(song => createSongHTML(song)).join('');
+    // Erstelle Songs-Tabelle mit Header
+    let html = '<div class="songs-table-header">';
+    html += '<div class="header-cover">Cover</div>';
+    html += '<div class="header-title">Title</div>';
+    html += '<div class="header-artist">Artist</div>';
+    html += '<div class="header-album">Album</div>';
+    html += '<div class="header-rating">Rating</div>';
+    html += '<div class="header-duration">Duration</div>';
+    html += '</div>';
+    html += '<div class="songs-table">' + currentSongs.map(song => createSongHTMLOneline(song)).join('') + '</div>';
+    
+    songsContainer.innerHTML = html;
     addDragListeners(songsContainer);
+    addSongClickListeners(songsContainer);
   } catch (error) {
     console.error('Error loading songs:', error);
     songsContainer.innerHTML = '<div class="loading">Error loading songs</div>';
@@ -267,14 +295,97 @@ async function loadArtists() {
 }
 
 // Song HTML erstellen
-function createSongHTML(song: NavidromeSong): string {
+// Song HTML als Einzeiler für einheitliche Darstellung erstellen
+
+// Hilfsfunktion zum Erstellen von Artist-Links aus dem artists Array
+function createArtistLinks(song: NavidromeSong): string {
+  // Verwende artists Array falls verfügbar, sonst Fallback auf artist string
+  if (song.artists && song.artists.length > 0) {
+    if (song.artists.length === 1) {
+      const artist = song.artists[0];
+      return `<span class="clickable-artist" draggable="false" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}" title="View artist details">${escapeHtml(artist.name)}</span>`;
+    } else {
+      // Multiple Artists - jeder einzeln klickbar
+      const artistLinks = song.artists.map(artist => 
+        `<span class="clickable-artist" draggable="false" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}" title="View artist details">${escapeHtml(artist.name)}</span>`
+      ).join('<span class="artist-separator"> • </span>');
+      
+      return `<div class="track-artist multi-artist">${artistLinks}</div>`;
+    }
+  } else {
+    // Fallback für alte API oder wenn artists Array nicht verfügbar
+    return `<div class="track-artist clickable-artist" draggable="false" data-artist-name="${escapeHtml(song.artist)}" title="View artist details">${escapeHtml(song.artist)}</div>`;
+  }
+}
+function createSongHTMLOneline(song: NavidromeSong): string {
   const duration = formatDuration(song.duration);
+  const coverUrl = song.coverArt && navidromeClient ? navidromeClient.getCoverArtUrl(song.coverArt, 50) : '';
+  
   return `
-    <div class="track-item" draggable="true" data-song-id="${song.id}" data-type="song">
-      <h4>${escapeHtml(song.title)}</h4>
-      <p>${escapeHtml(song.artist)} - ${escapeHtml(song.album)} (${duration})</p>
+    <div class="track-item-oneline" draggable="true" data-song-id="${song.id}" data-type="song">
+      <div class="track-cover">
+        ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="no-cover"><span class="material-icons">music_note</span></div>'}
+      </div>
+      <div class="track-title">${escapeHtml(song.title)}</div>
+      <div class="track-artist">${createArtistLinks(song)}</div>
+      <div class="track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
+      <div class="track-rating" data-song-id="${song.id}">
+        ${createStarRating(song.userRating || 0, song.id)}
+      </div>
+      <div class="track-duration">${duration}</div>
     </div>
   `;
+}
+
+// 5-Sterne Rating System erstellen
+function createStarRating(currentRating: number, songId: string): string {
+  let starsHTML = '';
+  for (let i = 1; i <= 5; i++) {
+    const filled = i <= currentRating ? 'filled' : '';
+    starsHTML += `<span class="star ${filled}" data-rating="${i}" data-song-id="${songId}">★</span>`;
+  }
+  return starsHTML;
+}
+
+// Rating setzen
+async function setRating(songId: string, rating: number) {
+  if (!navidromeClient) return;
+  
+  const success = await navidromeClient.setRating(songId, rating);
+  if (success) {
+    // Update UI
+    updateRatingDisplay(songId, rating);
+    console.log(`Rating set: ${rating} stars for song ${songId}`);
+  }
+}
+
+// Rating Display aktualisieren
+function updateRatingDisplay(songId: string, rating: number) {
+  const ratingContainers = document.querySelectorAll(`[data-song-id="${songId}"] .rating-stars`);
+  ratingContainers.forEach(container => {
+    container.innerHTML = createStarRating(rating, songId);
+  });
+  
+  // Update player rating if this song is currently playing
+  updatePlayerRating('left', songId, rating);
+  updatePlayerRating('right', songId, rating);
+}
+
+// Player Rating aktualisieren
+function updatePlayerRating(player: string, songId: string, rating: number) {
+  const currentSongId = getCurrentSongId(player);
+  if (currentSongId === songId) {
+    const playerRating = document.getElementById(`player-rating-${player}`);
+    if (playerRating) {
+      playerRating.innerHTML = createStarRating(rating, songId);
+    }
+  }
+}
+
+// Aktuelle Song ID aus Player holen
+function getCurrentSongId(player: string): string | null {
+  const audio = document.getElementById(`audio-${player}`) as HTMLAudioElement;
+  return audio?.dataset.songId || null;
 }
 
 // Album HTML erstellen
@@ -301,47 +412,72 @@ function createArtistHTML(artist: NavidromeArtist): string {
 
 // Search Results anzeigen
 function displaySearchResults(results: any) {
-  const searchContainer = document.getElementById('search-results');
-  if (!searchContainer) return;
+  const searchResultsSection = document.getElementById('search-results');
+  const noSearchState = document.getElementById('no-search-state');
+  const searchContent = document.getElementById('search-content');
+  
+  if (!searchResultsSection || !searchContent) {
+    console.error('Search results containers not found');
+    return;
+  }
   
   let html = '';
   
-  if (results.song && results.song.length > 0) {
-    html += '<h3>Songs</h3>';
-    html += results.song.map((song: NavidromeSong) => createSongHTML(song)).join('');
+  // Artists zuerst
+  if (results.artist && results.artist.length > 0) {
+    html += '<h4>Artists</h4>';
+    html += '<div class="artists-section">' + results.artist.map((artist: NavidromeArtist) => createArtistHTML(artist)).join('') + '</div>';
   }
   
+  // Dann Albums
   if (results.album && results.album.length > 0) {
-    html += '<h3>Albums</h3>';
+    html += '<h4>Albums</h4>';
     html += '<div class="albums-grid">' + results.album.map((album: NavidromeAlbum) => createAlbumHTML(album)).join('') + '</div>';
   }
   
-  if (results.artist && results.artist.length > 0) {
-    html += '<h3>Artists</h3>';
-    html += results.artist.map((artist: NavidromeArtist) => createArtistHTML(artist)).join('');
+  // Songs zuletzt
+  if (results.song && results.song.length > 0) {
+    html += '<h4>Songs</h4>';
+    html += '<div class="songs-table-header">';
+    html += '<div class="header-cover">Cover</div>';
+    html += '<div class="header-title">Title</div>';
+    html += '<div class="header-artist">Artist</div>';
+    html += '<div class="header-album">Album</div>';
+    html += '<div class="header-rating">Rating</div>';
+    html += '<div class="header-duration">Duration</div>';
+    html += '</div>';
+    html += '<div class="songs-table">' + results.song.map((song: NavidromeSong) => createSongHTMLOneline(song)).join('') + '</div>';
   }
   
   if (!html) {
     html = '<div class="no-results">No results found</div>';
   }
   
-  searchContainer.innerHTML = html;
-  console.log('Search results HTML updated');
+  // Search results anzeigen, No Search State verstecken
+  searchContent.innerHTML = html;
+  searchResultsSection.style.display = 'block';
+  if (noSearchState) {
+    noSearchState.style.display = 'none';
+  }
+  
+  console.log('Search results displayed');
   
   // Kleine Verzögerung für DOM-Rendering
   setTimeout(() => {
-    addDragListeners(searchContainer);
+    addDragListeners(searchContent);
     console.log('Drag listeners added to search results');
-    addAlbumClickListeners(searchContainer);
+    addAlbumClickListeners(searchContent);
     console.log('Album click listeners added to search results');
-    addArtistClickListeners(searchContainer);
+    addArtistClickListeners(searchContent);
     console.log('Artist click listeners added to search results');
+    addSongClickListeners(searchContent);
+    console.log('Song click listeners added to search results');
   }, 50);
 }
 
 // Drag & Drop Listeners hinzufügen
 function addDragListeners(container: Element) {
-  const trackItems = container.querySelectorAll('.track-item');
+  const trackItems = container.querySelectorAll('.track-item, .track-item-oneline');
   console.log(`Adding drag listeners to ${trackItems.length} track items`);
   
   trackItems.forEach((item, index) => {
@@ -365,6 +501,106 @@ function addDragListeners(container: Element) {
   });
 }
 
+// Song-interne Click Listeners hinzufügen (für Artist und Album in Songs)
+function addSongClickListeners(container: Element) {
+  console.log('Adding song click listeners to container:', container);
+  
+  // Artist Click Listeners
+  const artistElements = container.querySelectorAll('.clickable-artist');
+  console.log(`Found ${artistElements.length} clickable artists`);
+  
+  artistElements.forEach((element, index) => {
+    const artistId = (element as HTMLElement).dataset.artistId;
+    const artistName = (element as HTMLElement).dataset.artistName;
+    console.log(`Setting up artist click ${index}: ${artistName} (ID: ${artistId})`);
+    
+    element.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // Verhindert Drag-Start
+      console.log(`Artist clicked from song: ${artistName} (ID: ${artistId})`);
+      
+      if (artistId) {
+        // Wenn wir eine Artist ID haben, verwende diese direkt
+        await showArtistDetails(artistId);
+      } else if (artistName && navidromeClient) {
+        // Fallback: Suche nach Artist by Name
+        try {
+          const searchResults = await navidromeClient.search(artistName);
+          if (searchResults.artist && searchResults.artist.length > 0) {
+            // Finde exakten Match oder ersten Treffer
+            const artist = searchResults.artist.find((a: any) => 
+              a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
+            ) || searchResults.artist[0];
+            
+            if (artist) {
+              await showArtistDetails(artist.id);
+            } else {
+              console.error('Artist not found in search results');
+            }
+          } else {
+            console.error('No artists found for search term:', artistName);
+          }
+        } catch (error) {
+          console.error('Error searching for artist:', error);
+        }
+      }
+    });
+    
+    // Debug-Event für Mousedown
+    element.addEventListener('mousedown', () => {
+      console.log(`Artist mousedown: ${artistName}`);
+    });
+  });
+  
+  // Album Click Listeners
+  const albumElements = container.querySelectorAll('.clickable-album');
+  console.log(`Found ${albumElements.length} clickable albums`);
+  
+  albumElements.forEach((element, index) => {
+    const albumId = (element as HTMLElement).dataset.albumId;
+    const albumName = (element as HTMLElement).dataset.albumName;
+    console.log(`Setting up album click ${index}: ${albumName} (ID: ${albumId})`);
+    
+    element.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // Verhindert Drag-Start
+      console.log(`Album clicked from song: ${albumName} (ID: ${albumId})`);
+      
+      if (albumId && albumId !== '') {
+        await showAlbumSongs(albumId);
+      } else if (albumName && navidromeClient) {
+        console.log(`Album clicked from song (no ID): ${albumName}, searching...`);
+        
+        try {
+          // Suche nach Album by Name
+          const searchResults = await navidromeClient.search(albumName);
+          if (searchResults.album && searchResults.album.length > 0) {
+            // Finde exakten Match oder ersten Treffer
+            const album = searchResults.album.find((a: any) => 
+              a.name.toLowerCase().trim() === albumName.toLowerCase().trim()
+            ) || searchResults.album[0];
+            
+            if (album) {
+              await showAlbumSongs(album.id);
+            } else {
+              console.error('Album not found in search results');
+            }
+          } else {
+            console.error('No albums found for search term:', albumName);
+          }
+        } catch (error) {
+          console.error('Error searching for album:', error);
+        }
+      }
+    });
+    
+    // Debug-Event für Mousedown
+    element.addEventListener('mousedown', () => {
+      console.log(`Album mousedown: ${albumName}`);
+    });
+  });
+}
+
 // Album Click Listeners hinzufügen
 function addAlbumClickListeners(container: Element) {
   const albumItems = container.querySelectorAll('.album-item');
@@ -374,7 +610,11 @@ function addAlbumClickListeners(container: Element) {
     const albumId = (item as HTMLElement).dataset.albumId;
     console.log(`Setting up album ${index}: ID=${albumId}`);
     
-    item.addEventListener('click', async (e) => {
+    // Entferne vorherige Listener falls vorhanden
+    const clonedItem = item.cloneNode(true);
+    item.parentNode?.replaceChild(clonedItem, item);
+    
+    clonedItem.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
       console.log(`Album clicked: ${albumId} (click event fired)`);
@@ -385,6 +625,11 @@ function addAlbumClickListeners(container: Element) {
         console.error('Album ID not found on clicked element');
       }
     });
+    
+    // Zusätzlicher Debug-Event
+    clonedItem.addEventListener('mousedown', () => {
+      console.log(`Album mousedown: ${albumId}`);
+    });
   });
 }
 
@@ -393,14 +638,29 @@ function addArtistClickListeners(container: Element) {
   const artistItems = container.querySelectorAll('.artist-item');
   console.log(`Adding artist click listeners to ${artistItems.length} artists`);
   
-  artistItems.forEach(item => {
-    item.addEventListener('click', async (e) => {
+  artistItems.forEach((item, index) => {
+    const artistId = (item as HTMLElement).dataset.artistId;
+    console.log(`Setting up artist ${index}: ID=${artistId}`);
+    
+    // Entferne vorherige Listener falls vorhanden
+    const clonedItem = item.cloneNode(true);
+    item.parentNode?.replaceChild(clonedItem, item);
+    
+    clonedItem.addEventListener('click', async (e) => {
       e.preventDefault();
-      const artistId = (item as HTMLElement).dataset.artistId;
+      e.stopPropagation();
+      console.log(`Artist clicked: ${artistId} (click event fired)`);
+      
       if (artistId) {
-        console.log(`Artist clicked: ${artistId}`);
         await showArtistDetails(artistId);
+      } else {
+        console.error('Artist ID not found on clicked element');
       }
+    });
+    
+    // Zusätzlicher Debug-Event
+    clonedItem.addEventListener('mousedown', () => {
+      console.log(`Artist mousedown: ${artistId}`);
     });
   });
 }
@@ -430,33 +690,44 @@ async function showAlbumSongs(albumId: string) {
     
     const albumSongs = await navidromeClient.getAlbumSongs(albumId);
     
-    // Songs Container finden und anzeigen
+    // Prüfe ob wir in Search-View sind oder in der normalen Songs-Liste
+    const searchContent = document.getElementById('search-content');
     const songsContainer = document.getElementById('songs-list');
-    if (songsContainer) {
+    const targetContainer = searchContent?.style.display !== 'none' ? searchContent : songsContainer;
+    
+    if (targetContainer) {
       const albumName = album ? album.name : 'Unknown Album';
       const albumArtist = album ? album.artist : 'Unknown Artist';
       
-      songsContainer.innerHTML = `
+      let html = `
         <div class="album-header">
           <h3>Album: ${escapeHtml(albumName)} - ${escapeHtml(albumArtist)}</h3>
-          <button class="back-btn" id="back-to-songs">← Back to All Songs</button>
+          <button class="back-btn" id="back-to-search">← Back to Search</button>
         </div>
-        ${albumSongs.map(song => createSongHTML(song)).join('')}
       `;
-      addDragListeners(songsContainer);
+      
+      // Songs-Tabelle mit Header
+      html += '<div class="songs-table-header">';
+      html += '<div class="header-cover">Cover</div>';
+      html += '<div class="header-title">Title</div>';
+      html += '<div class="header-artist">Artist</div>';
+      html += '<div class="header-album">Album</div>';
+      html += '<div class="header-rating">Rating</div>';
+      html += '<div class="header-duration">Duration</div>';
+      html += '</div>';
+      html += '<div class="songs-table">' + albumSongs.map(song => createSongHTMLOneline(song)).join('') + '</div>';
+      
+      targetContainer.innerHTML = html;
+      addDragListeners(targetContainer);
+      addSongClickListeners(targetContainer);
       
       // Back Button Event Listener
-      const backBtn = document.getElementById('back-to-songs');
+      const backBtn = document.getElementById('back-to-search');
       if (backBtn) {
-        backBtn.addEventListener('click', async () => {
-          await loadSongs();
+        backBtn.addEventListener('click', () => {
+          // Gehe zurück zu No Search State
+          showNoSearchState();
         });
-      }
-      
-      // Wechsle zum Songs Tab
-      const songsTab = document.querySelector('[data-tab="songs"]');
-      if (songsTab) {
-        (songsTab as HTMLElement).click();
       }
     }
   } catch (error) {
@@ -473,42 +744,92 @@ async function showArtistDetails(artistId: string) {
     console.log(`Loading details for artist ${artistId}`);
     const artist = currentArtists.find(a => a.id === artistId);
     const artistSongs = await navidromeClient.getArtistSongs(artistId);
-    const artistAlbums = await navidromeClient.getArtistAlbums(artistId);
+    const artistOwnAlbums = await navidromeClient.getArtistAlbums(artistId);  // Eigene Alben vom Artist-Endpoint
+    const allAlbumsWithArtist = await navidromeClient.getAllAlbumsWithArtist(artist?.name || '');  // Alle Alben mit Songs des Künstlers
     
-    // Songs Container finden und anzeigen
+    console.log('Artist own albums:', artistOwnAlbums.map(a => a.name));
+    console.log('All albums with artist:', allAlbumsWithArtist.map(a => `${a.name} by ${a.artist}`));
+    
+    // Filtere Alben: zeige nur solche, wo der Künstler NICHT der Hauptkünstler ist
+    const appearsOnAlbums = allAlbumsWithArtist.filter(album => {
+      // Prüfe ob es NICHT in den eigenen Alben ist
+      const notInOwnAlbums = !artistOwnAlbums.some(ownAlbum => ownAlbum.id === album.id);
+      
+      // Prüfe ob der Künstler NICHT der Hauptkünstler des Albums ist (exakter Vergleich)
+      const notMainArtist = album.artist.toLowerCase().trim() !== (artist?.name || '').toLowerCase().trim();
+      
+      console.log(`Album "${album.name}" by "${album.artist}": notInOwn=${notInOwnAlbums}, notMain=${notMainArtist}`);
+      
+      return notInOwnAlbums && notMainArtist;
+    });
+    
+    // Prüfe ob wir in Search-View sind oder in der normalen Songs-Liste
+    const searchContent = document.getElementById('search-content');
     const songsContainer = document.getElementById('songs-list');
-    if (songsContainer && artist) {
-      songsContainer.innerHTML = `
+    const targetContainer = searchContent?.style.display !== 'none' ? searchContent : songsContainer;
+    
+    if (targetContainer && artist) {
+      let html = `
         <div class="artist-header">
           <h3>Artist: ${escapeHtml(artist.name)}</h3>
-          <button class="back-btn" id="back-to-songs-artist">← Back to All Songs</button>
+          <button class="back-btn" id="back-to-search-artist">← Back to Search</button>
         </div>
+      `;
+      
+      // Top Songs Sektion mit einheitlicher Tabelle
+      if (artistSongs.length > 0) {
+        html += `
         <div class="artist-section">
           <h4>Top Songs</h4>
-          ${artistSongs.slice(0, 10).map((song: NavidromeSong) => createSongHTML(song)).join('')}
+          <div class="songs-table-header">
+            <div class="header-cover">Cover</div>
+            <div class="header-title">Title</div>
+            <div class="header-artist">Artist</div>
+            <div class="header-album">Album</div>
+            <div class="header-rating">Rating</div>
+            <div class="header-duration">Duration</div>
+          </div>
+          <div class="songs-table">
+            ${artistSongs.slice(0, 10).map((song: NavidromeSong) => createSongHTMLOneline(song)).join('')}
+          </div>
         </div>
+        `;
+      }
+      
+      // Albums Sektion
+      html += `
         <div class="artist-section">
           <h4>Albums</h4>
           <div class="albums-grid">
-            ${artistAlbums.map((album: NavidromeAlbum) => createAlbumHTML(album)).join('')}
+            ${artistOwnAlbums.map((album: NavidromeAlbum) => createAlbumHTML(album)).join('')}
           </div>
         </div>
       `;
-      addDragListeners(songsContainer);
-      addAlbumClickListeners(songsContainer);
       
-      // Back Button Event Listener
-      const backBtn = document.getElementById('back-to-songs-artist');
-      if (backBtn) {
-        backBtn.addEventListener('click', async () => {
-          await loadSongs();
-        });
+      // Appears On Sektion
+      if (appearsOnAlbums.length > 0) {
+        html += `
+        <div class="artist-section">
+          <h4>Appears On</h4>
+          <div class="albums-grid">
+            ${appearsOnAlbums.map((album: NavidromeAlbum) => createAlbumHTML(album)).join('')}
+          </div>
+        </div>
+        `;
       }
       
-      // Wechsle zum Songs Tab
-      const songsTab = document.querySelector('[data-tab="songs"]');
-      if (songsTab) {
-        (songsTab as HTMLElement).click();
+      targetContainer.innerHTML = html;
+      addDragListeners(targetContainer);
+      addAlbumClickListeners(targetContainer);
+      addSongClickListeners(targetContainer);
+      
+      // Back Button Event Listener
+      const backBtn = document.getElementById('back-to-search-artist');
+      if (backBtn) {
+        backBtn.addEventListener('click', () => {
+          // Gehe zurück zu No Search State
+          showNoSearchState();
+        });
       }
     }
   } catch (error) {
@@ -536,9 +857,28 @@ function showError(message: string) {
 }
 
 function showSearchLoading() {
-  const searchContainer = document.getElementById('search-results');
-  if (searchContainer) {
-    searchContainer.innerHTML = '<div class="loading">Searching...</div>';
+  const searchResultsSection = document.getElementById('search-results');
+  const noSearchState = document.getElementById('no-search-state');
+  const searchContent = document.getElementById('search-content');
+  
+  if (searchResultsSection && searchContent) {
+    // Search results anzeigen, No Search State verstecken
+    searchContent.innerHTML = '<div class="loading">Searching...</div>';
+    searchResultsSection.style.display = 'block';
+    if (noSearchState) {
+      noSearchState.style.display = 'none';
+    }
+  }
+}
+
+// No Search State anzeigen (verstecke Search Results)
+function showNoSearchState() {
+  const searchResultsSection = document.getElementById('search-results');
+  const noSearchState = document.getElementById('no-search-state');
+  
+  if (searchResultsSection && noSearchState) {
+    searchResultsSection.style.display = 'none';
+    noSearchState.style.display = 'flex';
   }
 }
 
@@ -664,11 +1004,13 @@ function initializeNavidromeLogin() {
   const djControls = document.getElementById('dj-controls') as HTMLElement;
   const searchContainer = document.getElementById('search-container') as HTMLElement;
   
-  const performLogin = async () => {
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value.trim();
-    const serverUrl = serverInput.value.trim() || "https://musik.radio-endstation.de";
-    
+  // Umgebungsvariablen aus Vite abrufen
+  const envUrl = import.meta.env.VITE_NAVIDROME_URL;
+  const envUsername = import.meta.env.VITE_NAVIDROME_USERNAME;
+  const envPassword = import.meta.env.VITE_NAVIDROME_PASSWORD;
+  
+  // Interne Login-Funktion definieren
+  const performLogin = async (serverUrl: string, username: string, password: string) => {
     if (!username || !password) {
       console.log('❌ Please enter username and password');
       return;
@@ -676,10 +1018,12 @@ function initializeNavidromeLogin() {
     
     try {
       console.log('🔄 Connecting to Navidrome...');
-      loginBtn.disabled = true;
-      loginBtn.textContent = 'Connecting...';
+      if (loginBtn) {
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Connecting...';
+      }
       
-      // Erstelle Navidrome Client mit eingegebenen Credentials
+      // Erstelle Navidrome Client mit Credentials
       navidromeClient = new NavidromeClient({
         serverUrl: serverUrl,
         username: username,
@@ -701,29 +1045,64 @@ function initializeNavidromeLogin() {
         
       } else {
         console.log('❌ Login failed - Wrong username or password');
-        loginBtn.textContent = 'Login Failed';
+        if (loginBtn) {
+          loginBtn.textContent = 'Login Failed';
+          setTimeout(() => {
+            loginBtn.textContent = 'Login';
+            loginBtn.disabled = false;
+          }, 2000);
+        }
+      }
+      
+    } catch (error) {
+      console.error("❌ Navidrome connection error:", error);
+      if (loginBtn) {
+        loginBtn.textContent = 'Connection Error';
         setTimeout(() => {
           loginBtn.textContent = 'Login';
           loginBtn.disabled = false;
         }, 2000);
       }
-      
-    } catch (error) {
-      console.error("❌ Navidrome connection error:", error);
-      loginBtn.textContent = 'Connection Error';
-      setTimeout(() => {
-        loginBtn.textContent = 'Login';
-        loginBtn.disabled = false;
-      }, 2000);
     }
   };
   
-  loginBtn?.addEventListener('click', performLogin);
+  // Felder verstecken wenn Werte in .env vorhanden sind
+  if (envUrl) {
+    const serverGroup = document.querySelector('.form-group:has(#navidrome-server)') as HTMLElement;
+    if (serverGroup) serverGroup.style.display = 'none';
+  }
+  
+  if (envUsername) {
+    const usernameGroup = document.querySelector('.form-group:has(#navidrome-username)') as HTMLElement;
+    if (usernameGroup) usernameGroup.style.display = 'none';
+  }
+  
+  if (envPassword) {
+    const passwordGroup = document.querySelector('.form-group:has(#navidrome-password)') as HTMLElement;
+    if (passwordGroup) passwordGroup.style.display = 'none';
+  }
+  
+  // Auto-Login wenn alle Credentials in .env vorhanden sind
+  if (envUrl && envUsername && envPassword) {
+    console.log('🔄 Auto-login with environment credentials...');
+    performLogin(envUrl, envUsername, envPassword);
+    return;
+  }
+  
+  const performLoginFromForm = async () => {
+    const username = usernameInput.value.trim() || envUsername;
+    const password = passwordInput.value.trim() || envPassword;
+    const serverUrl = serverInput.value.trim() || envUrl || "https://musik.radio-endstation.de";
+    
+    await performLogin(serverUrl, username, password);
+  };
+  
+  loginBtn?.addEventListener('click', performLoginFromForm);
   
   // Enter-Taste in Passwort-Feld
   passwordInput?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      performLogin();
+      performLoginFromForm();
     }
   });
 }
@@ -788,7 +1167,8 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
     // Update play button state
     const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
     if (playPauseBtn) {
-      playPauseBtn.textContent = '▶️';
+      const icon = playPauseBtn.querySelector('.material-icons');
+      if (icon) icon.textContent = 'play_arrow';
       playPauseBtn.classList.remove('playing');
     }
     
@@ -833,7 +1213,8 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
           console.error(`❌ Play error on Player ${side}:`, e);
           showError(`Cannot play on Player ${side.toUpperCase()}: ${e.message}`);
         });
-        playPauseBtn.textContent = '⏸️';
+        const icon = playPauseBtn.querySelector('.material-icons');
+        if (icon) icon.textContent = 'pause';
         playPauseBtn.classList.add('playing');
       } else {
         console.log(`❓ No track loaded on Player ${side}`);
@@ -841,7 +1222,8 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
       }
     } else {
       audio.pause();
-      playPauseBtn.textContent = '▶️';
+      const icon = playPauseBtn.querySelector('.material-icons');
+      if (icon) icon.textContent = 'play_arrow';
       playPauseBtn.classList.remove('playing');
     }
   });
@@ -850,21 +1232,38 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
     audio.pause();
     audio.currentTime = 0;
     audio.src = '';
+    
+    // Clear song ID for rating system
+    delete audio.dataset.songId;
+    
     const trackTitle = document.getElementById(`track-title-${side}`);
     const trackArtist = document.getElementById(`track-artist-${side}`);
+    const playerRating = document.getElementById(`player-rating-${side}`);
+    
     if (trackTitle) trackTitle.textContent = 'No Track Loaded';
-    if (trackArtist) trackArtist.textContent = '';
+    if (trackArtist) trackArtist.textContent = '-';
+    if (playerRating) playerRating.innerHTML = '';
+    
     if (playPauseBtn) {
-      playPauseBtn.textContent = '▶️';
+      const icon = playPauseBtn.querySelector('.material-icons');
+      if (icon) icon.textContent = 'play_arrow';
       playPauseBtn.classList.remove('playing');
     }
     if (playerDeck) {
       playerDeck.classList.remove('playing');
     }
+    
+    console.log(`💿 Player ${side.toUpperCase()} ejected`);
   });
 
   restartBtn?.addEventListener('click', () => {
-    audio.currentTime = 0;
+    if (audio.src) {
+      audio.currentTime = 0;
+      console.log(`🔄 Player ${side.toUpperCase()} restarted`);
+    } else {
+      console.log(`❓ No track loaded on Player ${side}`);
+      showError(`No track loaded on Player ${side.toUpperCase()}`);
+    }
   });
   
   // Volume Control
@@ -923,6 +1322,18 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   }
   if (artistElement) {
     artistElement.textContent = `${song.artist} - ${song.album}`;
+  }
+  
+  // Song ID für Rating-System speichern
+  audio.dataset.songId = song.id;
+  
+  // Rating anzeigen (async laden)
+  const playerRating = document.getElementById(`player-rating-${side}`);
+  if (playerRating) {
+    playerRating.innerHTML = createStarRating(song.userRating || 0, song.id);
+    
+    // Rating async nachladen für bessere Performance
+    loadRatingAsync(song.id);
   }
   
   // Auto-Play wenn gewünscht
@@ -1055,12 +1466,33 @@ function findSongById(songId: string): NavidromeSong | null {
   let song = currentSongs.find(s => s.id === songId);
   if (song) return song;
   
-  // Suche in Search Results (DOM)
-  const searchResults = document.querySelectorAll('.track-item');
+  // Suche in Search Results (DOM) - sowohl alte als auch neue Track-Items
+  const searchResults = document.querySelectorAll('.track-item, .track-item-oneline');
   for (const item of searchResults) {
     const element = item as HTMLElement;
     if (element.dataset.songId === songId) {
-      // Extrahiere Song-Info aus dem DOM-Element
+      
+      // Für neue einzeilige Track-Items
+      if (element.classList.contains('track-item-oneline')) {
+        const titleElement = element.querySelector('.track-title');
+        const artistElement = element.querySelector('.track-artist');
+        const albumElement = element.querySelector('.track-album');
+        
+        if (titleElement && artistElement && albumElement) {
+          return {
+            id: songId,
+            title: titleElement.textContent || 'Unknown',
+            artist: artistElement.textContent || 'Unknown Artist',
+            album: albumElement.textContent || 'Unknown Album',
+            duration: 0,
+            size: 0,
+            suffix: 'mp3',
+            bitRate: 0
+          };
+        }
+      }
+      
+      // Für alte Track-Items (Fallback)
       const titleElement = element.querySelector('h4');
       const infoElement = element.querySelector('p');
       
@@ -1086,3 +1518,85 @@ function findSongById(songId: string): NavidromeSong | null {
   // Nicht gefunden
   return null;
 }
+
+// Rating-Event-Listeners initialisieren
+function initializeRatingListeners() {
+  document.addEventListener('click', async (event) => {
+    const target = event.target as HTMLElement;
+    
+    if (target.classList.contains('star')) {
+      const rating = parseInt(target.dataset.rating || '0');
+      const songId = target.dataset.songId;
+      
+      if (songId && rating > 0) {
+        await setRating(songId, rating);
+        
+        // Async Rating laden für bessere Performance
+        loadRatingAsync(songId);
+      }
+    }
+  });
+  
+  // Hover-Effekte für Sterne
+  document.addEventListener('mouseover', (event) => {
+    const target = event.target as HTMLElement;
+    
+    if (target.classList.contains('star')) {
+      const rating = parseInt(target.dataset.rating || '0');
+      const songId = target.dataset.songId;
+      
+      if (songId) {
+        highlightStars(songId, rating);
+      }
+    }
+  });
+  
+  document.addEventListener('mouseout', (event) => {
+    const target = event.target as HTMLElement;
+    
+    if (target.classList.contains('star')) {
+      const songId = target.dataset.songId;
+      
+      if (songId) {
+        resetStarHighlight(songId);
+      }
+    }
+  });
+}
+
+// Sterne für Hover-Effekt hervorheben
+function highlightStars(songId: string, rating: number) {
+  const stars = document.querySelectorAll(`[data-song-id="${songId}"] .star`);
+  stars.forEach((star, index) => {
+    const starElement = star as HTMLElement;
+    if (index < rating) {
+      starElement.classList.add('hover-preview');
+    } else {
+      starElement.classList.remove('hover-preview');
+    }
+  });
+}
+
+// Stern-Highlight zurücksetzen
+function resetStarHighlight(songId: string) {
+  const stars = document.querySelectorAll(`[data-song-id="${songId}"] .star`);
+  stars.forEach(star => {
+    star.classList.remove('hover-preview');
+  });
+}
+
+// Rating asynchron laden (für bessere Performance)
+async function loadRatingAsync(songId: string) {
+  if (!navidromeClient) return;
+  
+  try {
+    const rating = await navidromeClient.getRating(songId);
+    if (rating !== null) {
+      updateRatingDisplay(songId, rating);
+    }
+  } catch (error) {
+    console.warn(`Failed to load rating for song ${songId}:`, error);
+  }
+}
+
+// Recent Albums Funktion entfernt - wird nicht mehr benötigt
