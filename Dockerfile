@@ -66,7 +66,7 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY --from=builder --chown=webdj:nodejs /app/dist ./dist
 COPY --from=builder --chown=webdj:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=webdj:nodejs /app/package*.json ./
-COPY --from=builder --chown=webdj:nodejs /app/cors-proxy-fixed.js ./
+COPY --from=builder --chown=webdj:nodejs /app/unified-server.js ./
 
 # Copy environment template and start script
 COPY --chown=webdj:nodejs .env.example .env.example

@@ -224,8 +224,9 @@ body {
 /* Volume Section - Vertical for Portrait */
 .volume-section {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
+  gap: 0.5rem;
   height: 90px;
 }
 
@@ -270,6 +271,54 @@ body {
 
 .volume-label {
   font-size: 0.7em;
+  color: #888;
+  margin-top: 0.25rem;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+/* Volume Meter */
+.volume-meter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.meter-bars {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+  height: 60px;
+  align-items: center;
+}
+
+.meter-bar {
+  width: 8px;
+  height: 5px;
+  background: #333;
+  border: 1px solid #222;
+  border-radius: 1px;
+  transition: all 0.1s ease;
+}
+
+.meter-bar.active {
+  background: #00ff88;
+  box-shadow: 0 0 3px rgba(0, 255, 136, 0.5);
+}
+
+.meter-bar.orange.active {
+  background: #ff8800;
+  box-shadow: 0 0 3px rgba(255, 136, 0, 0.5);
+}
+
+.meter-bar.red.active {
+  background: #ff0044;
+  box-shadow: 0 0 3px rgba(255, 0, 68, 0.5);
+}
+
+.meter-label {
+  font-size: 0.6em;
   color: #888;
   margin-top: 0.25rem;
   writing-mode: vertical-rl;
@@ -386,6 +435,80 @@ body {
   flex-grow: 1;
   justify-content: center;
   width: 100%;
+}
+
+/* Mic Section with Volume Control and Meter */
+.mic-section {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+  flex-grow: 1;
+  width: 100%;
+  justify-content: center;
+}
+
+.mic-volume-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 120px;
+}
+
+.mic-volume-control input[type="range"] {
+  writing-mode: bt-lr; /* IE */
+  -webkit-appearance: slider-vertical; /* WebKit */
+  appearance: slider-vertical; /* Standard */
+  width: 8px;
+  height: 80px;
+  background: #444;
+  outline: none;
+  border-radius: 4px;
+}
+
+.mic-volume-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ff4444;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(255, 68, 68, 0.5);
+}
+
+.mic-volume-control input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ff4444;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 6px rgba(255, 68, 68, 0.5);
+}
+
+.mic-volume-meter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 120px;
+}
+
+.mic-volume-meter .meter-bars {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  height: 80px;
+  align-items: center;
+}
+
+.mic-volume-meter .meter-bar {
+  width: 10px;
+  height: 8px;
+  background: #333;
+  border: 1px solid #222;
+  border-radius: 2px;
+  transition: all 0.1s ease;
 }
 
 .broadcast-btn {

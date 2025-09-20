@@ -10,7 +10,7 @@ const PORT = 8082;
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Ice-Public', 'Ice-Name', 'Ice-Description', 'User-Agent']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Ice-Public', 'Ice-Name', 'Ice-Description', 'User-Agent', 'Range']
 }));
 
 // Harbor Connection Handler
@@ -144,13 +144,149 @@ function connectToHarbor(headers) {
     });
 }
 
+// Audio-Proxy für Navidrome Streams (CORS-Fix)
+app.get('/navidrome-stream', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) {
+        return res.status(400).json({ error: 'Missing URL parameter' });
+    }
+    
+    console.log(`🎵 Audio-Stream Request: ${targetUrl}`);
+    console.log(`📡 Headers: Range=${req.headers.range || 'none'}`);
+    
+    try {
+        const fetch = (await import('node-fetch')).default;
+        
+        // Headers für Request vorbereiten
+        const requestHeaders = {
+            'User-Agent': req.headers['user-agent'] || 'Navidrome-WebDJ-Proxy'
+        };
+        
+        // Range-Header nur hinzufügen wenn vorhanden
+        if (req.headers.range) {
+            requestHeaders['Range'] = req.headers.range;
+        }
+        
+        // Authorization hinzufügen falls vorhanden
+        if (req.headers.authorization) {
+            requestHeaders['Authorization'] = req.headers.authorization;
+        }
+        
+        console.log(`📤 Forwarding headers:`, requestHeaders);
+        
+        const response = await fetch(targetUrl, {
+            headers: requestHeaders
+        });
+        
+        console.log(`📥 Navidrome response: ${response.status} ${response.statusText}`);
+        
+        // CORS-Headers hinzufügen
+        res.set({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range, Authorization, Content-Type',
+            'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
+        });
+        
+        // Content-Type weiterleiten
+        if (response.headers.get('content-type')) {
+            res.set('Content-Type', response.headers.get('content-type'));
+        }
+        
+        // Content-Length weiterleiten falls vorhanden
+        if (response.headers.get('content-length')) {
+            res.set('Content-Length', response.headers.get('content-length'));
+        }
+        
+        // Accept-Ranges weiterleiten
+        if (response.headers.get('accept-ranges')) {
+            res.set('Accept-Ranges', response.headers.get('accept-ranges'));
+        }
+        
+        // Content-Range weiterleiten (wichtig für Range-Requests)
+        if (response.headers.get('content-range')) {
+            res.set('Content-Range', response.headers.get('content-range'));
+        }
+        
+        // Status Code weiterleiten
+        res.status(response.status);
+        
+        // Stream weiterleiten
+        response.body.pipe(res);
+        console.log(`✅ Audio-Stream proxied: ${response.status}`);
+        
+    } catch (error) {
+        console.error(`❌ Audio-Proxy Error:`, error.message);
+        res.status(500).json({ error: 'Proxy Error', details: error.message });
+    }
+});
+
+// Cover Art Proxy für Navidrome
+app.get('/navidrome-cover', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) {
+        return res.status(400).json({ error: 'Missing URL parameter' });
+    }
+    
+    console.log(`🖼️ Cover Art Request: ${targetUrl}`);
+    
+    try {
+        const fetch = (await import('node-fetch')).default;
+        
+        // Headers für Request vorbereiten
+        const requestHeaders = {
+            'User-Agent': req.headers['user-agent'] || 'Navidrome-WebDJ-Proxy'
+        };
+        
+        // Authorization hinzufügen falls vorhanden
+        if (req.headers.authorization) {
+            requestHeaders['Authorization'] = req.headers.authorization;
+        }
+        
+        const response = await fetch(targetUrl, {
+            headers: requestHeaders
+        });
+        
+        console.log(`📥 Cover response: ${response.status} ${response.statusText}`);
+        
+        // CORS-Headers hinzufügen
+        res.set({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Authorization, Content-Type'
+        });
+        
+        // Content-Type weiterleiten
+        if (response.headers.get('content-type')) {
+            res.set('Content-Type', response.headers.get('content-type'));
+        }
+        
+        // Content-Length weiterleiten falls vorhanden
+        if (response.headers.get('content-length')) {
+            res.set('Content-Length', response.headers.get('content-length'));
+        }
+        
+        // Status Code weiterleiten
+        res.status(response.status);
+        
+        // Stream weiterleiten
+        response.body.pipe(res);
+        console.log(`✅ Cover Art proxied: ${response.status}`);
+        
+    } catch (error) {
+        console.error(`❌ Cover Art Proxy Error:`, error.message);
+        res.status(500).json({ error: 'Proxy Error', details: error.message });
+    }
+});
+
 // Health check
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'ok', 
-        message: 'Harbor CORS Proxy',
+        message: 'Harbor CORS Proxy with Audio-Proxy',
         harbor: isConnected ? 'connected' : 'disconnected',
-        mountPoint: isConnected ? MOUNT_POINTS[currentMountIndex] : null
+        mountPoint: isConnected ? MOUNT_POINTS[currentMountIndex] : null,
+        audioProxy: 'enabled'
     });
 });
 

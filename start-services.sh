@@ -2,7 +2,7 @@
 
 # Start services script for Docker container
 
-echo "Starting WebDJ services..."
+echo "Starting WebDJ unified server..."
 
 # Create .env file from environment variables if it doesn't exist
 if [ ! -f .env ]; then
@@ -16,30 +16,20 @@ if [ ! -f .env ]; then
     } > .env 2>/dev/null || echo "Warning: Could not create .env file, using environment variables directly"
 fi
 
-# Start CORS proxy in background
-echo "Starting CORS proxy on port 8082..."
-node cors-proxy-fixed.js &
-PROXY_PID=$!
-
-# Wait a moment for proxy to start
-sleep 2
-
-# Start the web server using Node.js http-server (more reliable than Python)
-echo "Starting web server on port 5173..."
-npx http-server dist -p 5173 -c-1 --cors &
-WEB_PID=$!
+# Start unified server (Web + CORS Proxy + Harbor Stream)
+echo "Starting unified server on port 5173..."
+node unified-server.js &
+SERVER_PID=$!
 
 # Function to handle shutdown
 shutdown() {
-    echo "Shutting down services..."
-    kill $PROXY_PID 2>/dev/null
-    kill $WEB_PID 2>/dev/null
+    echo "Shutting down unified server..."
+    kill $SERVER_PID 2>/dev/null
     exit 0
 }
 
 # Trap signals
 trap shutdown SIGTERM SIGINT
 
-# Wait for processes
-wait $PROXY_PID
-wait $WEB_PID
+# Wait for server process
+wait $SERVER_PID

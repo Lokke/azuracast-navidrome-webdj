@@ -11,10 +11,12 @@ let lastSearchQuery: string = '';
 // Audio Mixing und Streaming Infrastruktur
 let audioContext: AudioContext | null = null;
 let masterGainNode: GainNode | null = null;
+let streamGainNode: GainNode | null = null; // Separate Ausgabe für Stream
 let leftPlayerGain: GainNode | null = null;
 let rightPlayerGain: GainNode | null = null;
 let microphoneGain: GainNode | null = null;
 let crossfaderGain: { left: GainNode; right: GainNode } | null = null;
+let streamCrossfaderGain: { left: GainNode; right: GainNode } | null = null; // Separate Crossfader für Stream
 let microphoneStream: MediaStream | null = null;
 let mediaRecorder: MediaRecorder | null = null;
 let isStreaming: boolean = false;
@@ -57,9 +59,9 @@ let streamConfig: StreamConfig = {
   serverType: (import.meta.env.VITE_STREAM_SERVER_TYPE as 'icecast' | 'shoutcast') || 'icecast',
   mountPoint: import.meta.env.VITE_STREAM_MOUNT_POINT || '/live',
   password: import.meta.env.VITE_STREAM_PASSWORD,
-  bitrate: parseInt(import.meta.env.VITE_STREAM_BITRATE) || 128,
+  bitrate: parseInt(import.meta.env.VITE_STREAM_BITRATE) || 192, // Erhöht auf 192 kbps für bessere Qualität
   format: 'mp3',
-  sampleRate: 44100,
+  sampleRate: 48000, // Erhöht auf 48kHz für professionelle Audio-Qualität
   username: import.meta.env.VITE_STREAM_USERNAME
 };
 
@@ -72,6 +74,145 @@ function getStreamServerUrl(): string {
     return `${proxyServer}/stream`;
   } else {
     return import.meta.env.VITE_STREAM_SERVER || 'http://localhost:8000';
+  }
+}
+
+// AUDIO MIXING FUNCTIONS (Moved up for proper scoping)
+
+// Audio-Mixing-System initialisieren
+async function initializeAudioMixing() {
+  try {
+    // AudioContext erstellen
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    console.log('AudioContext created:', audioContext.state);
+    
+    // Master Gain Node für Monitor-Ausgabe (Kopfhörer/Lautsprecher)
+    masterGainNode = audioContext.createGain();
+    masterGainNode.gain.value = 0.8; // 80% Master-Volume
+    masterGainNode.connect(audioContext.destination);
+    
+    // Stream Gain Node für Live-Stream (separate Ausgabe)
+    streamGainNode = audioContext.createGain();
+    
+    // Separate Gain Nodes für jeden Player
+    leftPlayerGain = audioContext.createGain();
+    leftPlayerGain.gain.value = 0.8; // Initial volume 80%
+    rightPlayerGain = audioContext.createGain();
+    rightPlayerGain.gain.value = 0.8; // Initial volume 80%
+    
+    // Crossfader Gain Nodes für Monitor-Ausgabe
+    crossfaderGain = {
+      left: audioContext.createGain(),
+      right: audioContext.createGain()
+    };
+    
+    // Crossfader Gain Nodes für Stream-Ausgabe (separate Kontrolle)
+    streamCrossfaderGain = {
+      left: audioContext.createGain(),
+      right: audioContext.createGain()
+    };
+    
+    // Initial Crossfader in der Mitte (beide Kanäle gleichlaut)
+    const initialGain = Math.cos(0.5 * Math.PI / 2); // ~0.707 für 50% Position
+    crossfaderGain.left.gain.value = initialGain;
+    crossfaderGain.right.gain.value = initialGain;
+    streamCrossfaderGain.left.gain.value = initialGain;
+    streamCrossfaderGain.right.gain.value = initialGain;
+    
+    // Mikrofon Gain Node
+    microphoneGain = audioContext.createGain();
+    microphoneGain.gain.value = 0; // Standardmäßig stumm
+    
+    // Monitor-Routing: Crossfader Gains mit Master verbinden
+    crossfaderGain.left.connect(masterGainNode);
+    crossfaderGain.right.connect(masterGainNode);
+    
+    // Stream-Routing: Stream Crossfader Gains mit Stream verbinden
+    streamCrossfaderGain.left.connect(streamGainNode);
+    streamCrossfaderGain.right.connect(streamGainNode);
+    
+    // Player Gains mit beiden Crossfadern verbinden
+    leftPlayerGain.connect(crossfaderGain.left);
+    leftPlayerGain.connect(streamCrossfaderGain.left);
+    rightPlayerGain.connect(crossfaderGain.right);
+    rightPlayerGain.connect(streamCrossfaderGain.right);
+    
+    // Mikrofon zu beiden Ausgängen verbinden
+    microphoneGain.connect(masterGainNode);
+    microphoneGain.connect(streamGainNode);
+    
+    console.log('🎛️ Audio mixing system initialized with separate monitor and stream outputs');
+    return true;
+  } catch (error) {
+    console.error('Failed to initialize audio mixing:', error);
+    return false;
+  }
+}
+
+// Audio-Quellen zu Mixing-System hinzufügen
+function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'right') {
+  if (!audioContext) {
+    console.error(`❌ AudioContext not initialized for ${side} player`);
+    return false;
+  }
+  
+  try {
+    // Entferne vorherige AudioSource-Verbindung falls vorhanden
+    if ((audioElement as any)._audioSourceNode) {
+      try {
+        (audioElement as any)._audioSourceNode.disconnect();
+        console.log(`🔌 Disconnected previous ${side} audio source`);
+      } catch (e) {
+        // Source node already disconnected
+      }
+    }
+    
+    // MediaElementAudioSourceNode erstellen
+    const sourceNode = audioContext.createMediaElementSource(audioElement);
+    (audioElement as any)._audioSourceNode = sourceNode; // Speichere Referenz für späteres Cleanup
+    
+    // Mit entsprechendem Player Gain verbinden
+    if (side === 'left' && leftPlayerGain && streamGainNode) {
+      sourceNode.connect(leftPlayerGain);
+      console.log(`🎵 Connected ${side} player to leftPlayerGain (Web Audio API)`);
+      
+      // DEBUG: Auch direkt zum Stream verbinden (wie Mikrofon)
+      sourceNode.connect(streamGainNode);
+      console.log(`🔥 DEBUG: ${side} player also connected DIRECTLY to streamGainNode (bypassing crossfader)`);
+      
+    } else if (side === 'right' && rightPlayerGain && streamGainNode) {
+      sourceNode.connect(rightPlayerGain);
+      console.log(`🎵 Connected ${side} player to rightPlayerGain (Web Audio API)`);
+      
+      // DEBUG: Auch direkt zum Stream verbinden (wie Mikrofon)  
+      sourceNode.connect(streamGainNode);
+      console.log(`🔥 DEBUG: ${side} player also connected DIRECTLY to streamGainNode (bypassing crossfader)`);
+      
+    } else {
+      console.error(`❌ Failed to connect ${side} player: gain node not available`);
+      return false;
+    }
+    
+    // WICHTIG: Nach createMediaElementSource wird das Audio-Element stumm!
+    // Es muss über die Web Audio API Pipeline laufen
+    console.log(`⚠️  ${side} audio now routed through Web Audio API → Stream`);
+    
+    // Debugging: Aktueller Audio-Flow anzeigen
+    console.log(`📊 Audio Flow: ${side} Player → ${side}PlayerGain → StreamGainNode → MediaRecorder → Shoutcast`);
+    
+    return true;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes('AudioNode is already connected')) {
+      console.log(`✅ ${side} player already connected to mixer`);
+      return true;
+    } else if (errorMsg.includes('MediaElementAudioSource')) {
+      console.warn(`⚠️  ${side} player already has MediaElementSource - this is normal for track changes`);
+      return true;
+    } else {
+      console.error(`❌ Failed to connect ${side} player to mixer:`, error);
+      return false;
+    }
   }
 }
 
@@ -130,6 +271,22 @@ function createPlayerDeckHTML(side: 'left' | 'right'): string {
         <div class="volume-control">
           <input type="range" min="0" max="100" value="80" id="volume-${side}" orient="vertical">
           <div class="volume-label">VOL</div>
+        </div>
+        <!-- Volume Meter -->
+        <div class="volume-meter" id="volume-meter-${side}">
+          <div class="meter-bars">
+            <div class="meter-bar" style="--level: 0"></div>
+            <div class="meter-bar" style="--level: 1"></div>
+            <div class="meter-bar" style="--level: 2"></div>
+            <div class="meter-bar" style="--level: 3"></div>
+            <div class="meter-bar" style="--level: 4"></div>
+            <div class="meter-bar" style="--level: 5"></div>
+            <div class="meter-bar" style="--level: 6"></div>
+            <div class="meter-bar" style="--level: 7"></div>
+            <div class="meter-bar orange" style="--level: 8"></div>
+            <div class="meter-bar red" style="--level: 9"></div>
+          </div>
+          <div class="meter-label">dB</div>
         </div>
       </div>
     </div>
@@ -259,6 +416,10 @@ function initializeWaveSurfer(side: 'left' | 'right'): WaveSurfer {
     normalize: true,
     backend: 'WebAudio'
   });
+  
+  // WaveSurfer muten - es soll nur Visualization sein, kein Audio output
+  wavesurfer.setVolume(0);
+  console.log(`🔇 WaveSurfer ${side} set to mute (visualization only)`);
 
   waveSurfers[side] = wavesurfer;
   return wavesurfer;
@@ -399,7 +560,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   
   // Mikrofon Toggle Funktionalität
   const micBtn = document.getElementById("mic-toggle") as HTMLButtonElement;
+  const micVolumeSlider = document.getElementById("mic-volume") as HTMLInputElement;
   let micActive = false;
+  
+  // Mikrofon Volume Control
+  micVolumeSlider?.addEventListener("input", (e) => {
+    const target = e.target as HTMLInputElement;
+    const volume = parseInt(target.value) / 100;
+    if (microphoneGain) {
+      microphoneGain.gain.value = micActive ? volume : 0;
+      console.log(`🎤 Microphone volume: ${Math.round(volume * 100)}%`);
+    }
+  });
   
   micBtn?.addEventListener("click", async () => {
     micActive = !micActive;
@@ -413,10 +585,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Mikrofon einrichten
       const micReady = await setupMicrophone();
       if (micReady) {
-        setMicrophoneEnabled(true);
+        // Volume basierend auf Slider setzen
+        const volume = parseInt(micVolumeSlider?.value || "70") / 100;
+        setMicrophoneEnabled(true, volume);
         micBtn.classList.add("active");
         micBtn.innerHTML = '<span class="material-icons">mic</span> MIKROFON AN';
-        console.log("Mikrofon aktiviert - pulsiert rot");
+        console.log("🎤 Mikrofon aktiviert - pulsiert rot");
       } else {
         micActive = false;
         alert('Microphone access denied or not available');
@@ -430,86 +604,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   
 // Audio-Mixing-System initialisieren
-async function initializeAudioMixing() {
-  try {
-    // AudioContext erstellen
-    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    
-    // Master Gain Node für Lautstärke-Kontrolle
-    masterGainNode = audioContext.createGain();
-    masterGainNode.connect(audioContext.destination);
-    
-    // Separate Gain Nodes für jeden Player
-    leftPlayerGain = audioContext.createGain();
-    rightPlayerGain = audioContext.createGain();
-    
-    // Crossfader Gain Nodes
-    crossfaderGain = {
-      left: audioContext.createGain(),
-      right: audioContext.createGain()
-    };
-    
-    // Mikrofon Gain Node
-    microphoneGain = audioContext.createGain();
-    microphoneGain.gain.value = 0; // Standardmäßig stumm
-    
-    // Crossfader Gains mit Master verbinden
-    crossfaderGain.left.connect(masterGainNode);
-    crossfaderGain.right.connect(masterGainNode);
-    
-    // Player Gains mit Crossfader verbinden
-    leftPlayerGain.connect(crossfaderGain.left);
-    rightPlayerGain.connect(crossfaderGain.right);
-    
-    // Mikrofon direkt mit Master verbinden (bypassed Crossfader)
-    microphoneGain.connect(masterGainNode);
-    
-    console.log('Audio mixing system initialized');
-    return true;
-  } catch (error) {
-    console.error('Failed to initialize audio mixing:', error);
-    return false;
-  }
-}
-
 // Audio-Quellen zu Mixing-System hinzufügen
-function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'right') {
-  if (!audioContext) return false;
-  
-  try {
-    // Entferne vorherige AudioSource-Verbindung falls vorhanden
-    if ((audioElement as any)._audioSourceNode) {
-      try {
-        (audioElement as any)._audioSourceNode.disconnect();
-      } catch (e) {
-        // Source node already disconnected
-      }
-    }
-    
-    // MediaElementAudioSourceNode erstellen
-    const sourceNode = audioContext.createMediaElementSource(audioElement);
-    (audioElement as any)._audioSourceNode = sourceNode; // Speichere Referenz für späteres Cleanup
-    
-    // Mit entsprechendem Player Gain verbinden
-    if (side === 'left' && leftPlayerGain) {
-      sourceNode.connect(leftPlayerGain);
-    } else if (side === 'right' && rightPlayerGain) {
-      sourceNode.connect(rightPlayerGain);
-    }
-    
-    console.log(`🎵 Connected ${side} player to audio mixer for streaming`);
-    return true;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    if (errorMsg.includes('AudioNode is already connected')) {
-      console.log(`${side} player already connected to mixer`);
-      return true;
-    } else {
-      console.error(`Failed to connect ${side} player to mixer:`, error);
-      return false;
-    }
-  }
-}
 
 // CORS-Fehlermeldung anzeigen
 function showCORSErrorMessage() {
@@ -574,35 +669,94 @@ async function setupMicrophone() {
   if (!audioContext || !microphoneGain) return false;
   
   try {
-    // Mikrofon-Zugriff anfordern
+    // Erweiterte Mikrofon-Konfiguration für bessere Audioqualität
     microphoneStream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
+        // Basis-Audio-Einstellungen
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: false
+        autoGainControl: false, // AGC aus für bessere Kontrolle
+        
+        // Erweiterte Qualitäts-Einstellungen
+        sampleRate: { ideal: 48000 },     // Höhere Sample-Rate für bessere Qualität
+        sampleSize: { ideal: 16 },        // 16-bit Audio
+        channelCount: { ideal: 1 },       // Mono für geringere Bandbreite
+        
+        // Browser-spezifische Verbesserungen (falls unterstützt)
+        // @ts-ignore - Browser-spezifische Eigenschaften
+        googEchoCancellation: true,
+        // @ts-ignore
+        googAutoGainControl: false,
+        // @ts-ignore
+        googNoiseSuppression: true,
+        // @ts-ignore
+        googHighpassFilter: true,
+        // @ts-ignore
+        googTypingNoiseDetection: true,
+        // @ts-ignore
+        googAudioMirroring: false
       } 
     });
     
     // Mikrofon-Tracks stumm schalten für Browser-Ausgabe (verhindert Echo)
     microphoneStream.getAudioTracks().forEach(track => {
       track.enabled = true; // Track ist aktiv für Aufnahme
+      
+      // Erweiterte Track-Einstellungen falls verfügbar
+      if (track.applyConstraints) {
+        track.applyConstraints({
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+          sampleRate: 48000
+        }).catch(e => console.warn('Could not apply advanced mic constraints:', e));
+      }
     });
     
     // MediaStreamAudioSourceNode erstellen
     const micSourceNode = audioContext.createMediaStreamSource(microphoneStream);
-    micSourceNode.connect(microphoneGain);
     
-    console.log('Microphone connected to audio mixer (echo prevention enabled)');
+    // Optional: Kompressor für bessere Mikrofon-Qualität hinzufügen
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-24, audioContext.currentTime);
+    compressor.knee.setValueAtTime(30, audioContext.currentTime);
+    compressor.ratio.setValueAtTime(12, audioContext.currentTime);
+    compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
+    compressor.release.setValueAtTime(0.25, audioContext.currentTime);
+    
+    // Audio-Kette: Mikrofon -> Kompressor -> Gain
+    micSourceNode.connect(compressor);
+    compressor.connect(microphoneGain);
+    
+    console.log('🎤 Microphone connected with enhanced audio processing (48kHz, compression, noise reduction)');
     return true;
   } catch (error) {
     console.error('Failed to setup microphone:', error);
-    return false;
+    // Fallback mit einfacheren Einstellungen versuchen
+    try {
+      microphoneStream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false
+        } 
+      });
+      
+      const micSourceNode = audioContext.createMediaStreamSource(microphoneStream);
+      micSourceNode.connect(microphoneGain);
+      
+      console.log('🎤 Microphone connected with basic settings (fallback)');
+      return true;
+    } catch (fallbackError) {
+      console.error('Failed to setup microphone even with basic settings:', fallbackError);
+      return false;
+    }
   }
 }
 
 // Crossfader-Position setzen (0 = links, 0.5 = mitte, 1 = rechts)
 function setCrossfaderPosition(position: number) {
-  if (!crossfaderGain) return;
+  if (!crossfaderGain || !streamCrossfaderGain) return;
   
   // Position zwischen 0 und 1 begrenzen
   position = Math.max(0, Math.min(1, position));
@@ -612,31 +766,36 @@ function setCrossfaderPosition(position: number) {
   // Rechts: minimum bei 0, maximum bei 1
   const rightGain = Math.sin(position * Math.PI / 2);
   
+  // Monitor-Crossfader (für Speaker/Kopfhörer)
   crossfaderGain.left.gain.value = leftGain;
   crossfaderGain.right.gain.value = rightGain;
   
-  console.log(`Crossfader position: ${position}, Left: ${leftGain.toFixed(2)}, Right: ${rightGain.toFixed(2)}`);
+  // Stream-Crossfader (für Live-Stream) - gleiche Werte
+  streamCrossfaderGain.left.gain.value = leftGain;
+  streamCrossfaderGain.right.gain.value = rightGain;
+  
+  console.log(`🎛️ Crossfader position: ${position}, Left: ${leftGain.toFixed(2)}, Right: ${rightGain.toFixed(2)} (Monitor + Stream)`);
 }
 
 // Mikrofon ein-/ausschalten
-function setMicrophoneEnabled(enabled: boolean) {
+function setMicrophoneEnabled(enabled: boolean, volume: number = 1) {
   if (!microphoneGain) return;
   
-  microphoneGain.gain.value = enabled ? 1 : 0;
-  console.log(`Microphone ${enabled ? 'enabled' : 'disabled'}`);
+  microphoneGain.gain.value = enabled ? volume : 0;
+  console.log(`🎤 Microphone ${enabled ? 'enabled' : 'disabled'} with volume ${Math.round(volume * 100)}%`);
 }
 
 // MediaRecorder für Streaming einrichten
 async function initializeStreamRecorder() {
-  if (!audioContext || !masterGainNode) {
-    console.error('Audio context not initialized');
+  if (!audioContext || !streamGainNode) {
+    console.error('Audio context or stream gain node not initialized');
     return false;
   }
   
   try {
-    // MediaStreamDestination erstellen für Aufnahme
+    // MediaStreamDestination erstellen für Stream-Aufnahme
     const destination = audioContext.createMediaStreamDestination();
-    masterGainNode.connect(destination);
+    streamGainNode.connect(destination); // Verwende streamGainNode statt masterGainNode
     
     // MediaRecorder mit MP3-kompatiblen Einstellungen
     let options: MediaRecorderOptions;
@@ -830,7 +989,7 @@ async function startDirectStream(): Promise<boolean> {
     console.log('Starting direct Liquidsoap Harbor stream...');
     
     // 1. Audio Mixing System initialisieren
-    if (!audioContext || !masterGainNode) {
+    if (!audioContext || !streamGainNode) {
       const mixingReady = await initializeAudioMixing();
       if (!mixingReady) {
         throw new Error('Failed to initialize audio mixing');
@@ -838,21 +997,23 @@ async function startDirectStream(): Promise<boolean> {
     }
     
     // 2. MediaStreamDestination für direktes Streaming
-    if (!audioContext || !masterGainNode) {
-      throw new Error('Audio context not ready');
+    if (!audioContext || !streamGainNode) {
+      throw new Error('Audio context or stream gain node not ready');
     }
     
     const destination = audioContext.createMediaStreamDestination();
-    masterGainNode.connect(destination);
+    streamGainNode.connect(destination); // Verwende streamGainNode für Stream-Output
     
-    // 3. MediaRecorder für ICY-kompatible Daten
+    // 3. MediaRecorder für ICY-kompatible Daten mit optimierten Einstellungen
     const recorder = new MediaRecorder(destination.stream, {
       mimeType: 'audio/webm;codecs=opus',
-      audioBitsPerSecond: streamConfig.bitrate * 1000
+      audioBitsPerSecond: streamConfig.bitrate * 1000,
+      // Opus-spezifische Optimierungen für bessere Qualität
+      bitsPerSecond: streamConfig.bitrate * 1000
     });
     
-    // 4. Direkte HTTP-POST Verbindung zu Harbor (über CORS-Proxy)
-    const harborUrl = `http://localhost:8082/stream`;
+    // 4. Direkte HTTP-POST Verbindung zu Harbor (über unified server API)
+    const harborUrl = `/api/stream`;
     
     // Verwende Credentials (Unified oder Individual aus .env)
     const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
@@ -2701,45 +2862,45 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
   playPauseBtn?.addEventListener('click', () => {
     const wavesurfer = waveSurfers[side];
     
-    // Prioritize WaveSurfer if available, disable HTML audio
-    if (wavesurfer) {
-      if (wavesurfer.isPlaying()) {
-        wavesurfer.pause();
-        const icon = playPauseBtn.querySelector('.material-icons');
-        if (icon) icon.textContent = 'play_arrow';
-        playPauseBtn.classList.remove('playing');
-      } else {
-        try {
-          wavesurfer.play();
-          const icon = playPauseBtn.querySelector('.material-icons');
-          if (icon) icon.textContent = 'pause';
-          playPauseBtn.classList.add('playing');
-        } catch (e) {
-          console.error(`❌ WaveSurfer play error on Player ${side}:`, e);
-          showError(`Cannot play on Player ${side.toUpperCase()}: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    // HTML Audio controls playback, WaveSurfer follows for visualization
+    if (audio.paused) {
+      if (audio.src) {
+        audio.play().catch(e => {
+          console.error(`❌ Play error on Player ${side}:`, e);
+          showError(`Cannot play on Player ${side.toUpperCase()}: ${e.message}`);
+        });
+        
+        // Sync WaveSurfer visualization if available
+        if (wavesurfer) {
+          try {
+            wavesurfer.play();
+          } catch (e) {
+            console.warn(`⚠️ WaveSurfer sync error on Player ${side}:`, e);
+          }
         }
+        
+        const icon = playPauseBtn.querySelector('.material-icons');
+        if (icon) icon.textContent = 'pause';
+        playPauseBtn.classList.add('playing');
+      } else {
+        console.log(`❓ No track loaded on Player ${side}`);
+        showError(`No track loaded on Player ${side.toUpperCase()}`);
       }
     } else {
-      // Fallback to HTML audio if WaveSurfer not available
-      if (audio.paused) {
-        if (audio.src) {
-          audio.play().catch(e => {
-            console.error(`❌ Play error on Player ${side}:`, e);
-            showError(`Cannot play on Player ${side.toUpperCase()}: ${e.message}`);
-          });
-          const icon = playPauseBtn.querySelector('.material-icons');
-          if (icon) icon.textContent = 'pause';
-          playPauseBtn.classList.add('playing');
-        } else {
-          console.log(`❓ No track loaded on Player ${side}`);
-          showError(`No track loaded on Player ${side.toUpperCase()}`);
+      audio.pause();
+      
+      // Sync WaveSurfer visualization if available
+      if (wavesurfer) {
+        try {
+          wavesurfer.pause();
+        } catch (e) {
+          console.warn(`⚠️ WaveSurfer sync error on Player ${side}:`, e);
         }
-      } else {
-        audio.pause();
-        const icon = playPauseBtn.querySelector('.material-icons');
-        if (icon) icon.textContent = 'play_arrow';
-        playPauseBtn.classList.remove('playing');
       }
+      
+      const icon = playPauseBtn.querySelector('.material-icons');
+      if (icon) icon.textContent = 'play_arrow';
+      playPauseBtn.classList.remove('playing');
     }
   });
   
@@ -2781,9 +2942,20 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
     }
   });
   
-  // Volume Control
+  // Volume Control - steuert Web Audio API GainNodes
   volumeSlider?.addEventListener('input', () => {
     const volume = parseInt(volumeSlider.value) / 100;
+    
+    // Web Audio API Gain steuern (für Streaming)
+    if (side === 'left' && leftPlayerGain) {
+      leftPlayerGain.gain.value = volume;
+      console.log(`🎛️ Player ${side} Web Audio gain: ${volume}`);
+    } else if (side === 'right' && rightPlayerGain) {
+      rightPlayerGain.gain.value = volume;
+      console.log(`🎛️ Player ${side} Web Audio gain: ${volume}`);
+    }
+    
+    // HTML Audio Element auch setzen (für direkte Abhörung ohne Web Audio)
     audio.volume = volume;
     console.log(`Player ${side} volume: ${volume * 100}%`);
   });
@@ -2858,14 +3030,8 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   // Load new waveform using WaveSurfer (lädt automatisch neue Waveform)
   loadWaveform(side, audio.src);
   
-  // Audio zu Mixing-System hinzufügen für Live-Streaming
-  if (!audioContext) {
-    // Audio-Mixing automatisch initialisieren wenn erster Track geladen wird
-    console.log("Initializing audio mixing...");
-    // Simple initialization without complex promises for now
-  } else {
-    console.log("Audio context already exists, connecting to mixer...");
-  }
+  // Audio-Event-Listener werden nach allen Funktionsdefinitionen hinzugefügt
+  setupAudioEventListeners(audio, side);
   
   // Note: We don't sync WaveSurfer with audio to avoid double playback
   // WaveSurfer handles playback directly via play button
@@ -2933,7 +3099,7 @@ function initializeCrossfader() {
     const position = value / 100;
     
     // Audio-Pipeline Crossfader setzen falls verfügbar
-    if (crossfaderGain) {
+    if (crossfaderGain && streamCrossfaderGain) {
       // Position zwischen 0 und 1 begrenzen
       const clampedPosition = Math.max(0, Math.min(1, position));
       
@@ -2942,10 +3108,15 @@ function initializeCrossfader() {
       // Rechts: minimum bei 0, maximum bei 1
       const rightGain = Math.sin(clampedPosition * Math.PI / 2);
       
+      // Monitor-Crossfader
       crossfaderGain.left.gain.value = leftGain;
       crossfaderGain.right.gain.value = rightGain;
       
-      console.log(`Crossfader position: ${position}, Left: ${leftGain.toFixed(2)}, Right: ${rightGain.toFixed(2)}`);
+      // Stream-Crossfader (synchron)
+      streamCrossfaderGain.left.gain.value = leftGain;
+      streamCrossfaderGain.right.gain.value = rightGain;
+      
+      console.log(`🎛️ Crossfader Web Audio: ${position}, Left: ${leftGain.toFixed(2)}, Right: ${rightGain.toFixed(2)} (Monitor + Stream)`);
     }
     
     // Fallback: Direkte Audio-Element-Kontrolle
@@ -3168,5 +3339,162 @@ async function loadRatingAsync(songId: string) {
     console.warn(`Failed to load rating for song ${songId}:`, error);
   }
 }
+
+// Audio Level Monitoring für Volume Meter
+let volumeMeterIntervals: { [key: string]: NodeJS.Timeout } = {};
+
+function startVolumeMeter(side: 'left' | 'right' | 'mic') {
+  // Stoppe vorherige Intervalle
+  if (volumeMeterIntervals[side]) {
+    clearInterval(volumeMeterIntervals[side]);
+  }
+  
+  const meterId = side === 'mic' ? 'mic-volume-meter' : `volume-meter-${side}`;
+  const meterElement = document.getElementById(meterId);
+  
+  if (!meterElement || !audioContext) return;
+  
+  // AnalyserNode für Audio-Level-Messung erstellen
+  let analyser: AnalyserNode;
+  let gainNode: GainNode | null = null;
+  
+  if (side === 'left') {
+    gainNode = leftPlayerGain;
+  } else if (side === 'right') {
+    gainNode = rightPlayerGain;
+  } else if (side === 'mic') {
+    gainNode = microphoneGain;
+  }
+  
+  if (!gainNode) return;
+  
+  try {
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8;
+    
+    // Verbinde Gain Node mit Analyser (ohne Audio-Flow zu stören)
+    gainNode.connect(analyser);
+    
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    // Update Interval
+    volumeMeterIntervals[side] = setInterval(() => {
+      analyser.getByteFrequencyData(dataArray);
+      
+      // Berechne RMS (Root Mean Square) für bessere Level-Anzeige
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i] * dataArray[i];
+      }
+      const rms = Math.sqrt(sum / bufferLength);
+      
+      // Konvertiere zu dB und normalisiere (0-10 Balken)
+      const dbValue = 20 * Math.log10(rms / 255);
+      const normalizedLevel = Math.max(0, Math.min(10, Math.floor((dbValue + 60) / 6)));
+      
+      updateVolumeMeter(meterId, normalizedLevel);
+    }, 50); // 20 FPS Update-Rate
+    
+    console.log(`📊 Volume meter started for ${side}`);
+  } catch (error) {
+    console.error(`Failed to start volume meter for ${side}:`, error);
+  }
+}
+
+function updateVolumeMeter(meterId: string, level: number) {
+  const meterElement = document.getElementById(meterId);
+  if (!meterElement) return;
+  
+  const bars = meterElement.querySelectorAll('.meter-bar');
+  bars.forEach((bar, index) => {
+    if (index < level) {
+      bar.classList.add('active');
+    } else {
+      bar.classList.remove('active');
+    }
+  });
+}
+
+function stopVolumeMeter(side: 'left' | 'right' | 'mic') {
+  if (volumeMeterIntervals[side]) {
+    clearInterval(volumeMeterIntervals[side]);
+    delete volumeMeterIntervals[side];
+    console.log(`📊 Volume meter stopped for ${side}`);
+  }
+}
+
+// Audio Event Listeners Setup
+function setupAudioEventListeners(audio: HTMLAudioElement, side: 'left' | 'right') {
+  // Audio zu Mixing-System hinzufügen für Live-Streaming
+  audio.addEventListener('loadeddata', () => {
+    console.log(`🎵 TRACK LOADED: ${side} player audio element src: ${audio.src}`);
+    setTimeout(async () => {
+      if (!audioContext) {
+        // Audio-Mixing automatisch initialisieren wenn erster Track geladen wird
+        console.log("🎛️ Initializing audio mixing...");
+        const success = await initializeAudioMixing();
+        if (success) {
+          console.log(`🔌 Connecting ${side} player to mixer (first time)`);
+          const connected = connectAudioToMixer(audio, side);
+          console.log(`🔌 Connection result for ${side}: ${connected}`);
+        } else {
+          console.error(`❌ Failed to initialize audio mixing for ${side}`);
+        }
+      } else {
+        console.log(`🔌 Connecting ${side} player to mixer (track change)`);
+        const connected = connectAudioToMixer(audio, side);
+        console.log(`🔌 Connection result for ${side}: ${connected}`);
+      }
+    }, 0);
+  });
+  
+  // ZUSÄTZLICH: Sicherstellen dass Verbindung bei Play-Event existiert
+  audio.addEventListener('play', () => {
+    console.log(`▶️ PLAY EVENT: ${side} player starting playback`);
+    // Verbindung nochmals prüfen/herstellen bei Wiedergabe
+    if (audioContext && (leftPlayerGain || rightPlayerGain)) {
+      const connected = connectAudioToMixer(audio, side);
+      if (connected) {
+        console.log(`✅ ${side} player audio routing verified for stream`);
+      } else {
+        console.error(`❌ ${side} player audio routing FAILED`);
+      }
+    } else {
+      console.error(`❌ ${side} player: audioContext or gain nodes not ready`);
+    }
+  });
+}
+
+// Volume Meter bei Audio-Events starten/stoppen
+document.addEventListener('DOMContentLoaded', () => {
+  // Player Volume Control Event Listeners
+  ['left', 'right'].forEach(side => {
+    const volumeSlider = document.getElementById(`volume-${side}`) as HTMLInputElement;
+    
+    volumeSlider?.addEventListener('input', (e) => {
+      const target = e.target as HTMLInputElement;
+      const volume = parseInt(target.value) / 100;
+      
+      if (side === 'left' && leftPlayerGain) {
+        leftPlayerGain.gain.value = volume;
+        console.log(`🎵 ${side} player volume: ${Math.round(volume * 100)}%`);
+      } else if (side === 'right' && rightPlayerGain) {
+        rightPlayerGain.gain.value = volume;
+        console.log(`🎵 ${side} player volume: ${Math.round(volume * 100)}%`);
+      }
+    });
+  });
+  
+  // Auto-start volume meters when audio mixing is initialized
+  setTimeout(() => {
+    if (audioContext) {
+      startVolumeMeter('left');
+      startVolumeMeter('right');
+      startVolumeMeter('mic');
+    }
+  }, 1000);
+});
 
 // Recent Albums Funktion entfernt - wird nicht mehr benötigt

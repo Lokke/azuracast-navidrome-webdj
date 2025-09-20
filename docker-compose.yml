@@ -19,8 +19,7 @@ services:
         VITE_UNIFIED_USERNAME: ${VITE_UNIFIED_USERNAME}
         VITE_UNIFIED_PASSWORD: ${VITE_UNIFIED_PASSWORD}
     ports:
-      - "5173:5173"  # Web interface
-      - "8082:8082"  # CORS proxy
+      - "5173:5173"  # Unified server (Web interface + CORS proxy + Harbor stream)
     environment:
       # Runtime-Umgebungsvariablen für den CORS-Proxy
       - STREAM_USERNAME=${STREAM_USERNAME:-test}

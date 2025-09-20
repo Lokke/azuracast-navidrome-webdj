@@ -519,7 +519,14 @@ class NavidromeClient {
       id: songId
     });
 
-    return `${this.config.serverUrl}/rest/stream?${params.toString()}`;
+    // Ursprüngliche Navidrome URL
+    const originalUrl = `${this.config.serverUrl}/rest/stream?${params.toString()}`;
+    
+    // CORS-Fix: Über SAME-ORIGIN API Route leiten (löst Cross-Origin Problem)
+    const proxiedUrl = `/api/navidrome-stream?url=${encodeURIComponent(originalUrl)}`;
+    
+    console.log(`🎵 Stream URL (same-origin): ${proxiedUrl}`);
+    return proxiedUrl;
   }
 
   // Cover Art URL erstellen
@@ -538,7 +545,13 @@ class NavidromeClient {
       size: size.toString()
     });
 
-    return `${this.config.serverUrl}/rest/getCoverArt?${params.toString()}`;
+    // Ursprüngliche Cover Art URL
+    const originalUrl = `${this.config.serverUrl}/rest/getCoverArt?${params.toString()}`;
+    
+    // CORS-Fix: Über SAME-ORIGIN API Route leiten (löst Cross-Origin Problem)
+    const proxiedUrl = `/api/navidrome-cover?url=${encodeURIComponent(originalUrl)}`;
+    
+    return proxiedUrl;
   }
 
   // Download URL für einen Song

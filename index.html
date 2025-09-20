@@ -38,7 +38,31 @@
           <div class="dj-controls" id="dj-controls" style="display: none;">
             <div class="mic-controls">
               <button class="broadcast-btn" id="broadcast-toggle"><span class="material-icons">radio</span> Broadcast</button>
-              <button class="mic-btn" id="mic-toggle"><span class="material-icons">mic</span> MIKROFON</button>
+              <div class="mic-section">
+                <!-- Mic Volume Control -->
+                <div class="mic-volume-control">
+                  <input type="range" min="0" max="100" value="70" id="mic-volume" orient="vertical" title="Microphone Volume">
+                  <div class="volume-label">MIC</div>
+                </div>
+                
+                <!-- Mic Toggle Button -->
+                <button class="mic-btn" id="mic-toggle"><span class="material-icons">mic</span> MIKROFON</button>
+                
+                <!-- Mic Volume Meter -->
+                <div class="mic-volume-meter" id="mic-volume-meter">
+                  <div class="meter-bars">
+                    <div class="meter-bar" style="--level: 0"></div>
+                    <div class="meter-bar" style="--level: 1"></div>
+                    <div class="meter-bar" style="--level: 2"></div>
+                    <div class="meter-bar" style="--level: 3"></div>
+                    <div class="meter-bar" style="--level: 4"></div>
+                    <div class="meter-bar" style="--level: 5"></div>
+                    <div class="meter-bar orange" style="--level: 6"></div>
+                    <div class="meter-bar red" style="--level: 7"></div>
+                  </div>
+                  <div class="meter-label">dB</div>
+                </div>
+              </div>
               <button class="stream-config-btn" id="stream-config-btn"><span class="material-icons">settings</span></button>
             </div>
             <div class="crossfader-container">
