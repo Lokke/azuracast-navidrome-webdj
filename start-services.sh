@@ -7,11 +7,13 @@ echo "Starting WebDJ services..."
 # Create .env file from environment variables if it doesn't exist
 if [ ! -f .env ]; then
     echo "Creating .env file from environment variables..."
-    echo "VITE_STREAM_USERNAME=${STREAM_USERNAME:-test}" > .env
-    echo "VITE_STREAM_PASSWORD=${STREAM_PASSWORD:-test}" >> .env
-    echo "VITE_STREAM_SERVER=${STREAM_SERVER:-funkturm.radio-endstation.de}" >> .env
-    echo "VITE_STREAM_PORT=${STREAM_PORT:-8015}" >> .env
-    echo "VITE_STREAM_MOUNT=${STREAM_MOUNT:-/}" >> .env
+    {
+        echo "VITE_STREAM_USERNAME=${STREAM_USERNAME:-test}"
+        echo "VITE_STREAM_PASSWORD=${STREAM_PASSWORD:-test}"
+        echo "VITE_STREAM_SERVER=${STREAM_SERVER:-funkturm.radio-endstation.de}"
+        echo "VITE_STREAM_PORT=${STREAM_PORT:-8015}"
+        echo "VITE_STREAM_MOUNT=${STREAM_MOUNT:-/}"
+    } > .env 2>/dev/null || echo "Warning: Could not create .env file, using environment variables directly"
 fi
 
 # Start CORS proxy in background

@@ -854,15 +854,23 @@ async function startDirectStream(): Promise<boolean> {
     // 4. Direkte HTTP-POST Verbindung zu Harbor (über CORS-Proxy)
     const harborUrl = `http://localhost:8082/stream`;
     
-    // Verwende Credentials direkt aus .env (keine Fallbacks oder streamConfig)
-    const username = import.meta.env.VITE_STREAM_USERNAME;
-    const password = import.meta.env.VITE_STREAM_PASSWORD;
+    // Verwende Credentials (Unified oder Individual aus .env)
+    const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
+    const unifiedUsername = import.meta.env.VITE_UNIFIED_USERNAME;
+    const unifiedPassword = import.meta.env.VITE_UNIFIED_PASSWORD;
+    const individualUsername = import.meta.env.VITE_STREAM_USERNAME;
+    const individualPassword = import.meta.env.VITE_STREAM_PASSWORD;
+    
+    const username = useUnifiedLogin ? unifiedUsername : individualUsername;
+    const password = useUnifiedLogin ? unifiedPassword : individualPassword;
     
     if (!username || !password) {
-      throw new Error('Missing credentials: VITE_STREAM_USERNAME or VITE_STREAM_PASSWORD not set in .env');
+      const missingType = useUnifiedLogin ? 'unified' : 'individual streaming';
+      throw new Error(`Missing ${missingType} credentials: username or password not set in .env`);
     }
     
     const credentials = btoa(`${username}:${password}`);
+    console.log(`🔐 Using ${useUnifiedLogin ? 'unified' : 'individual'} credentials for streaming`);
     console.log(`🔐 Raw env values: username="${username}", password="${password}"`);
     console.log(`🔐 Combined credentials: "${username}:${password}"`);
     console.log(`🔐 Base64 encoded: ${credentials}`);
@@ -1085,6 +1093,21 @@ function initializeStreamConfigPanel() {
   // Konfiguration laden
   loadStreamConfig();
   
+  // Prüfen ob überhaupt konfigurierbare Felder vorhanden sind
+  const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
+  const hasUnifiedCredentials = import.meta.env.VITE_UNIFIED_USERNAME && import.meta.env.VITE_UNIFIED_PASSWORD;
+  const hasIndividualCredentials = import.meta.env.VITE_STREAM_USERNAME && import.meta.env.VITE_STREAM_PASSWORD;
+  const hasServerConfig = import.meta.env.VITE_STREAM_SERVER;
+  
+  // Wenn alle wichtigen Konfigurationen fest definiert sind, Settings-Button verstecken
+  const allConfigured = hasServerConfig && ((useUnifiedLogin && hasUnifiedCredentials) || (!useUnifiedLogin && hasIndividualCredentials));
+  
+  if (allConfigured && configBtn) {
+    configBtn.style.display = 'none';
+    console.log('📝 Stream settings completely configured via environment - hiding settings button');
+    return;
+  }
+  
   // Panel ein-/ausblenden
   configBtn?.addEventListener('click', () => {
     if (configPanel) {
@@ -1149,8 +1172,23 @@ function loadStreamConfig() {
   const bitrateSelect = document.getElementById('stream-bitrate') as HTMLSelectElement;
   const formatSelect = document.getElementById('stream-format') as HTMLSelectElement;
   
+  // Credential-Logik (Unified oder Individual)
+  const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
+  const unifiedUsername = import.meta.env.VITE_UNIFIED_USERNAME;
+  const unifiedPassword = import.meta.env.VITE_UNIFIED_PASSWORD;
+  const individualUsername = import.meta.env.VITE_STREAM_USERNAME;
+  const individualPassword = import.meta.env.VITE_STREAM_PASSWORD;
+  
+  const finalUsername = useUnifiedLogin ? unifiedUsername : individualUsername;
+  const finalPassword = useUnifiedLogin ? unifiedPassword : individualPassword;
+  
+  // Server-Konfiguration aus Environment-Variablen
+  const envStreamServer = import.meta.env.VITE_STREAM_SERVER;
+  const envStreamPort = import.meta.env.VITE_STREAM_PORT;
+  const envStreamMount = import.meta.env.VITE_STREAM_MOUNT;
+  
   // Original Server-URL anzeigen (nicht die Proxy-URL)
-  const originalServerUrl = import.meta.env.VITE_STREAM_SERVER || 'http://localhost:8000';
+  const originalServerUrl = envStreamServer || 'http://localhost:8000';
   const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
   
   if (urlInput) {
@@ -1163,10 +1201,46 @@ function loadStreamConfig() {
   }
   if (typeSelect) typeSelect.value = streamConfig.serverType;
   if (mountInput) mountInput.value = streamConfig.mountPoint;
-  if (usernameInput) usernameInput.value = streamConfig.username || '';
-  if (passwordInput) passwordInput.value = streamConfig.password;
+  if (usernameInput) usernameInput.value = finalUsername || '';
+  if (passwordInput) passwordInput.value = finalPassword || '';
   if (bitrateSelect) bitrateSelect.value = streamConfig.bitrate.toString();
   if (formatSelect) formatSelect.value = streamConfig.format;
+  
+  // Server-Konfiguration verstecken wenn in .env definiert
+  if (envStreamServer) {
+    const serverGroup = document.querySelector('.config-group:has(#stream-server-url)') as HTMLElement;
+    if (serverGroup) serverGroup.style.display = 'none';
+  }
+  
+  if (envStreamServer) {
+    const typeGroup = document.querySelector('.config-group:has(#stream-server-type)') as HTMLElement;
+    if (typeGroup) typeGroup.style.display = 'none';
+  }
+  
+  if (envStreamMount) {
+    const mountGroup = document.querySelector('.config-group:has(#mount-point)') as HTMLElement;
+    if (mountGroup) mountGroup.style.display = 'none';
+  }
+  
+  // Felder verstecken wenn bereits gefüllt
+  if (finalUsername) {
+    const usernameGroup = document.querySelector('.config-group:has(#stream-username)') as HTMLElement;
+    if (usernameGroup) usernameGroup.style.display = 'none';
+  }
+  
+  if (finalPassword) {
+    const passwordGroup = document.querySelector('.config-group:has(#stream-password)') as HTMLElement;
+    if (passwordGroup) passwordGroup.style.display = 'none';
+  }
+  
+  // Unified Login Info in Header anzeigen
+  if (useUnifiedLogin && unifiedUsername) {
+    const configTitle = document.querySelector('#stream-config-panel h3');
+    if (configTitle) {
+      configTitle.textContent = `Streaming Config (Unified: ${unifiedUsername})`;
+      (configTitle as HTMLElement).style.color = '#4CAF50';
+    }
+  }
   
   // Mount Point Feld je nach Server-Typ anzeigen/verstecken
   updateMountPointVisibility();
@@ -2410,6 +2484,15 @@ function initializeNavidromeLogin() {
   const envUsername = import.meta.env.VITE_NAVIDROME_USERNAME;
   const envPassword = import.meta.env.VITE_NAVIDROME_PASSWORD;
   
+  // Unified Login Konfiguration
+  const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
+  const unifiedUsername = import.meta.env.VITE_UNIFIED_USERNAME;
+  const unifiedPassword = import.meta.env.VITE_UNIFIED_PASSWORD;
+  
+  // Bestimme finale Credentials (Unified hat Vorrang)
+  const finalUsername = useUnifiedLogin ? unifiedUsername : envUsername;
+  const finalPassword = useUnifiedLogin ? unifiedPassword : envPassword;
+  
   // Interne Login-Funktion definieren
   const performLogin = async (serverUrl: string, username: string, password: string) => {
     if (!username || !password) {
@@ -2467,32 +2550,41 @@ function initializeNavidromeLogin() {
     }
   };
   
-  // Felder verstecken wenn Werte in .env vorhanden sind
+  // Felder verstecken wenn Werte verfügbar sind (Unified oder Individual)
   if (envUrl) {
     const serverGroup = document.querySelector('.form-group:has(#navidrome-server)') as HTMLElement;
     if (serverGroup) serverGroup.style.display = 'none';
   }
   
-  if (envUsername) {
+  if (finalUsername) {
     const usernameGroup = document.querySelector('.form-group:has(#navidrome-username)') as HTMLElement;
     if (usernameGroup) usernameGroup.style.display = 'none';
   }
   
-  if (envPassword) {
+  if (finalPassword) {
     const passwordGroup = document.querySelector('.form-group:has(#navidrome-password)') as HTMLElement;
     if (passwordGroup) passwordGroup.style.display = 'none';
   }
   
-  // Auto-Login wenn alle Credentials in .env vorhanden sind
-  if (envUrl && envUsername && envPassword) {
-    console.log('🔄 Auto-login with environment credentials...');
-    performLogin(envUrl, envUsername, envPassword);
+  // Unified Login Info anzeigen
+  if (useUnifiedLogin && unifiedUsername) {
+    const loginTitle = loginForm.querySelector('h3');
+    if (loginTitle) {
+      loginTitle.textContent = `Login (Unified: ${unifiedUsername})`;
+      loginTitle.style.color = '#4CAF50';
+    }
+  }
+  
+  // Auto-Login wenn alle Credentials verfügbar sind
+  if (envUrl && finalUsername && finalPassword) {
+    console.log(`🔄 Auto-login with ${useUnifiedLogin ? 'unified' : 'individual'} credentials...`);
+    performLogin(envUrl, finalUsername, finalPassword);
     return;
   }
   
   const performLoginFromForm = async () => {
-    const username = usernameInput.value.trim() || envUsername;
-    const password = passwordInput.value.trim() || envPassword;
+    const username = usernameInput.value.trim() || finalUsername;
+    const password = passwordInput.value.trim() || finalPassword;
     const serverUrl = serverInput.value.trim() || envUrl || "https://musik.radio-endstation.de";
     
     await performLogin(serverUrl, username, password);

@@ -50,12 +50,13 @@ jspm_packages/
 # Yarn Integrity file
 .yarn-integrity
 
-# Environment variables
+# Environment variables - WICHTIG: Keine .env Dateien ins Image!
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.docker
 
 # Temporary files
 *.tmp

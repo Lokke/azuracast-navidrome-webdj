@@ -1,57 +1,77 @@
-# WebDJ Docker Examples
+# WebDJ Docker Setup
 
-## Quick Start Commands
+## Sicherheitskonfiguration
 
-### Using Docker Compose (Recommended)
+**WICHTIG**: Die Credentials werden in der `.env.docker` Datei gespeichert und zur Build-Zeit in das JavaScript eingebaut.
+
+## Erste Einrichtung
+
+### 1. Credentials-Datei erstellen
+
 ```bash
-# Clone the repository
-git clone https://github.com/Lokke/azuracast-navidrome-webdj.git
-cd azuracast-navidrome-webdj
+# Kopiere das Example-File
+cp .env.docker.example .env.docker
 
-# Start with default settings
+# Bearbeite mit deinen echten Credentials
+nano .env.docker
+```
+
+### 2. Credentials konfigurieren
+
+Bearbeite die Datei `.env.docker` und trage deine echten Credentials ein:
+
+```bash
+# Streaming Server Credentials
+STREAM_USERNAME=dein_echter_username
+STREAM_PASSWORD=dein_echtes_passwort
+
+# Streaming Server Connection
+STREAM_SERVER=funkturm.radio-endstation.de
+STREAM_PORT=8015
+STREAM_MOUNT=/
+
+# Navidrome Configuration (automatisch vorausgefüllt im Browser)
+VITE_NAVIDROME_URL=https://your.navidrome.server
+VITE_NAVIDROME_USERNAME=your_username
+VITE_NAVIDROME_PASSWORD=your_password
+```
+
+### 3. Container starten
+
+```bash
+# Mit Docker Compose (empfohlen)
 docker-compose up -d
 
-# View logs
+# Logs anschauen
 docker-compose logs -f
 
-# Stop
+# Stoppen
 docker-compose down
 ```
 
-### Using Docker Run
-```bash
-# Build the image
-docker build -t webdj .
+### 4. Zugriff
 
-# Run with default settings
-docker run -d \
-  --name webdj \
-  -p 5173:5173 \
-  -p 8082:8082 \
-  webdj
+Öffne <http://localhost:5173> in deinem Browser. Sowohl die Streaming- als auch die Navidrome-Credentials sind bereits vorausgefüllt!
 
-# Run with custom streaming server
-docker run -d \
-  --name webdj-custom \
-  -p 5173:5173 \
-  -p 8082:8082 \
-  -e STREAM_USERNAME=myuser \
-  -e STREAM_PASSWORD=mypass \
-  -e STREAM_SERVER=my.streaming.server \
-  -e STREAM_PORT=8000 \
-  -e STREAM_MOUNT=/live \
-  webdj
-```
+## Wie es funktioniert
+
+1. **Build-Zeit**: Alle Credentials aus `.env.docker` werden in das JavaScript eingebaut
+2. **Laufzeit**: Stream-Credentials werden für den CORS-Proxy verwendet
+3. **Browser**: Alle Felder sind automatisch vorausgefüllt
+4. **Sicherheit**: `.env.docker` ist in .gitignore und landet nicht auf GitHub
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `STREAM_USERNAME` | `test` | Harbor streaming username |
-| `STREAM_PASSWORD` | `test` | Harbor streaming password |
-| `STREAM_SERVER` | `funkturm.radio-endstation.de` | Streaming server hostname |
-| `STREAM_PORT` | `8015` | Harbor port |
-| `STREAM_MOUNT` | `/` | Mount point |
+| Variable | Beschreibung | Eingebaut in |
+|----------|-------------|-------------|
+| `STREAM_USERNAME` | Harbor streaming username | JS + Proxy |
+| `STREAM_PASSWORD` | Harbor streaming password | JS + Proxy |
+| `STREAM_SERVER` | Streaming server | JS + Proxy |
+| `STREAM_PORT` | Harbor port | JS + Proxy |
+| `STREAM_MOUNT` | Mount point | JS + Proxy |
+| `VITE_NAVIDROME_URL` | Navidrome Server URL | Nur JS |
+| `VITE_NAVIDROME_USERNAME` | Navidrome Username | Nur JS |
+| `VITE_NAVIDROME_PASSWORD` | Navidrome Password | Nur JS |
 
 ## Development
 

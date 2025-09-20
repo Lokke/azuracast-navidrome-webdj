@@ -13,6 +13,38 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Set build-time environment variables (will be passed from docker-compose)
+ARG VITE_STREAM_USERNAME
+ARG VITE_STREAM_PASSWORD
+ARG VITE_STREAM_SERVER
+ARG VITE_STREAM_PORT
+ARG VITE_STREAM_MOUNT
+ARG VITE_NAVIDROME_URL
+ARG VITE_NAVIDROME_USERNAME
+ARG VITE_NAVIDROME_PASSWORD
+ARG VITE_USE_UNIFIED_LOGIN
+ARG VITE_UNIFIED_USERNAME
+ARG VITE_UNIFIED_PASSWORD
+
+# Create .env file for Vite build only if variables are provided
+RUN if [ -n "$VITE_STREAM_USERNAME" ]; then \
+        echo "VITE_STREAM_USERNAME=${VITE_STREAM_USERNAME}" > .env && \
+        echo "VITE_STREAM_PASSWORD=${VITE_STREAM_PASSWORD}" >> .env && \
+        echo "VITE_STREAM_SERVER=${VITE_STREAM_SERVER}" >> .env && \
+        echo "VITE_STREAM_PORT=${VITE_STREAM_PORT}" >> .env && \
+        echo "VITE_STREAM_MOUNT=${VITE_STREAM_MOUNT}" >> .env; \
+    fi && \
+    if [ -n "$VITE_NAVIDROME_URL" ]; then \
+        echo "VITE_NAVIDROME_URL=${VITE_NAVIDROME_URL}" >> .env && \
+        echo "VITE_NAVIDROME_USERNAME=${VITE_NAVIDROME_USERNAME}" >> .env && \
+        echo "VITE_NAVIDROME_PASSWORD=${VITE_NAVIDROME_PASSWORD}" >> .env; \
+    fi && \
+    if [ -n "$VITE_USE_UNIFIED_LOGIN" ]; then \
+        echo "VITE_USE_UNIFIED_LOGIN=${VITE_USE_UNIFIED_LOGIN}" >> .env && \
+        echo "VITE_UNIFIED_USERNAME=${VITE_UNIFIED_USERNAME}" >> .env && \
+        echo "VITE_UNIFIED_PASSWORD=${VITE_UNIFIED_PASSWORD}" >> .env; \
+    fi
+
 # Build the application
 RUN npm run build
 
@@ -22,12 +54,13 @@ FROM node:20-alpine AS runtime
 # Install dumb-init and wget for proper signal handling and health checks
 RUN apk add --no-cache dumb-init wget
 
-# Create app user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S webdj -u 1001
-
-# Set working directory
+# Set working directory first
 WORKDIR /app
+
+# Create app user and set ownership BEFORE copying files
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S webdj -u 1001 && \
+    chown -R webdj:nodejs /app
 
 # Copy built application from builder stage
 COPY --from=builder --chown=webdj:nodejs /app/dist ./dist

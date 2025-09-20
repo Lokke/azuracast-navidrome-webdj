@@ -1,19 +1,37 @@
 # WebDJ Docker Compose
-version: '3.8'
-
 services:
   webdj:
-    build: .
+    build: 
+      context: .
+      args:
+        # Build-time variables für Vite (werden in das JavaScript eingebaut)
+        VITE_STREAM_USERNAME: ${STREAM_USERNAME:-test}
+        VITE_STREAM_PASSWORD: ${STREAM_PASSWORD:-test}
+        VITE_STREAM_SERVER: ${STREAM_SERVER:-funkturm.radio-endstation.de}
+        VITE_STREAM_PORT: ${STREAM_PORT:-8015}
+        VITE_STREAM_MOUNT: ${STREAM_MOUNT:-/}
+        # Navidrome Credentials (werden auch in das JavaScript eingebaut)
+        VITE_NAVIDROME_URL: ${VITE_NAVIDROME_URL}
+        VITE_NAVIDROME_USERNAME: ${VITE_NAVIDROME_USERNAME}
+        VITE_NAVIDROME_PASSWORD: ${VITE_NAVIDROME_PASSWORD}
+        # Unified Login (optional)
+        VITE_USE_UNIFIED_LOGIN: ${VITE_USE_UNIFIED_LOGIN}
+        VITE_UNIFIED_USERNAME: ${VITE_UNIFIED_USERNAME}
+        VITE_UNIFIED_PASSWORD: ${VITE_UNIFIED_PASSWORD}
     ports:
       - "5173:5173"  # Web interface
       - "8082:8082"  # CORS proxy
     environment:
-      - STREAM_USERNAME=test
-      - STREAM_PASSWORD=test
-      - STREAM_SERVER=funkturm.radio-endstation.de
-      - STREAM_PORT=8015
-      - STREAM_MOUNT=/
-    volumes:
-      - ./config:/app/config  # Optional: for persistent config
+      # Runtime-Umgebungsvariablen für den CORS-Proxy
+      - STREAM_USERNAME=${STREAM_USERNAME:-test}
+      - STREAM_PASSWORD=${STREAM_PASSWORD:-test}
+      - STREAM_SERVER=${STREAM_SERVER:-funkturm.radio-endstation.de}
+      - STREAM_PORT=${STREAM_PORT:-8015}
+      - STREAM_MOUNT=${STREAM_MOUNT:-/}
+    env_file:
+      - .env.docker
+    # volumes:
+      # Optional: für persistente Konfigurationsdateien
+      # - ./config:/app/config
     restart: unless-stopped
     container_name: webdj
