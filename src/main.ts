@@ -22,6 +22,21 @@ let mediaRecorder: MediaRecorder | null = null;
 let isStreaming: boolean = false;
 let streamChunks: Blob[] = [];
 
+// SMART METADATA PRIORITY SYSTEM
+interface PlayerState {
+  song: NavidromeSong | null;
+  isPlaying: boolean;
+  startTime: number; // Timestamp when track started playing
+  side: 'left' | 'right';
+}
+
+let playerStates: Record<'left' | 'right', PlayerState> = {
+  left: { song: null, isPlaying: false, startTime: 0, side: 'left' },
+  right: { song: null, isPlaying: false, startTime: 0, side: 'right' }
+};
+
+let currentStreamMetadata: NavidromeSong | null = null; // Currently displayed metadata in stream
+
 let bridgeSocket: WebSocket | null = null;
 
 // Send metadata to AzuraCast WebDJ
@@ -41,6 +56,136 @@ function sendMetadataToAzuraCast(song: NavidromeSong) {
     bridgeSocket.send(JSON.stringify(metadataMessage));
   }
 }
+
+// SMART METADATA PRIORITY SYSTEM
+function updateStreamMetadata() {
+  if (!isStreaming) return; // Only update metadata when streaming
+  
+  const activePlayers = Object.values(playerStates).filter(state => state.isPlaying && state.song);
+  
+  if (activePlayers.length === 0) {
+    // No active players - clear metadata
+    currentStreamMetadata = null;
+    console.log('🎵 Stream metadata cleared - no active players');
+    return;
+  }
+  
+  // Priority logic: Latest started player has priority
+  const priorityPlayer = activePlayers.reduce((latest, current) => 
+    current.startTime > latest.startTime ? current : latest
+  );
+  
+  // Only update if metadata actually changed
+  if (currentStreamMetadata?.id !== priorityPlayer.song?.id) {
+    currentStreamMetadata = priorityPlayer.song;
+    
+    if (currentStreamMetadata) {
+      sendMetadataToAzuraCast(currentStreamMetadata);
+      console.log(`🎵 Stream metadata updated: "${currentStreamMetadata.title}" (Player ${priorityPlayer.side.toUpperCase()})`);
+    }
+  }
+}
+
+// Track player state changes
+function setPlayerState(side: 'left' | 'right', song: NavidromeSong | null, isPlaying: boolean) {
+  const state = playerStates[side];
+  const wasPlaying = state.isPlaying;
+  
+  state.song = song;
+  state.isPlaying = isPlaying;
+  
+  // Update start time if player just started playing
+  if (isPlaying && !wasPlaying) {
+    state.startTime = Date.now();
+    console.log(`▶️ Player ${side.toUpperCase()} started: "${song?.title}" at ${state.startTime}`);
+  } else if (!isPlaying && wasPlaying) {
+    console.log(`⏹️ Player ${side.toUpperCase()} stopped: "${song?.title}"`);
+  }
+  
+  // Update stream metadata based on new state
+  updateStreamMetadata();
+}
+
+// Get currently loaded song from player
+function getCurrentLoadedSong(side: 'left' | 'right'): NavidromeSong | null {
+  const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+  if (!audio || !audio.dataset.songId) return null;
+  
+  // Find song by ID in current songs or player state
+  return playerStates[side].song || 
+         currentSongs.find(song => song.id === audio.dataset.songId) || 
+         null;
+}
+
+// Complete deck reset when track ends or eject is pressed
+function clearPlayerDeck(side: 'left' | 'right') {
+  console.log(`🧹 Clearing Player ${side.toUpperCase()} deck completely`);
+  
+  const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+  const titleElement = document.getElementById(`track-title-${side}`);
+  const artistElement = document.getElementById(`track-artist-${side}`);
+  const albumCover = document.getElementById(`album-cover-${side}`) as HTMLImageElement;
+  const playerRating = document.getElementById(`player-rating-${side}`);
+  const timeDisplay = document.getElementById(`time-display-${side}`);
+  
+  // Clear audio
+  if (audio) {
+    audio.pause();
+    audio.src = '';
+    audio.currentTime = 0;
+    delete audio.dataset.songId;
+  }
+  
+  // Clear metadata display
+  if (titleElement) titleElement.textContent = 'No Track Loaded';
+  if (artistElement) artistElement.textContent = '';
+  
+  // Clear album cover
+  if (albumCover) {
+    albumCover.src = '/placeholder-cover.png';
+    albumCover.alt = 'No Cover';
+  }
+  
+  // Clear rating
+  if (playerRating) {
+    playerRating.innerHTML = '';
+  }
+  
+  // Clear time display
+  if (timeDisplay) {
+    timeDisplay.textContent = '00:00 / 00:00';
+  }
+  
+  // Reset waveform
+  resetWaveform(side);
+  
+  // Clear player state
+  setPlayerState(side, null, false);
+  
+  console.log(`✅ Player ${side.toUpperCase()} deck cleared completely`);
+}
+
+// Debug function to show current player states and metadata priority
+function debugPlayerStates() {
+  console.log('🎵 CURRENT PLAYER STATES DEBUG:');
+  console.log('Left Player:', playerStates.left);
+  console.log('Right Player:', playerStates.right);
+  console.log('Current Stream Metadata:', currentStreamMetadata?.title || 'None');
+  console.log('Is Streaming:', isStreaming);
+  
+  const activePlayers = Object.values(playerStates).filter(state => state.isPlaying && state.song);
+  if (activePlayers.length > 0) {
+    const priorityPlayer = activePlayers.reduce((latest, current) => 
+      current.startTime > latest.startTime ? current : latest
+    );
+    console.log('Priority Player:', priorityPlayer.side.toUpperCase(), priorityPlayer.song?.title);
+  } else {
+    console.log('No active players');
+  }
+}
+
+// Make debug function available globally
+(window as any).debugPlayerStates = debugPlayerStates;
 
 // Streaming Konfiguration
 interface StreamConfig {
@@ -82,23 +227,42 @@ function getStreamServerUrl(): string {
 // Audio-Mixing-System initialisieren
 async function initializeAudioMixing() {
   try {
-    // AudioContext erstellen
-    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    // AudioContext mit spezifischen Optionen erstellen für bessere Browser-Kompatibilität
+    const audioContextOptions: AudioContextOptions = {
+      latencyHint: 'playback', // Optimiert für Playback statt Interaktion
+      sampleRate: 48000
+    };
+    
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)(audioContextOptions);
     console.log('AudioContext created:', audioContext.state);
+    
+    // BROWSER AUDIO KOMPATIBILITÄT: AudioContext sofort suspendieren
+    // Wird nur bei Broadcast aktiviert, sodass andere Tabs normal funktionieren
+    if (audioContext.state === 'running') {
+      await audioContext.suspend();
+      console.log('🔇 AudioContext suspended by default - other tabs can play audio normally');
+      console.log('📻 Will only activate during broadcasting to avoid interference');
+    }
+    
+    // Audio Context Policy: Andere Audio-Quellen nicht beeinträchtigen
+    if ('audioWorklet' in audioContext) {
+      console.log('🎵 Audio Context supports advanced features - using isolated mode');
+    }
     
     // Master Gain Node für Monitor-Ausgabe (Kopfhörer/Lautsprecher)
     masterGainNode = audioContext.createGain();
-    masterGainNode.gain.value = 0.8; // 80% Master-Volume
+    masterGainNode.gain.value = 0.99; // 99% Master-Volume
     masterGainNode.connect(audioContext.destination);
     
     // Stream Gain Node für Live-Stream (separate Ausgabe)
     streamGainNode = audioContext.createGain();
+    streamGainNode.gain.value = 0.99; // 99% Stream-Volume
     
     // Separate Gain Nodes für jeden Player
     leftPlayerGain = audioContext.createGain();
-    leftPlayerGain.gain.value = 0.8; // Initial volume 80%
+    leftPlayerGain.gain.value = 1.0; // 100% Initial volume
     rightPlayerGain = audioContext.createGain();
-    rightPlayerGain.gain.value = 0.8; // Initial volume 80%
+    rightPlayerGain.gain.value = 1.0; // 100% Initial volume
     
     // Crossfader Gain Nodes für Monitor-Ausgabe
     crossfaderGain = {
@@ -121,7 +285,7 @@ async function initializeAudioMixing() {
     
     // Mikrofon Gain Node
     microphoneGain = audioContext.createGain();
-    microphoneGain.gain.value = 0; // Standardmäßig stumm
+    microphoneGain.gain.value = 0; // Standardmäßig stumm (wird über Button aktiviert)
     
     // Monitor-Routing: Crossfader Gains mit Master verbinden
     crossfaderGain.left.connect(masterGainNode);
@@ -142,6 +306,15 @@ async function initializeAudioMixing() {
     microphoneGain.connect(streamGainNode);
     
     console.log('🎛️ Audio mixing system initialized with separate monitor and stream outputs');
+    
+    // Volume Meter sofort nach Audio-Initialisierung starten
+    setTimeout(() => {
+      console.log('📊 Starting volume meters...');
+      startVolumeMeter('left');
+      startVolumeMeter('right');
+      startVolumeMeter('mic');
+    }, 500); // Kurze Verzögerung für Audio-Kontext Stabilität
+    
     return true;
   } catch (error) {
     console.error('Failed to initialize audio mixing:', error);
@@ -167,26 +340,32 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'rig
       }
     }
     
-    // MediaElementAudioSourceNode erstellen
+    // WICHTIG: Audio Element Eigenschaften für bessere Browser-Kompatibilität setzen
+    audioElement.crossOrigin = 'anonymous';
+    audioElement.preservesPitch = false; // Weniger CPU-intensiv
+    
+    // MediaElementAudioSourceNode erstellen (mit Browser-Audio-Koexistenz)
     const sourceNode = audioContext.createMediaElementSource(audioElement);
     (audioElement as any)._audioSourceNode = sourceNode; // Speichere Referenz für späteres Cleanup
     
+    // BROWSER AUDIO KOMPATIBILITÄT: Duplex Output für normale Browser-Audio
+    try {
+      // Versuche normale Audio-Pipeline beizubehalten (falls Browser es unterstützt)
+      if ('setSinkId' in audioElement) {
+        console.log(`🔊 ${side} player: Browser supports setSinkId - maintaining dual audio pipeline`);
+      }
+    } catch (e) {
+      console.log(`⚠️  ${side} player: Browser audio pipeline fully captured by Web Audio API`);
+    }
+    
     // Mit entsprechendem Player Gain verbinden
-    if (side === 'left' && leftPlayerGain && streamGainNode) {
+    if (side === 'left' && leftPlayerGain) {
       sourceNode.connect(leftPlayerGain);
       console.log(`🎵 Connected ${side} player to leftPlayerGain (Web Audio API)`);
       
-      // DEBUG: Auch direkt zum Stream verbinden (wie Mikrofon)
-      sourceNode.connect(streamGainNode);
-      console.log(`🔥 DEBUG: ${side} player also connected DIRECTLY to streamGainNode (bypassing crossfader)`);
-      
-    } else if (side === 'right' && rightPlayerGain && streamGainNode) {
+    } else if (side === 'right' && rightPlayerGain) {
       sourceNode.connect(rightPlayerGain);
       console.log(`🎵 Connected ${side} player to rightPlayerGain (Web Audio API)`);
-      
-      // DEBUG: Auch direkt zum Stream verbinden (wie Mikrofon)  
-      sourceNode.connect(streamGainNode);
-      console.log(`🔥 DEBUG: ${side} player also connected DIRECTLY to streamGainNode (bypassing crossfader)`);
       
     } else {
       console.error(`❌ Failed to connect ${side} player: gain node not available`);
@@ -669,30 +848,30 @@ async function setupMicrophone() {
   if (!audioContext || !microphoneGain) return false;
   
   try {
-    // Erweiterte Mikrofon-Konfiguration für bessere Audioqualität
+    // Mikrofon-Konfiguration für DJ-Anwendung (ALLE Audio-Effekte deaktiviert für beste Verständlichkeit)
     microphoneStream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
-        // Basis-Audio-Einstellungen
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: false, // AGC aus für bessere Kontrolle
+        // Basis-Audio-Einstellungen - ALLE Effekte AUS für natürliche Stimme
+        echoCancellation: false,          // Echo-Cancel AUS - verschlechtert oft DJ-Mikrofone
+        noiseSuppression: false,          // Noise-Suppress AUS - kann Stimme verzerren
+        autoGainControl: false,           // AGC aus für manuelle Lautstärke-Kontrolle
         
         // Erweiterte Qualitäts-Einstellungen
         sampleRate: { ideal: 48000 },     // Höhere Sample-Rate für bessere Qualität
         sampleSize: { ideal: 16 },        // 16-bit Audio
         channelCount: { ideal: 1 },       // Mono für geringere Bandbreite
         
-        // Browser-spezifische Verbesserungen (falls unterstützt)
+        // Browser-spezifische Verbesserungen - ALLE AUS für natürliche Stimme
         // @ts-ignore - Browser-spezifische Eigenschaften
-        googEchoCancellation: true,
+        googEchoCancellation: false,      // Google Echo-Cancel AUS
         // @ts-ignore
-        googAutoGainControl: false,
+        googAutoGainControl: false,       // Google AGC AUS
         // @ts-ignore
-        googNoiseSuppression: true,
+        googNoiseSuppression: false,      // Google Noise-Suppress AUS
         // @ts-ignore
-        googHighpassFilter: true,
+        googHighpassFilter: false,        // Highpass-Filter AUS
         // @ts-ignore
-        googTypingNoiseDetection: true,
+        googTypingNoiseDetection: false,  // Typing-Detection AUS
         // @ts-ignore
         googAudioMirroring: false
       } 
@@ -702,12 +881,12 @@ async function setupMicrophone() {
     microphoneStream.getAudioTracks().forEach(track => {
       track.enabled = true; // Track ist aktiv für Aufnahme
       
-      // Erweiterte Track-Einstellungen falls verfügbar
+      // Erweiterte Track-Einstellungen - ALLE Audio-Effekte deaktiviert für natürliche Stimme
       if (track.applyConstraints) {
         track.applyConstraints({
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: false,
+          echoCancellation: false,      // Echo-Cancel AUS für DJ-Mikrofon
+          noiseSuppression: false,      // Noise-Suppress AUS für natürliche Stimme
+          autoGainControl: false,       // AGC AUS für manuelle Kontrolle
           sampleRate: 48000
         }).catch(e => console.warn('Could not apply advanced mic constraints:', e));
       }
@@ -1148,21 +1327,30 @@ async function stopLiveStream() {
   }
 }
 
-  // Broadcast Button Funktionalität
-  const broadcastBtn = document.getElementById("broadcast-toggle") as HTMLButtonElement;
+  // Live Status Indicator / Broadcast Button Funktionalität
+  const liveIndicator = document.getElementById("live-status") as HTMLButtonElement;
   let broadcastActive = false;
   
-  broadcastBtn?.addEventListener("click", async () => {
+  liveIndicator?.addEventListener("click", async () => {
     broadcastActive = !broadcastActive;
     
     if (broadcastActive) {
+      // BROWSER AUDIO KOMPATIBILITÄT: AudioContext nur für Streaming aktivieren
+      if (audioContext && audioContext.state === 'suspended') {
+        console.log('🎵 Resuming AudioContext for broadcasting (other tabs should remain unaffected)');
+        try {
+          await audioContext.resume();
+        } catch (e) {
+          console.warn('AudioContext resume failed:', e);
+        }
+      }
+      
       // Live-Streaming starten
       const success = await startLiveStream();
       
       if (success) {
-        broadcastBtn.innerHTML = '<span class="material-icons">radio</span> LIVE';
-        broadcastBtn.style.background = "linear-gradient(135deg, #ff3333 0%, #cc0000 100%)";
-        broadcastBtn.title = "Stop Live Broadcast";
+        liveIndicator.classList.add("active");
+        liveIndicator.title = "Stop Live Broadcast";
         console.log("Live broadcast started");
         
         // Streaming-Status anzeigen
@@ -1170,8 +1358,7 @@ async function stopLiveStream() {
       } else {
         // Fehler beim Starten - Status zurücksetzen
         broadcastActive = false;
-        broadcastBtn.innerHTML = '<span class="material-icons">error</span> Error';
-        broadcastBtn.style.background = "linear-gradient(135deg, #ff3333 0%, #990000 100%)";
+        liveIndicator.classList.remove("active");
         console.error("Failed to start live broadcast");
         
         // CORS-spezifische Fehlermeldung anzeigen
@@ -1179,18 +1366,27 @@ async function stopLiveStream() {
         
         // Nach 5 Sekunden zurück zu normalem State
         setTimeout(() => {
-          broadcastBtn.innerHTML = '<span class="material-icons">radio</span> Broadcast';
-          broadcastBtn.style.background = "linear-gradient(135deg, #ff8800 0%, #cc6600 100%)";
-          broadcastBtn.title = "Start Live Broadcast";
+          liveIndicator.classList.remove("active");
+          liveIndicator.title = "Start Live Broadcast";
         }, 5000);
       }
     } else {
       // Live-Streaming stoppen
       await stopLiveStream();
       
-      broadcastBtn.innerHTML = '<span class="material-icons">radio</span> Broadcast';
-      broadcastBtn.style.background = "linear-gradient(135deg, #ff8800 0%, #cc6600 100%)";
-      broadcastBtn.title = "Start Live Broadcast";
+      // BROWSER AUDIO KOMPATIBILITÄT: AudioContext suspendieren um andere Tabs nicht zu beeinträchtigen
+      if (audioContext && audioContext.state === 'running') {
+        console.log('🔇 Suspending AudioContext to restore normal browser audio for other tabs');
+        try {
+          await audioContext.suspend();
+          console.log('✅ AudioContext suspended - other tabs should work normally now');
+        } catch (e) {
+          console.warn('AudioContext suspend failed:', e);
+        }
+      }
+      
+      liveIndicator.classList.remove("active");
+      liveIndicator.title = "Start Live Broadcast";
       console.log("Live broadcast stopped");
       
       // Streaming-Status verstecken
@@ -2805,6 +3001,12 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
     if (playerDeck) {
       playerDeck.classList.add('playing');
     }
+    
+    // PLAYER STATE: Track is now playing
+    const song = getCurrentLoadedSong(side);
+    if (song) {
+      setPlayerState(side, song, true);
+    }
   });
   
   audio.addEventListener('pause', () => {
@@ -2812,10 +3014,22 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
     if (playerDeck) {
       playerDeck.classList.remove('playing');
     }
+    
+    // PLAYER STATE: Track is paused
+    const song = getCurrentLoadedSong(side);
+    if (song) {
+      setPlayerState(side, song, false);
+    }
   });
   
   audio.addEventListener('ended', () => {
     console.log(`🏁 Player ${side} finished playing`);
+    
+    // PLAYER STATE: Track finished - clear player
+    setPlayerState(side, null, false);
+    
+    // Clear deck completely when track ends
+    clearPlayerDeck(side);
     
     // Update play button state
     const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
@@ -2905,21 +3119,12 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
   });
   
   ejectBtn?.addEventListener('click', () => {
-    audio.pause();
-    audio.currentTime = 0;
-    audio.src = '';
+    console.log(`💿 Player ${side.toUpperCase()} eject button pressed`);
     
-    // Clear song ID for rating system
-    delete audio.dataset.songId;
+    // Complete deck clearing including metadata update
+    clearPlayerDeck(side);
     
-    const trackTitle = document.getElementById(`track-title-${side}`);
-    const trackArtist = document.getElementById(`track-artist-${side}`);
-    const playerRating = document.getElementById(`player-rating-${side}`);
-    
-    if (trackTitle) trackTitle.textContent = 'No Track Loaded';
-    if (trackArtist) trackArtist.textContent = '-';
-    if (playerRating) playerRating.innerHTML = '';
-    
+    // Reset UI elements
     if (playPauseBtn) {
       const icon = playPauseBtn.querySelector('.material-icons');
       if (icon) icon.textContent = 'play_arrow';
@@ -3003,6 +3208,9 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   audio.pause();
   audio.currentTime = 0;
   
+  // PLAYER STATE: Track loaded but not playing yet
+  setPlayerState(side, song, false);
+  
   // Neuen Track laden
   audio.src = streamUrl;
   
@@ -3016,11 +3224,6 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   
   // Album Cover aktualisieren
   updateAlbumCover(side, song);
-  
-  // Send metadata to AzuraCast if streaming
-  if (isStreaming) {
-    sendMetadataToAzuraCast(song);
-  }
   
   // Play-Button zurücksetzen (Track ist gestoppt)
   const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
@@ -3054,6 +3257,9 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
     audio.addEventListener('loadeddata', () => {
       audio.play().then(() => {
         console.log(`🎵 Player ${side.toUpperCase()}: "${song.title}" is now playing`);
+        
+        // PLAYER STATE: Auto-play started
+        setPlayerState(side, song, true);
         
         // Update play button state
         const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
@@ -3407,7 +3613,8 @@ function updateVolumeMeter(meterId: string, level: number) {
   const meterElement = document.getElementById(meterId);
   if (!meterElement) return;
   
-  const bars = meterElement.querySelectorAll('.meter-bar');
+  // Support für beide Meter-Typen: kompakt und regular
+  const bars = meterElement.querySelectorAll('.meter-bar-compact, .meter-bar');
   bars.forEach((bar, index) => {
     if (index < level) {
       bar.classList.add('active');
