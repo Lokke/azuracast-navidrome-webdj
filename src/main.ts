@@ -1,8 +1,86 @@
 ﻿import "./style.css";
 import { NavidromeClient, type NavidromeSong, type NavidromeAlbum, type NavidromeArtist } from "./navidrome";
 import WaveSurfer from 'wavesurfer.js';
+import { WebRTCStreamer, defaultWebRTCConfig, type WebRTCStreamConfig } from './webrtc-streamer';
 
 console.log("DJ Radio Webapp loaded!");
+
+// Global state for search results
+let lastSearchResults: any = null;
+let lastSearchQuery: string = '';
+
+// Audio Mixing und Streaming Infrastruktur
+let audioContext: AudioContext | null = null;
+let masterGainNode: GainNode | null = null;
+let leftPlayerGain: GainNode | null = null;
+let rightPlayerGain: GainNode | null = null;
+let microphoneGain: GainNode | null = null;
+let crossfaderGain: { left: GainNode; right: GainNode } | null = null;
+let microphoneStream: MediaStream | null = null;
+let mediaRecorder: MediaRecorder | null = null;
+let isStreaming: boolean = false;
+let streamChunks: Blob[] = [];
+
+// Separates Audio-Routing für Browser-Wiedergabe vs. Streaming
+let browserOutputGain: GainNode | null = null;  // Für lokale Wiedergabe
+let streamingOutputGain: GainNode | null = null; // Für Live-Stream
+
+// WebRTC Streamer Instanz
+let webrtcStreamer: WebRTCStreamer | null = null;
+let bridgeSocket: WebSocket | null = null;
+
+// Send metadata to AzuraCast WebDJ
+function sendMetadataToAzuraCast(song: NavidromeSong) {
+  if (bridgeSocket?.readyState === WebSocket.OPEN) {
+    const metadataMessage = {
+      type: 'metadata',
+      data: {
+        song: `${song.artist} - ${song.title}`,
+        artist: song.artist,
+        title: song.title,
+        album: song.album
+      }
+    };
+    
+    console.log('📤 Sending metadata to AzuraCast:', metadataMessage);
+    bridgeSocket.send(JSON.stringify(metadataMessage));
+  }
+}
+
+// Streaming Konfiguration
+interface StreamConfig {
+  serverUrl: string;
+  serverType: 'icecast' | 'shoutcast';
+  mountPoint: string; // nur für Icecast und Shoutcast v2
+  password: string;
+  bitrate: number;
+  format: 'mp3' | 'aac';
+  sampleRate: number;
+  username?: string; // für manche Server
+}
+
+let streamConfig: StreamConfig = {
+  serverUrl: getStreamServerUrl(),
+  serverType: (import.meta.env.VITE_STREAM_SERVER_TYPE as 'icecast' | 'shoutcast') || 'icecast',
+  mountPoint: import.meta.env.VITE_STREAM_MOUNT_POINT || '/live',
+  password: import.meta.env.VITE_STREAM_PASSWORD,
+  bitrate: parseInt(import.meta.env.VITE_STREAM_BITRATE) || 128,
+  format: 'mp3',
+  sampleRate: 44100,
+  username: import.meta.env.VITE_STREAM_USERNAME
+};
+
+// Hilfsfunktion für Stream-Server-URL mit Proxy-Unterstützung
+function getStreamServerUrl(): string {
+  const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
+  
+  if (useProxy) {
+    const proxyServer = import.meta.env.VITE_PROXY_SERVER || 'http://localhost:3001';
+    return `${proxyServer}/stream`;
+  } else {
+    return import.meta.env.VITE_STREAM_SERVER || 'http://localhost:8000';
+  }
+}
 
 // Player Deck Fragment Template
 function createPlayerDeckHTML(side: 'left' | 'right'): string {
@@ -322,41 +400,886 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Login-Formular initialisieren
   initializeNavidromeLogin();
   
+  // Stream-Konfiguration Panel initialisieren
+  initializeStreamConfigPanel();
+  
   // Mikrofon Toggle Funktionalität
   const micBtn = document.getElementById("mic-toggle") as HTMLButtonElement;
   let micActive = false;
   
-  micBtn?.addEventListener("click", () => {
+  micBtn?.addEventListener("click", async () => {
     micActive = !micActive;
     
     if (micActive) {
-      micBtn.classList.add("active");
-      micBtn.innerHTML = '<span class="material-icons">mic</span> MIKROFON AN';
-      console.log("Mikrofon aktiviert - pulsiert rot");
+      // Mikrofon einschalten und Audio-Mixing initialisieren falls nötig
+      if (!audioContext) {
+        await initializeAudioMixing();
+      }
+      
+      // Mikrofon einrichten
+      const micReady = await setupMicrophone();
+      if (micReady) {
+        setMicrophoneEnabled(true);
+        micBtn.classList.add("active");
+        micBtn.innerHTML = '<span class="material-icons">mic</span> MIKROFON AN';
+        console.log("Mikrofon aktiviert - pulsiert rot");
+      } else {
+        micActive = false;
+        alert('Microphone access denied or not available');
+      }
     } else {
+      setMicrophoneEnabled(false);
       micBtn.classList.remove("active");
       micBtn.innerHTML = '<span class="material-icons">mic</span> MIKROFON';
       console.log("Mikrofon deaktiviert");
     }
   });
   
+// Audio-Mixing-System initialisieren
+async function initializeAudioMixing() {
+  try {
+    // AudioContext erstellen
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    // Master Gain Node für Lautstärke-Kontrolle
+    masterGainNode = audioContext.createGain();
+    masterGainNode.connect(audioContext.destination);
+    
+    // Separate Gain Nodes für jeden Player
+    leftPlayerGain = audioContext.createGain();
+    rightPlayerGain = audioContext.createGain();
+    
+    // Crossfader Gain Nodes
+    crossfaderGain = {
+      left: audioContext.createGain(),
+      right: audioContext.createGain()
+    };
+    
+    // Mikrofon Gain Node
+    microphoneGain = audioContext.createGain();
+    microphoneGain.gain.value = 0; // Standardmäßig stumm
+    
+    // Crossfader Gains mit Master verbinden
+    crossfaderGain.left.connect(masterGainNode);
+    crossfaderGain.right.connect(masterGainNode);
+    
+    // Player Gains mit Crossfader verbinden
+    leftPlayerGain.connect(crossfaderGain.left);
+    rightPlayerGain.connect(crossfaderGain.right);
+    
+    // Mikrofon direkt mit Master verbinden (bypassed Crossfader)
+    microphoneGain.connect(masterGainNode);
+    
+    console.log('Audio mixing system initialized');
+    return true;
+  } catch (error) {
+    console.error('Failed to initialize audio mixing:', error);
+    return false;
+  }
+}
+
+// Audio-Quellen zu Mixing-System hinzufügen
+function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'right') {
+  if (!audioContext) return false;
+  
+  try {
+    // Entferne vorherige AudioSource-Verbindung falls vorhanden
+    if ((audioElement as any)._audioSourceNode) {
+      try {
+        (audioElement as any)._audioSourceNode.disconnect();
+      } catch (e) {
+        // Source node already disconnected
+      }
+    }
+    
+    // MediaElementAudioSourceNode erstellen
+    const sourceNode = audioContext.createMediaElementSource(audioElement);
+    (audioElement as any)._audioSourceNode = sourceNode; // Speichere Referenz für späteres Cleanup
+    
+    // Mit entsprechendem Player Gain verbinden
+    if (side === 'left' && leftPlayerGain) {
+      sourceNode.connect(leftPlayerGain);
+    } else if (side === 'right' && rightPlayerGain) {
+      sourceNode.connect(rightPlayerGain);
+    }
+    
+    console.log(`🎵 Connected ${side} player to audio mixer for streaming`);
+    return true;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes('AudioNode is already connected')) {
+      console.log(`${side} player already connected to mixer`);
+      return true;
+    } else {
+      console.error(`Failed to connect ${side} player to mixer:`, error);
+      return false;
+    }
+  }
+}
+
+// CORS-Fehlermeldung anzeigen
+function showCORSErrorMessage() {
+  // Prüfen ob bereits eine Fehlermeldung angezeigt wird
+  if (document.getElementById('cors-error-message')) return;
+  
+  const errorDiv = document.createElement('div');
+  errorDiv.id = 'cors-error-message';
+  errorDiv.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10000;
+    max-width: 400px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  `;
+  
+  errorDiv.innerHTML = `
+    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+      <span class="material-icons" style="margin-right: 8px;">error</span>
+      <strong>Streaming Connection Blocked</strong>
+    </div>
+    <p style="margin: 8px 0;">Browser-Security (CORS) verhindert direkte Verbindungen zu Shoutcast-Servern.</p>
+    <div style="margin-top: 12px; font-size: 12px; opacity: 0.9;">
+      <strong>Lösungen:</strong><br>
+      • Proxy-Server verwenden<br>
+      • Browser mit --disable-web-security starten<br>
+      • Server CORS-Header konfigurieren
+    </div>
+    <button onclick="this.parentElement.remove()" style="
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      opacity: 0.7;
+    ">&times;</button>
+  `;
+  
+  document.body.appendChild(errorDiv);
+  
+  // Automatisch nach 10 Sekunden entfernen
+  setTimeout(() => {
+    if (errorDiv.parentElement) {
+      errorDiv.remove();
+    }
+  }, 10000);
+}
+
+// Mikrofon zum Mixing-System hinzufügen
+async function setupMicrophone() {
+  if (!audioContext || !microphoneGain) return false;
+  
+  try {
+    // Mikrofon-Zugriff anfordern
+    microphoneStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false
+      } 
+    });
+    
+    // Mikrofon-Tracks stumm schalten für Browser-Ausgabe (verhindert Echo)
+    microphoneStream.getAudioTracks().forEach(track => {
+      track.enabled = true; // Track ist aktiv für Aufnahme
+    });
+    
+    // MediaStreamAudioSourceNode erstellen
+    const micSourceNode = audioContext.createMediaStreamSource(microphoneStream);
+    micSourceNode.connect(microphoneGain);
+    
+    console.log('Microphone connected to audio mixer (echo prevention enabled)');
+    return true;
+  } catch (error) {
+    console.error('Failed to setup microphone:', error);
+    return false;
+  }
+}
+
+// Crossfader-Position setzen (0 = links, 0.5 = mitte, 1 = rechts)
+function setCrossfaderPosition(position: number) {
+  if (!crossfaderGain) return;
+  
+  // Position zwischen 0 und 1 begrenzen
+  position = Math.max(0, Math.min(1, position));
+  
+  // Links: maximum bei 0, minimum bei 1
+  const leftGain = Math.cos(position * Math.PI / 2);
+  // Rechts: minimum bei 0, maximum bei 1
+  const rightGain = Math.sin(position * Math.PI / 2);
+  
+  crossfaderGain.left.gain.value = leftGain;
+  crossfaderGain.right.gain.value = rightGain;
+  
+  console.log(`Crossfader position: ${position}, Left: ${leftGain.toFixed(2)}, Right: ${rightGain.toFixed(2)}`);
+}
+
+// Mikrofon ein-/ausschalten
+function setMicrophoneEnabled(enabled: boolean) {
+  if (!microphoneGain) return;
+  
+  microphoneGain.gain.value = enabled ? 1 : 0;
+  console.log(`Microphone ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+// MediaRecorder für Streaming einrichten
+async function initializeStreamRecorder() {
+  if (!audioContext || !masterGainNode) {
+    console.error('Audio context not initialized');
+    return false;
+  }
+  
+  try {
+    // MediaStreamDestination erstellen für Aufnahme
+    const destination = audioContext.createMediaStreamDestination();
+    masterGainNode.connect(destination);
+    
+    // MediaRecorder mit MP3-kompatiblen Einstellungen
+    let options: MediaRecorderOptions;
+    
+    if (streamConfig.format === 'mp3') {
+      // MP3 wird nicht direkt von MediaRecorder unterstützt
+      // Fallback auf AAC in MP4 Container oder WebM/Opus
+      options = {
+        mimeType: 'audio/mp4',  // AAC in MP4 - näher an MP3
+        audioBitsPerSecond: streamConfig.bitrate * 1000
+      };
+      
+      // Fallback falls MP4 nicht unterstützt wird
+      if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
+        options = {
+          mimeType: 'audio/webm;codecs=opus',
+          audioBitsPerSecond: streamConfig.bitrate * 1000
+        };
+      }
+    } else {
+      // AAC
+      options = {
+        mimeType: 'audio/mp4',
+        audioBitsPerSecond: streamConfig.bitrate * 1000
+      };
+    }
+    
+    mediaRecorder = new MediaRecorder(destination.stream, options);
+    
+    // Event Handlers für MediaRecorder
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        streamChunks.push(event.data);
+        
+        // Send raw audio data to AzuraCast WebDJ WebSocket
+        if (isStreaming && bridgeSocket?.readyState === WebSocket.OPEN) {
+          // Send raw audio binary data directly
+          bridgeSocket.send(event.data);
+        }
+      }
+    };
+    
+    mediaRecorder.onstart = () => {
+      console.log('Stream recording started');
+      streamChunks = [];
+    };
+    
+    mediaRecorder.onstop = () => {
+      console.log('Stream recording stopped');
+    };
+    
+    mediaRecorder.onerror = (event) => {
+      console.error('MediaRecorder error:', event);
+    };
+    
+    console.log('Stream recorder initialized with format:', options.mimeType);
+    return true;
+  } catch (error) {
+    console.error('Failed to initialize stream recorder:', error);
+    return false;
+  }
+}
+
+// HTTP-Verbindung zu Icecast/Shoutcast Server
+let streamConnection: XMLHttpRequest | null = null;
+
+function connectToStreamingServer() {
+  return new Promise<boolean>((resolve) => {
+    try {
+      streamConnection = new XMLHttpRequest();
+      
+      // Verwende die bereits konfigurierte Stream-URL (mit Proxy-Logik)
+      let streamUrl = streamConfig.serverUrl;
+      
+      // Für Icecast Mount Point anhängen, außer bei Proxy (bereits enthalten)
+      const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
+      if (!useProxy && streamConfig.serverType === 'icecast' && streamConfig.mountPoint) {
+        streamUrl += streamConfig.mountPoint;
+      }
+      
+      console.log(`Connecting to ${streamConfig.serverType} server: ${streamUrl}`);
+      console.log(`Using proxy: ${useProxy}`);
+      
+      // HTTP PUT Request für Streaming
+      streamConnection.open('PUT', streamUrl, true);
+      
+      // Headers für Icecast/Shoutcast
+      if (streamConfig.serverType === 'icecast') {
+        // Icecast Headers
+        streamConnection.setRequestHeader('Authorization', 
+          'Basic ' + btoa(`${streamConfig.username || 'source'}:${streamConfig.password}`));
+        streamConnection.setRequestHeader('Content-Type', 'audio/mpeg');
+        streamConnection.setRequestHeader('Ice-Name', 'DJ Radio Live Stream');
+        streamConnection.setRequestHeader('Ice-Description', 'Live DJ Set');
+        streamConnection.setRequestHeader('Ice-Genre', 'Electronic');
+        streamConnection.setRequestHeader('Ice-Bitrate', streamConfig.bitrate.toString());
+        streamConnection.setRequestHeader('Ice-Public', '1');
+      } else {
+        // Shoutcast Headers
+        streamConnection.setRequestHeader('Authorization', 
+          'Basic ' + btoa(`:${streamConfig.password}`));
+        streamConnection.setRequestHeader('Content-Type', 'audio/mpeg');
+        streamConnection.setRequestHeader('Icy-Name', 'DJ Radio Live Stream');
+        streamConnection.setRequestHeader('Icy-Genre', 'Electronic');
+        streamConnection.setRequestHeader('Icy-Br', streamConfig.bitrate.toString());
+        streamConnection.setRequestHeader('Icy-Pub', '1');
+      }
+      
+      streamConnection.onreadystatechange = () => {
+        if (streamConnection!.readyState === XMLHttpRequest.DONE) {
+          if (streamConnection!.status === 200 || streamConnection!.status === 201) {
+            console.log('Successfully connected to streaming server');
+            resolve(true);
+          } else {
+            console.error(`Failed to connect: ${streamConnection!.status} ${streamConnection!.statusText}`);
+            resolve(false);
+          }
+        }
+      };
+      
+      streamConnection.onerror = () => {
+        console.error('Connection error to streaming server (likely CORS issue)');
+        resolve(false);
+      };
+      
+      streamConnection.ontimeout = () => {
+        console.error('Connection timeout to streaming server');
+        resolve(false);
+      };
+      
+      // Verbindung initialisieren (leerer Body für Initial-Request)
+      try {
+        streamConnection.send();
+      } catch (e) {
+        console.error('Failed to send request (CORS restriction):', e);
+        resolve(false);
+      }
+      
+    } catch (error) {
+      console.error('Failed to connect to streaming server:', error);
+      resolve(false);
+    }
+  });
+}
+
+// Audio Chunk an Server senden
+function sendAudioChunkToServer(audioChunk: Blob) {
+  if (!streamConnection || streamConnection.readyState !== XMLHttpRequest.DONE) {
+    console.warn('Stream connection not ready, cannot send audio chunk');
+    return;
+  }
+  
+  // Neuer Request für jeden Chunk (Shoutcast/Icecast Protokoll)
+  const chunkRequest = new XMLHttpRequest();
+  const streamUrl = streamConfig.serverType === 'shoutcast' && !streamConfig.mountPoint 
+    ? streamConfig.serverUrl 
+    : `${streamConfig.serverUrl}${streamConfig.mountPoint}`;
+  
+  chunkRequest.open('POST', streamUrl, true);
+  chunkRequest.setRequestHeader('Content-Type', 'audio/mpeg');
+  
+  // Authorization wiederholen
+  if (streamConfig.serverType === 'icecast') {
+    chunkRequest.setRequestHeader('Authorization', 
+      'Basic ' + btoa(`${streamConfig.username || 'source'}:${streamConfig.password}`));
+  } else {
+    chunkRequest.setRequestHeader('Authorization', 
+      'Basic ' + btoa(`:${streamConfig.password}`));
+  }
+  
+  // Audio-Daten senden
+  chunkRequest.send(audioChunk);
+}
+
+// Live-Streaming starten (Browser-to-Shoutcast via Proxy)
+async function startLiveStream() {
+  try {
+    console.log('Starting live stream...');
+    
+    // Direktes Liquidsoap Harbor Streaming (ohne Bridge)
+    return await startDirectStream();
+  } catch (error) {
+    console.error('Failed to start live stream:', error);
+    return false;
+  }
+}
+
+// Direktes Liquidsoap Harbor Streaming (ohne Bridge)
+async function startDirectStream(): Promise<boolean> {
+  try {
+    console.log('Starting direct Liquidsoap Harbor stream...');
+    
+    // 1. Audio Mixing System initialisieren
+    if (!audioContext || !masterGainNode) {
+      const mixingReady = await initializeAudioMixing();
+      if (!mixingReady) {
+        throw new Error('Failed to initialize audio mixing');
+      }
+    }
+    
+    // 2. MediaStreamDestination für direktes Streaming
+    if (!audioContext || !masterGainNode) {
+      throw new Error('Audio context not ready');
+    }
+    
+    const destination = audioContext.createMediaStreamDestination();
+    masterGainNode.connect(destination);
+    
+    // 3. MediaRecorder für ICY-kompatible Daten
+    const recorder = new MediaRecorder(destination.stream, {
+      mimeType: 'audio/webm;codecs=opus',
+      audioBitsPerSecond: streamConfig.bitrate * 1000
+    });
+    
+    // 4. Direkte HTTP-POST Verbindung zu Harbor (über CORS-Proxy)
+    const harborUrl = `http://localhost:8082/stream`;
+    
+    // Verwende Credentials direkt aus .env (keine Fallbacks oder streamConfig)
+    const username = import.meta.env.VITE_STREAM_USERNAME;
+    const password = import.meta.env.VITE_STREAM_PASSWORD;
+    
+    if (!username || !password) {
+      throw new Error('Missing credentials: VITE_STREAM_USERNAME or VITE_STREAM_PASSWORD not set in .env');
+    }
+    
+    const credentials = btoa(`${username}:${password}`);
+    console.log(`🔐 Raw env values: username="${username}", password="${password}"`);
+    console.log(`🔐 Combined credentials: "${username}:${password}"`);
+    console.log(`🔐 Base64 encoded: ${credentials}`);
+    
+    let isConnected = false;
+    let chunkQueue: Blob[] = [];
+    
+    // Funktion zum Senden von Audio-Chunks
+    const sendAudioChunk = async (audioBlob: Blob) => {
+      try {
+        const response = await fetch(harborUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${credentials}`,
+            'Content-Type': 'audio/webm',
+            'Ice-Public': '0',
+            'Ice-Name': 'WebDJ Live Stream',
+            'Ice-Description': 'Live broadcast from WebDJ',
+            'User-Agent': 'WebDJ/1.0'
+          },
+          body: audioBlob,
+          keepalive: true
+        });
+        
+        if (response.ok) {
+          if (!isConnected) {
+            isConnected = true;
+            console.log('✅ Direct Harbor connection established (via CORS proxy)');
+            showStatusMessage('✅ Connected to Liquidsoap Harbor (direct)', 'success');
+          }
+        } else {
+          console.error('Harbor rejected chunk:', response.status, response.statusText);
+          if (response.status === 401) {
+            throw new Error('Authentication failed');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to send audio chunk:', error);
+        throw error;
+      }
+    };
+    
+    // 5. MediaRecorder Event Handler
+    recorder.ondataavailable = async (event) => {
+      if (event.data.size > 0) {
+        chunkQueue.push(event.data);
+        
+        // Chunks in Serie senden (nicht parallel)
+        if (chunkQueue.length === 1) {
+          while (chunkQueue.length > 0) {
+            const chunk = chunkQueue.shift()!;
+            try {
+              await sendAudioChunk(chunk);
+            } catch (error) {
+              console.error('Failed to send chunk, stopping stream:', error);
+              await stopLiveStream();
+              return;
+            }
+          }
+        }
+      }
+    };
+    
+    // 6. Mikrofon einrichten
+    await setupMicrophone();
+    
+    // 7. Recording starten
+    recorder.start(1000); // 1-Sekunden-Chunks
+    
+    mediaRecorder = recorder;
+    isStreaming = true;
+    
+    console.log('Direct Harbor stream started successfully');
+    return true;
+    
+  } catch (error) {
+    console.error('Failed to start direct stream:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    showStatusMessage(`❌ Direct stream failed: ${errorMessage}`, 'error');
+    return false;
+  }
+}
+
+// Live-Streaming stoppen
+async function stopLiveStream() {
+  try {
+    console.log('Stopping live stream...');
+    
+    isStreaming = false;
+    
+    // MediaRecorder stoppen
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+    
+    // Stream-Verbindung schließen (für HTTP-Mode)
+    if (streamConnection) {
+      streamConnection.abort();
+      streamConnection = null;
+    }
+    
+    // Mikrofon-Stream stoppen
+    if (microphoneStream) {
+      microphoneStream.getTracks().forEach(track => track.stop());
+      microphoneStream = null;
+    }
+    
+    console.log('Live stream stopped');
+    return true;
+    
+  } catch (error) {
+    console.error('Failed to stop live stream:', error);
+    return false;
+  }
+}
+
   // Broadcast Button Funktionalität
   const broadcastBtn = document.getElementById("broadcast-toggle") as HTMLButtonElement;
   let broadcastActive = false;
   
-  broadcastBtn?.addEventListener("click", () => {
+  broadcastBtn?.addEventListener("click", async () => {
     broadcastActive = !broadcastActive;
     
     if (broadcastActive) {
-      broadcastBtn.innerHTML = '<span class="material-icons">radio</span> LIVE';
-      broadcastBtn.style.background = "linear-gradient(135deg, #ff3333 0%, #cc0000 100%)";
-      console.log("Broadcast aktiviert");
+      // Live-Streaming starten
+      const success = await startLiveStream();
+      
+      if (success) {
+        broadcastBtn.innerHTML = '<span class="material-icons">radio</span> LIVE';
+        broadcastBtn.style.background = "linear-gradient(135deg, #ff3333 0%, #cc0000 100%)";
+        broadcastBtn.title = "Stop Live Broadcast";
+        console.log("Live broadcast started");
+        
+        // Streaming-Status anzeigen
+        showStreamingStatus(true);
+      } else {
+        // Fehler beim Starten - Status zurücksetzen
+        broadcastActive = false;
+        broadcastBtn.innerHTML = '<span class="material-icons">error</span> Error';
+        broadcastBtn.style.background = "linear-gradient(135deg, #ff3333 0%, #990000 100%)";
+        console.error("Failed to start live broadcast");
+        
+        // CORS-spezifische Fehlermeldung anzeigen
+        showCORSErrorMessage();
+        
+        // Nach 5 Sekunden zurück zu normalem State
+        setTimeout(() => {
+          broadcastBtn.innerHTML = '<span class="material-icons">radio</span> Broadcast';
+          broadcastBtn.style.background = "linear-gradient(135deg, #ff8800 0%, #cc6600 100%)";
+          broadcastBtn.title = "Start Live Broadcast";
+        }, 5000);
+      }
     } else {
+      // Live-Streaming stoppen
+      await stopLiveStream();
+      
       broadcastBtn.innerHTML = '<span class="material-icons">radio</span> Broadcast';
       broadcastBtn.style.background = "linear-gradient(135deg, #ff8800 0%, #cc6600 100%)";
-      console.log("Broadcast deaktiviert");
+      broadcastBtn.title = "Start Live Broadcast";
+      console.log("Live broadcast stopped");
+      
+      // Streaming-Status verstecken
+      showStreamingStatus(false);
     }
   });
+
+// Streaming-Status anzeigen/verstecken
+function showStreamingStatus(isLive: boolean) {
+  // Erstelle oder aktualisiere Streaming-Status-Anzeige
+  let statusElement = document.getElementById('streaming-status');
+  
+  if (!statusElement) {
+    statusElement = document.createElement('div');
+    statusElement.id = 'streaming-status';
+    statusElement.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: linear-gradient(135deg, #ff3333 0%, #cc0000 100%);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 25px;
+      font-weight: bold;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 15px rgba(255, 51, 51, 0.3);
+      transition: opacity 0.3s ease;
+    `;
+    document.body.appendChild(statusElement);
+  }
+  
+  if (isLive) {
+    statusElement.innerHTML = '<span class="material-icons">fiber_manual_record</span> LIVE ON AIR';
+    statusElement.style.opacity = '1';
+    
+    // Pulsing-Animation für Live-Indikator
+    statusElement.style.animation = 'pulse 2s ease-in-out infinite';
+  } else {
+    statusElement.style.opacity = '0';
+    statusElement.style.animation = 'none';
+    
+    // Element nach Animation entfernen
+    setTimeout(() => {
+      if (statusElement && statusElement.parentNode) {
+        statusElement.parentNode.removeChild(statusElement);
+      }
+    }, 300);
+  }
+}
+
+// Stream-Konfiguration Panel Funktionalität
+function initializeStreamConfigPanel() {
+  const configBtn = document.getElementById('stream-config-btn');
+  const configPanel = document.getElementById('stream-config-panel');
+  const saveBtn = document.getElementById('save-stream-config');
+  const cancelBtn = document.getElementById('cancel-stream-config');
+  
+  // Konfiguration laden
+  loadStreamConfig();
+  
+  // Panel ein-/ausblenden
+  configBtn?.addEventListener('click', () => {
+    if (configPanel) {
+      const isVisible = configPanel.style.display !== 'none';
+      configPanel.style.display = isVisible ? 'none' : 'block';
+    }
+  });
+  
+  // Konfiguration speichern
+  saveBtn?.addEventListener('click', () => {
+    saveStreamConfig();
+    if (configPanel) {
+      configPanel.style.display = 'none';
+    }
+  });
+  
+  // Panel schließen
+  cancelBtn?.addEventListener('click', () => {
+    loadStreamConfig(); // Änderungen verwerfen
+    if (configPanel) {
+      configPanel.style.display = 'none';
+    }
+  });
+  
+  // Server-Type Änderung verwalten
+  const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
+  typeSelect?.addEventListener('change', updateMountPointVisibility);
+  
+  // Initial Mount Point Sichtbarkeit setzen
+  updateMountPointVisibility();
+  
+  // Panel schließen bei Klick außerhalb
+  document.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+    if (configPanel && 
+        configPanel.style.display !== 'none' && 
+        !configPanel.contains(target) && 
+        !configBtn?.contains(target)) {
+      configPanel.style.display = 'none';
+    }
+  });
+}
+
+// Stream-Konfiguration laden
+function loadStreamConfig() {
+  // Aus localStorage laden oder Standardwerte verwenden
+  const saved = localStorage.getItem('streamConfig');
+  if (saved) {
+    try {
+      streamConfig = { ...streamConfig, ...JSON.parse(saved) };
+    } catch (e) {
+      console.warn('Failed to load stream config from localStorage');
+    }
+  }
+  
+  // UI-Felder aktualisieren mit aktueller Konfiguration (inkl. .env Werte)
+  const urlInput = document.getElementById('stream-server-url') as HTMLInputElement;
+  const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
+  const mountInput = document.getElementById('mount-point') as HTMLInputElement;
+  const usernameInput = document.getElementById('stream-username') as HTMLInputElement;
+  const passwordInput = document.getElementById('stream-password') as HTMLInputElement;
+  const bitrateSelect = document.getElementById('stream-bitrate') as HTMLSelectElement;
+  const formatSelect = document.getElementById('stream-format') as HTMLSelectElement;
+  
+  // Original Server-URL anzeigen (nicht die Proxy-URL)
+  const originalServerUrl = import.meta.env.VITE_STREAM_SERVER || 'http://localhost:8000';
+  const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
+  
+  if (urlInput) {
+    urlInput.value = originalServerUrl;
+    // Hinweis anzeigen wenn Proxy verwendet wird
+    if (useProxy) {
+      urlInput.title = `Using CORS Proxy: ${streamConfig.serverUrl}`;
+      urlInput.style.borderColor = '#4CAF50';
+    }
+  }
+  if (typeSelect) typeSelect.value = streamConfig.serverType;
+  if (mountInput) mountInput.value = streamConfig.mountPoint;
+  if (usernameInput) usernameInput.value = streamConfig.username || '';
+  if (passwordInput) passwordInput.value = streamConfig.password;
+  if (bitrateSelect) bitrateSelect.value = streamConfig.bitrate.toString();
+  if (formatSelect) formatSelect.value = streamConfig.format;
+  
+  // Mount Point Feld je nach Server-Typ anzeigen/verstecken
+  updateMountPointVisibility();
+  
+  // Proxy-Status-Indikator aktualisieren
+  updateProxyStatusIndicator();
+}
+
+// Proxy-Status-Indikator aktualisieren
+function updateProxyStatusIndicator() {
+  const proxyStatus = document.getElementById('proxy-status');
+  const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
+  const useBridge = import.meta.env.VITE_USE_BRIDGE === 'true';
+  
+  if (proxyStatus) {
+    if (useBridge) {
+      proxyStatus.style.display = 'flex';
+      proxyStatus.innerHTML = `
+        <span class="material-icons" style="color: #2196F3; font-size: 16px;">stream</span>
+        <span style="color: #2196F3; font-size: 12px; font-weight: 500;">WebRTC→Shoutcast Bridge Active (${import.meta.env.VITE_WEBRTC_BRIDGE || 'ws://localhost:3003'})</span>
+      `;
+    } else if (useProxy) {
+      proxyStatus.style.display = 'flex';
+      proxyStatus.innerHTML = `
+        <span class="material-icons" style="color: #4CAF50; font-size: 16px;">security</span>
+        <span style="color: #4CAF50; font-size: 12px; font-weight: 500;">CORS Proxy Active (${import.meta.env.VITE_PROXY_SERVER || 'http://localhost:3001'})</span>
+      `;
+    } else {
+      proxyStatus.style.display = 'flex';
+      proxyStatus.innerHTML = `
+        <span class="material-icons" style="color: #ff9800; font-size: 16px;">warning</span>
+        <span style="color: #ff9800; font-size: 12px; font-weight: 500;">Direct Connection (may be blocked by CORS)</span>
+      `;
+    }
+  }
+}
+
+// Stream-Konfiguration speichern
+function saveStreamConfig() {
+  const urlInput = document.getElementById('stream-server-url') as HTMLInputElement;
+  const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
+  const mountInput = document.getElementById('mount-point') as HTMLInputElement;
+  const usernameInput = document.getElementById('stream-username') as HTMLInputElement;
+  const passwordInput = document.getElementById('stream-password') as HTMLInputElement;
+  const bitrateSelect = document.getElementById('stream-bitrate') as HTMLSelectElement;
+  const formatSelect = document.getElementById('stream-format') as HTMLSelectElement;
+  
+  // Neue Konfiguration sammeln
+  const newConfig: StreamConfig = {
+    serverUrl: getStreamServerUrl(), // Berechnet automatisch Proxy vs. direkte URL
+    serverType: (typeSelect?.value as 'icecast' | 'shoutcast') || streamConfig.serverType,
+    mountPoint: mountInput?.value || streamConfig.mountPoint,
+    username: usernameInput?.value || streamConfig.username,
+    password: passwordInput?.value || streamConfig.password,
+    bitrate: parseInt(bitrateSelect?.value) || streamConfig.bitrate,
+    format: (formatSelect?.value as 'mp3' | 'aac') || streamConfig.format,
+    sampleRate: streamConfig.sampleRate // Beibehalten
+  };
+  
+  // Validierung der ursprünglichen Server-URL (nicht Proxy)
+  const originalUrl = urlInput?.value || streamConfig.serverUrl;
+  if (!originalUrl || !newConfig.password) {
+    alert('Please fill in server URL and password');
+    return;
+  }
+  
+  if (newConfig.serverType === 'icecast' && !newConfig.mountPoint) {
+    alert('Mount point is required for Icecast');
+    return;
+  }
+  
+  // Konfiguration aktualisieren
+  streamConfig = newConfig;
+  
+  // In localStorage speichern
+  try {
+    localStorage.setItem('streamConfig', JSON.stringify(streamConfig));
+    console.log('Stream configuration saved:', streamConfig);
+    
+    // Kurze Bestätigung anzeigen
+    const saveBtn = document.getElementById('save-stream-config');
+    if (saveBtn) {
+      const originalText = saveBtn.textContent;
+      saveBtn.textContent = 'Saved!';
+      setTimeout(() => {
+        saveBtn.textContent = originalText;
+      }, 1500);
+    }
+  } catch (e) {
+    console.error('Failed to save stream config:', e);
+    alert('Failed to save configuration');
+  }
+}
+
+// Mount Point Sichtbarkeit je nach Server-Typ
+function updateMountPointVisibility() {
+  const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
+  const mountGroup = document.querySelector('.mount-point-group') as HTMLElement;
+  
+  if (typeSelect && mountGroup) {
+    if (typeSelect.value === 'shoutcast') {
+      mountGroup.style.display = 'none';
+    } else {
+      mountGroup.style.display = 'block';
+    }
+  }
+}
 
   // Auto-Queue Toggle Funktionalität für alle Buttons
   const autoQueueButtons = document.querySelectorAll(".auto-queue-btn") as NodeListOf<HTMLButtonElement>;
@@ -742,6 +1665,13 @@ function displaySearchResults(results: any) {
     console.error('Search results containers not found');
     return;
   }
+
+  // Speichere die aktuellen Suchergebnisse für Back-Navigation
+  lastSearchResults = results;
+  const searchInput = document.getElementById('search-input') as HTMLInputElement;
+  if (searchInput) {
+    lastSearchQuery = searchInput.value.trim();
+  }
   
   let html = '';
   
@@ -782,7 +1712,7 @@ function displaySearchResults(results: any) {
     noSearchState.style.display = 'none';
   }
   
-  console.log('Search results displayed');
+  console.log('Search results displayed and saved for back navigation');
   
   // Kleine Verzögerung für DOM-Rendering
   setTimeout(() => {
@@ -795,6 +1725,35 @@ function displaySearchResults(results: any) {
     addSongClickListeners(searchContent);
     console.log('Song click listeners added to search results');
   }, 50);
+}
+
+// Zurück zu den letzten Suchergebnissen
+function returnToLastSearchResults() {
+  if (lastSearchResults) {
+    console.log('Returning to last search results:', lastSearchQuery);
+    
+    // Setze das Suchfeld auf die letzte Suchanfrage
+    const searchInput = document.getElementById('search-input') as HTMLInputElement;
+    if (searchInput && lastSearchQuery) {
+      searchInput.value = lastSearchQuery;
+    }
+    
+    // Zeige die gespeicherten Suchergebnisse wieder an
+    displaySearchResults(lastSearchResults);
+  } else {
+    console.log('No previous search results found, showing no search state');
+    showNoSearchState();
+    
+    // Zeige kurz eine Hinweismeldung
+    const searchInput = document.getElementById('search-input') as HTMLInputElement;
+    if (searchInput) {
+      const originalPlaceholder = searchInput.placeholder;
+      searchInput.placeholder = 'No previous search to return to...';
+      setTimeout(() => {
+        searchInput.placeholder = originalPlaceholder;
+      }, 2000);
+    }
+  }
 }
 
 // Drag & Drop Listeners hinzufügen
@@ -1090,8 +2049,8 @@ async function showAlbumSongs(albumId: string) {
       const backBtn = document.getElementById('back-to-search');
       if (backBtn) {
         backBtn.addEventListener('click', () => {
-          // Gehe zurück zu No Search State
-          showNoSearchState();
+          // Gehe zurück zu den letzten Suchergebnissen
+          returnToLastSearchResults();
         });
       }
     }
@@ -1224,8 +2183,8 @@ async function showArtistDetails(artistId: string, artistName?: string) {
       const backBtn = document.getElementById('back-to-search-artist');
       if (backBtn) {
         backBtn.addEventListener('click', () => {
-          // Gehe zurück zu No Search State
-          showNoSearchState();
+          // Gehe zurück zu den letzten Suchergebnissen
+          returnToLastSearchResults();
         });
       }
     }
@@ -1253,6 +2212,52 @@ function showError(message: string) {
   // Hier könnte eine Benutzeroberfläche für Fehler implementiert werden
 }
 
+// Status-Nachrichten anzeigen (für Bridge-Feedback)
+function showStatusMessage(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  console.log(`[${type.toUpperCase()}]`, message);
+  
+  // Temporäres Status-Element erstellen falls noch nicht vorhanden
+  let statusElement = document.getElementById('bridge-status-message');
+  if (!statusElement) {
+    statusElement = document.createElement('div');
+    statusElement.id = 'bridge-status-message';
+    statusElement.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      color: white;
+      font-weight: bold;
+      z-index: 10000;
+      max-width: 400px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      transition: all 0.3s ease;
+    `;
+    document.body.appendChild(statusElement);
+  }
+  
+  // Style basierend auf Type
+  statusElement.style.backgroundColor = 
+    type === 'success' ? '#10b981' :
+    type === 'error' ? '#ef4444' :
+    '#3b82f6';
+  
+  statusElement.textContent = message;
+  statusElement.style.display = 'block';
+  statusElement.style.opacity = '1';
+  
+  // Nach 5 Sekunden ausblenden
+  setTimeout(() => {
+    if (statusElement) {
+      statusElement.style.opacity = '0';
+      setTimeout(() => {
+        statusElement.style.display = 'none';
+      }, 300);
+    }
+  }, 5000);
+}
+
 function showSearchLoading() {
   const searchResultsSection = document.getElementById('search-results');
   const noSearchState = document.getElementById('no-search-state');
@@ -1277,6 +2282,11 @@ function showNoSearchState() {
     searchResultsSection.style.display = 'none';
     noSearchState.style.display = 'flex';
   }
+  
+  // Lösche Suchhistorie, wenn zurück zum No Search State
+  lastSearchResults = null;
+  lastSearchQuery = '';
+  console.log('Search history cleared');
 }
 
 // Queue initialisieren (permanent)
@@ -1749,6 +2759,11 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   // Album Cover aktualisieren
   updateAlbumCover(side, song);
   
+  // Send metadata to AzuraCast if streaming
+  if (isStreaming) {
+    sendMetadataToAzuraCast(song);
+  }
+  
   // Play-Button zurücksetzen (Track ist gestoppt)
   const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
   const icon = playPauseBtn?.querySelector('.material-icons');
@@ -1756,6 +2771,16 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   
   // Load new waveform using WaveSurfer (lädt automatisch neue Waveform)
   loadWaveform(side, audio.src);
+  
+  // Audio zu Mixing-System hinzufügen für Live-Streaming
+  if (!audioContext) {
+    // Audio-Mixing automatisch initialisieren wenn erster Track geladen wird
+    initializeAudioMixing().then(() => {
+      connectAudioToMixer(audio, side);
+    });
+  } else {
+    connectAudioToMixer(audio, side);
+  }
   
   // Note: We don't sync WaveSurfer with audio to avoid double playback
   // WaveSurfer handles playback directly via play button
@@ -1786,7 +2811,7 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
           playPauseBtn.classList.add('playing');
         }
         
-      }).catch(error => {
+      }).catch((error: any) => {
         console.error(`❌ Auto-play failed on Player ${side.toUpperCase()}:`, error);
         showError(`Auto-play failed on Player ${side.toUpperCase()}: ${error.message}`);
       });
@@ -1819,6 +2844,26 @@ function initializeCrossfader() {
   crossfader.addEventListener('input', () => {
     const value = parseInt(crossfader.value);
     
+    // Konvertiere Crossfader-Position (0-100) zu Audio-Pipeline-Position (0-1)
+    const position = value / 100;
+    
+    // Audio-Pipeline Crossfader setzen falls verfügbar
+    if (crossfaderGain) {
+      // Position zwischen 0 und 1 begrenzen
+      const clampedPosition = Math.max(0, Math.min(1, position));
+      
+      // Links: maximum bei 0, minimum bei 1
+      const leftGain = Math.cos(clampedPosition * Math.PI / 2);
+      // Rechts: minimum bei 0, maximum bei 1
+      const rightGain = Math.sin(clampedPosition * Math.PI / 2);
+      
+      crossfaderGain.left.gain.value = leftGain;
+      crossfaderGain.right.gain.value = rightGain;
+      
+      console.log(`Crossfader position: ${position}, Left: ${leftGain.toFixed(2)}, Right: ${rightGain.toFixed(2)}`);
+    }
+    
+    // Fallback: Direkte Audio-Element-Kontrolle
     // Crossfader: 0 = nur links, 50 = beide gleich, 100 = nur rechts
     // Korrekte Berechnung für fließenden Übergang
     let leftVolume, rightVolume;

@@ -408,6 +408,127 @@ body {
   font-size: 18px;
 }
 
+.stream-config-btn {
+  background: linear-gradient(135deg, #4a4a4a 0%, #333333 100%);
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+
+.stream-config-btn:hover {
+  background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+}
+
+.stream-config-btn .material-icons {
+  font-size: 20px;
+}
+
+/* Stream Configuration Panel */
+.stream-config-panel {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #2a2a2a, #3a3a3a);
+  border: 2px solid #00ff88;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 350px;
+  box-shadow: 0 8px 25px rgba(0, 255, 136, 0.2);
+  z-index: 1000;
+  margin-top: 1rem;
+}
+
+.config-form h3 {
+  color: #00ff88;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.config-group {
+  margin-bottom: 1rem;
+}
+
+.config-group label {
+  display: block;
+  color: #ffffff;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.config-group input,
+.config-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #4a4a4a;
+  border-radius: 6px;
+  background: #333;
+  color: white;
+  font-size: 1rem;
+}
+
+.config-group input:focus,
+.config-group select:focus {
+  outline: none;
+  border-color: #00ff88;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+}
+
+.config-group small {
+  display: block;
+  color: #888;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+  font-style: italic;
+}
+
+.config-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.config-buttons button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+#save-stream-config {
+  background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+  color: #000;
+}
+
+#save-stream-config:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.4);
+}
+
+#cancel-stream-config {
+  background: linear-gradient(135deg, #666 0%, #444 100%);
+  color: white;
+}
+
+#cancel-stream-config:hover {
+  background: linear-gradient(135deg, #777 0%, #555 100%);
+  transform: translateY(-2px);
+}
+
 .mic-btn {
   background: linear-gradient(135deg, #ff4444 0%, #cc3333 100%);
   border: none;
@@ -1647,4 +1768,35 @@ body {
 .library-content::-webkit-scrollbar-thumb:hover,
 .search-results::-webkit-scrollbar-thumb:hover {
   background: #00ff88;
+}
+
+/* Live Streaming Animations */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 4px 15px rgba(255, 51, 51, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 6px 25px rgba(255, 51, 51, 0.6);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 4px 15px rgba(255, 51, 51, 0.3);
+    transform: scale(1);
+  }
+}
+
+/* Streaming Status Overlay */
+#streaming-status {
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#streaming-status .material-icons {
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
 }

@@ -33,10 +33,72 @@
             <div class="mic-controls">
               <button class="broadcast-btn" id="broadcast-toggle"><span class="material-icons">radio</span> Broadcast</button>
               <button class="mic-btn" id="mic-toggle"><span class="material-icons">mic</span> MIKROFON</button>
+              <button class="stream-config-btn" id="stream-config-btn"><span class="material-icons">settings</span></button>
             </div>
             <div class="crossfader-container">
               <label>Crossfader</label>
               <input type="range" min="0" max="100" value="50" id="crossfader" class="crossfader">
+            </div>
+          </div>
+          
+          <!-- Stream Configuration Panel -->
+          <div class="stream-config-panel" id="stream-config-panel" style="display: none;">
+            <div class="config-form">
+              <h3>Streaming Configuration</h3>
+              <div class="config-group">
+                <label for="stream-server-url">Server URL:</label>
+                <input type="text" id="stream-server-url" placeholder="http://localhost:8000" value="http://localhost:8000">
+              </div>
+              <div class="config-group">
+                <label for="stream-server-type">Server Type:</label>
+                <select id="stream-server-type">
+                  <option value="icecast" selected>Icecast</option>
+                  <option value="shoutcast">Shoutcast</option>
+                </select>
+              </div>
+              <div class="config-group mount-point-group">
+                <label for="mount-point">Mount Point (Icecast only):</label>
+                <input type="text" id="mount-point" placeholder="/live" value="/live">
+                <small>Leave empty for Shoutcast v1</small>
+              </div>
+              <div class="config-group">
+                <label for="stream-username">Username:</label>
+                <input type="text" id="stream-username" placeholder="Username (optional for some servers)" value="test">
+              </div>
+              <div class="config-group">
+                <label for="stream-password">Password:</label>
+                <input type="password" id="stream-password" placeholder="Password" value="hackme">
+              </div>
+              <div class="config-group">
+                <label for="stream-bitrate">Bitrate (kbps):</label>
+                <select id="stream-bitrate">
+                  <option value="64">64 kbps</option>
+                  <option value="96">96 kbps</option>
+                  <option value="128" selected>128 kbps</option>
+                  <option value="160">160 kbps</option>
+                  <option value="192">192 kbps</option>
+                  <option value="256">256 kbps</option>
+                  <option value="320">320 kbps</option>
+                </select>
+              </div>
+              <div class="config-group">
+                <label for="stream-format">Audio Format:</label>
+                <select id="stream-format">
+                  <option value="mp3" selected>MP3</option>
+                  <option value="aac">AAC</option>
+                </select>
+                <small>Note: Browser converts to AAC/Opus, server can transcode to MP3</small>
+              </div>
+              <div class="config-group">
+                <div id="proxy-status" style="display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(76, 175, 80, 0.2); border-radius: 4px;">
+                  <span class="material-icons" style="color: #4CAF50; font-size: 16px;">security</span>
+                  <span style="color: #4CAF50; font-size: 12px; font-weight: 500;">CORS Proxy Active</span>
+                </div>
+              </div>
+              <div class="config-buttons">
+                <button id="save-stream-config">Save</button>
+                <button id="cancel-stream-config">Cancel</button>
+              </div>
             </div>
           </div>
         </div>

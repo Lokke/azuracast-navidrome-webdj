@@ -6,13 +6,25 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start:all": "concurrently \"npm run start:proxy\" \"npm run start:signaling\" \"npm run start:bridge\" \"npm run dev\"",
+    "start:proxy": "node proxy-server.js",
+    "start:signaling": "node webrtc-signaling-server.js",
+    "start:bridge": "node webrtc-shoutcast-bridge-tcp.js",
+    "start:services": "concurrently \"npm run start:proxy\" \"npm run start:signaling\" \"npm run start:bridge\""
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "typescript": "~5.8.3",
     "vite": "^7.1.6"
   },
   "dependencies": {
-    "wavesurfer.js": "^7.10.1"
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "http-proxy-middleware": "^3.0.5",
+    "node-fetch": "^3.3.2",
+    "wavesurfer.js": "^7.10.1",
+    "ws": "^8.18.3"
   }
 }
