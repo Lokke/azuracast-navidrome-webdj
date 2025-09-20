@@ -1,49 +1,94 @@
-# DJ Radio Webapp
+# WebDJ - Browser-Based DJ Application# DJ Radio Webapp
 
-A professional DJ/Radio interface with dual player decks, crossfader controls, and Navidrome music library integration.
 
-## Features
 
-🎵 **Dual Player Decks**
-- Independent left and right player controls
-- Play, pause, stop functionality
-- Volume controls for each deck
-- Progress bars with real-time updates
+Modern web-based DJ application with dual players, crossfader, microphone input, and live streaming capabilities.A professional DJ/Radio interface with dual player decks, crossfader controls, and Navidrome music library integration.
 
-🎛️ **Professional DJ Controls**
+
+
+## Features## Features
+
+
+
+- **Dual DJ Players** - Load and mix tracks from Navidrome music library🎵 **Dual Player Decks**
+
+- **Professional Crossfader** - Smooth transitions between decks- Independent left and right player controls
+
+- **Microphone Integration** - Live microphone input with echo prevention- Play, pause, stop functionality
+
+- **Live Streaming** - Direct broadcast to Liquidsoap Harbor (Radio Endstation)- Volume controls for each deck
+
+- **Music Library** - Search and browse via Navidrome integration- Progress bars with real-time updates
+
+
+
+## Quick Start🎛️ **Professional DJ Controls**
+
 - Crossfader for seamless mixing between decks
-- Microphone on/off switch
-- Broadcast button for live streaming
 
-📚 **Music Library Integration**
+1. **Install dependencies:**- Microphone on/off switch
+
+   ```bash- Broadcast button for live streaming
+
+   npm install
+
+   ```📚 **Music Library Integration**
+
 - Connected to Navidrome server
-- Search functionality for tracks, artists, albums
-- Drag and drop tracks to players or queue
+
+2. **Configure environment:**- Search functionality for tracks, artists, albums
+
+   Copy `.env.example` to `.env` and set your Navidrome credentials- Drag and drop tracks to players or queue
+
 - Queue management for upcoming tracks
 
-🎨 **Modern Interface**
-- Responsive design for all screen sizes
-- Professional dark theme with neon accents
+3. **Start CORS proxy:**
+
+   ```bash🎨 **Modern Interface**
+
+   node cors-proxy-fixed.js- Responsive design for all screen sizes
+
+   ```- Professional dark theme with neon accents
+
 - Smooth animations and hover effects
 
-## Technology Stack
+4. **Start application:**
 
-- **Frontend**: Vanilla TypeScript + Vite
+   ```bash## Technology Stack
+
+   npm run dev
+
+   ```- **Frontend**: Vanilla TypeScript + Vite
+
 - **Styling**: Modern CSS Grid/Flexbox
-- **Audio**: Web Audio API for real-time processing
+
+5. **Access at:** http://localhost:5173 (or next available port)- **Audio**: Web Audio API for real-time processing
+
 - **Music Source**: Navidrome REST API
-- **Development**: Hot reload with Vite dev server
 
-## Development
+## Streaming Setup- **Development**: Hot reload with Vite dev server
 
-### Prerequisites
+
+
+- CORS proxy runs on port 8082## Development
+
+- Streams to: funkturm.radio-endstation.de:8015
+
+- Authentication: test:test (configured in .env)### Prerequisites
+
 - Node.js 20.19+ or 22.12+
-- Modern web browser with Web Audio API support
 
-### Getting Started
+## Tech Stack- Modern web browser with Web Audio API support
 
-1. **Install dependencies**
-   ```bash
+
+
+- **Frontend:** Vite + TypeScript + Web Audio API### Getting Started
+
+- **Music Library:** Navidrome REST API
+
+- **Streaming:** Direct HTTP POST to Liquidsoap Harbor1. **Install dependencies**
+
+- **Audio Processing:** Web Audio API with real-time mixing   ```bash
    npm install
    ```
 
