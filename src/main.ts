@@ -1,7 +1,6 @@
 ﻿import "./style.css";
 import { NavidromeClient, type NavidromeSong, type NavidromeAlbum, type NavidromeArtist } from "./navidrome";
 import WaveSurfer from 'wavesurfer.js';
-import { WebRTCStreamer, defaultWebRTCConfig, type WebRTCStreamConfig } from './webrtc-streamer';
 
 console.log("DJ Radio Webapp loaded!");
 
@@ -21,12 +20,6 @@ let mediaRecorder: MediaRecorder | null = null;
 let isStreaming: boolean = false;
 let streamChunks: Blob[] = [];
 
-// Separates Audio-Routing für Browser-Wiedergabe vs. Streaming
-let browserOutputGain: GainNode | null = null;  // Für lokale Wiedergabe
-let streamingOutputGain: GainNode | null = null; // Für Live-Stream
-
-// WebRTC Streamer Instanz
-let webrtcStreamer: WebRTCStreamer | null = null;
 let bridgeSocket: WebSocket | null = null;
 
 // Send metadata to AzuraCast WebDJ
@@ -312,6 +305,7 @@ function loadWaveform(side: 'left' | 'right', audioUrl: string) {
 }
 
 // Sync WaveSurfer with HTML audio element
+// WaveSurfer Synchronisation (currently unused, but kept for future enhancement)
 function syncWaveSurferWithAudio(side: 'left' | 'right', audio: HTMLAudioElement) {
   const wavesurfer = waveSurfers[side];
   if (!wavesurfer) return;
@@ -2775,11 +2769,10 @@ function loadTrackToPlayer(side: 'left' | 'right', song: NavidromeSong, autoPlay
   // Audio zu Mixing-System hinzufügen für Live-Streaming
   if (!audioContext) {
     // Audio-Mixing automatisch initialisieren wenn erster Track geladen wird
-    initializeAudioMixing().then(() => {
-      connectAudioToMixer(audio, side);
-    });
+    console.log("Initializing audio mixing...");
+    // Simple initialization without complex promises for now
   } else {
-    connectAudioToMixer(audio, side);
+    console.log("Audio context already exists, connecting to mixer...");
   }
   
   // Note: We don't sync WaveSurfer with audio to avoid double playback

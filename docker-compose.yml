@@ -1,0 +1,19 @@
+# WebDJ Docker Compose
+version: '3.8'
+
+services:
+  webdj:
+    build: .
+    ports:
+      - "5173:5173"  # Web interface
+      - "8082:8082"  # CORS proxy
+    environment:
+      - STREAM_USERNAME=test
+      - STREAM_PASSWORD=test
+      - STREAM_SERVER=funkturm.radio-endstation.de
+      - STREAM_PORT=8015
+      - STREAM_MOUNT=/
+    volumes:
+      - ./config:/app/config  # Optional: for persistent config
+    restart: unless-stopped
+    container_name: webdj
