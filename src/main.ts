@@ -1,5 +1,5 @@
 import "./style.css";
-import { OpenSubsonicClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist } from "./OpenSubsonic";
+import { SubsonicApiClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist } from "./navidrome";
 import WaveSurfer from 'wavesurfer.js';
 
 console.log("SubCaster loaded!");
@@ -11,12 +11,12 @@ let lastSearchQuery: string = '';
 // Audio Mixing und Streaming Infrastruktur
 let audioContext: AudioContext | null = null;
 let masterGainNode: GainNode | null = null;
-let streamGainNode: GainNode | null = null; // Separate Ausgabe für Stream
+let streamGainNode: GainNode | null = null; // Separate Ausgabe fï¿½r Stream
 let leftPlayerGain: GainNode | null = null;
 let rightPlayerGain: GainNode | null = null;
 let microphoneGain: GainNode | null = null;
 let crossfaderGain: { left: GainNode; right: GainNode } | null = null;
-let streamCrossfaderGain: { left: GainNode; right: GainNode } | null = null; // Separate Crossfader für Stream
+let streamCrossfaderGain: { left: GainNode; right: GainNode } | null = null; // Separate Crossfader fï¿½r Stream
 let microphoneStream: MediaStream | null = null;
 let mediaRecorder: MediaRecorder | null = null;
 let isStreaming: boolean = false;
@@ -191,12 +191,12 @@ function debugPlayerStates() {
 interface StreamConfig {
   serverUrl: string;
   serverType: 'icecast' | 'shoutcast';
-  mountPoint: string; // nur für Icecast und Shoutcast v2
+  mountPoint: string; // nur fï¿½r Icecast und Shoutcast v2
   password: string;
   bitrate: number;
   format: 'mp3' | 'aac';
   sampleRate: number;
-  username?: string; // für manche Server
+  username?: string; // fï¿½r manche Server
 }
 
 let streamConfig: StreamConfig = {
@@ -204,13 +204,13 @@ let streamConfig: StreamConfig = {
   serverType: (import.meta.env.VITE_STREAM_SERVER_TYPE as 'icecast' | 'shoutcast') || 'icecast',
   mountPoint: import.meta.env.VITE_STREAM_MOUNT_POINT || '/live',
   password: import.meta.env.VITE_STREAM_PASSWORD,
-  bitrate: parseInt(import.meta.env.VITE_STREAM_BITRATE) || 192, // Erhöht auf 192 kbps für bessere Qualität
+  bitrate: parseInt(import.meta.env.VITE_STREAM_BITRATE) || 192, // Erhï¿½ht auf 192 kbps fï¿½r bessere Qualitï¿½t
   format: 'mp3',
-  sampleRate: 48000, // Erhöht auf 48kHz für professionelle Audio-Qualität
+  sampleRate: 48000, // Erhï¿½ht auf 48kHz fï¿½r professionelle Audio-Qualitï¿½t
   username: import.meta.env.VITE_STREAM_USERNAME
 };
 
-// Hilfsfunktion für Stream-Server-URL mit Proxy-Unterstützung
+// Hilfsfunktion fï¿½r Stream-Server-URL mit Proxy-Unterstï¿½tzung
 function getStreamServerUrl(): string {
   const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
   
@@ -229,17 +229,17 @@ async function initializeAudioMixing() {
   try {
     // AudioContext mit dynamischer Sample Rate (Browser-Standard)
     const audioContextOptions: AudioContextOptions = {
-      latencyHint: 'playback' // Optimiert für Playback statt Interaktion
-      // sampleRate bewusst weggelassen ? Browser wählt optimale Sample Rate
+      latencyHint: 'playback' // Optimiert fï¿½r Playback statt Interaktion
+      // sampleRate bewusst weggelassen ? Browser wï¿½hlt optimale Sample Rate
     };
     
     audioContext = new (window.AudioContext || (window as any).webkitAudioContext)(audioContextOptions);
     
-    // Log der tatsächlich verwendeten Sample Rate
+    // Log der tatsï¿½chlich verwendeten Sample Rate
     console.log(`?? AudioContext created with dynamic sample rate: ${audioContext.sampleRate} Hz`);
     console.log(`?? AudioContext state: ${audioContext.state}`);
     
-    // Sample Rate Kompatibilität prüfen
+    // Sample Rate Kompatibilitï¿½t prï¿½fen
     const supportedRates = [8000, 16000, 22050, 44100, 48000, 96000, 192000];
     const currentRate = audioContext.sampleRate;
     const isStandardRate = supportedRates.includes(currentRate);
@@ -249,7 +249,7 @@ async function initializeAudioMixing() {
     console.log(`   - Is Standard: ${isStandardRate ? '?' : '??'}`);
     console.log(`   - Browser optimized for: ${currentRate >= 48000 ? 'High Quality' : 'Standard Quality'}`);
     
-    // BROWSER AUDIO KOMPATIBILITÄT: AudioContext sofort suspendieren
+    // BROWSER AUDIO KOMPATIBILITï¿½T: AudioContext sofort suspendieren
     // Wird nur bei Broadcast aktiviert, sodass andere Tabs normal funktionieren
     if (audioContext.state === 'running') {
       await audioContext.suspend();
@@ -257,40 +257,40 @@ async function initializeAudioMixing() {
       console.log('?? Will only activate during broadcasting to avoid interference');
     }
     
-    // Audio Context Policy: Andere Audio-Quellen nicht beeinträchtigen
+    // Audio Context Policy: Andere Audio-Quellen nicht beeintrï¿½chtigen
     if ('audioWorklet' in audioContext) {
       console.log('?? Audio Context supports advanced features - using isolated mode');
     }
     
-    // Master Gain Node für Monitor-Ausgabe (Kopfhörer/Lautsprecher)
+    // Master Gain Node fï¿½r Monitor-Ausgabe (Kopfhï¿½rer/Lautsprecher)
     masterGainNode = audioContext.createGain();
     masterGainNode.gain.value = 0.99; // 99% Master-Volume
     masterGainNode.connect(audioContext.destination);
     
-    // Stream Gain Node für Live-Stream (separate Ausgabe)
+    // Stream Gain Node fï¿½r Live-Stream (separate Ausgabe)
     streamGainNode = audioContext.createGain();
     streamGainNode.gain.value = 0.99; // 99% Stream-Volume
     
-    // Separate Gain Nodes für jeden Player
+    // Separate Gain Nodes fï¿½r jeden Player
     leftPlayerGain = audioContext.createGain();
     leftPlayerGain.gain.value = 1.0; // 100% Initial volume
     rightPlayerGain = audioContext.createGain();
     rightPlayerGain.gain.value = 1.0; // 100% Initial volume
     
-    // Crossfader Gain Nodes für Monitor-Ausgabe
+    // Crossfader Gain Nodes fï¿½r Monitor-Ausgabe
     crossfaderGain = {
       left: audioContext.createGain(),
       right: audioContext.createGain()
     };
     
-    // Crossfader Gain Nodes für Stream-Ausgabe (separate Kontrolle)
+    // Crossfader Gain Nodes fï¿½r Stream-Ausgabe (separate Kontrolle)
     streamCrossfaderGain = {
       left: audioContext.createGain(),
       right: audioContext.createGain()
     };
     
-    // Initial Crossfader in der Mitte (beide Kanäle gleichlaut)
-    const initialGain = Math.cos(0.5 * Math.PI / 2); // ~0.707 für 50% Position
+    // Initial Crossfader in der Mitte (beide Kanï¿½le gleichlaut)
+    const initialGain = Math.cos(0.5 * Math.PI / 2); // ~0.707 fï¿½r 50% Position
     crossfaderGain.left.gain.value = initialGain;
     crossfaderGain.right.gain.value = initialGain;
     streamCrossfaderGain.left.gain.value = initialGain;
@@ -298,7 +298,7 @@ async function initializeAudioMixing() {
     
     // Mikrofon Gain Node
     microphoneGain = audioContext.createGain();
-    microphoneGain.gain.value = 0; // Standardmäßig stumm (wird über Button aktiviert)
+    microphoneGain.gain.value = 0; // Standardmï¿½ï¿½ig stumm (wird ï¿½ber Button aktiviert)
     
     // Monitor-Routing: Crossfader Gains mit Master verbinden
     crossfaderGain.left.connect(masterGainNode);
@@ -314,7 +314,7 @@ async function initializeAudioMixing() {
     rightPlayerGain.connect(crossfaderGain.right);
     rightPlayerGain.connect(streamCrossfaderGain.right);
     
-    // Mikrofon zu beiden Ausgängen verbinden
+    // Mikrofon zu beiden Ausgï¿½ngen verbinden
     microphoneGain.connect(masterGainNode);
     microphoneGain.connect(streamGainNode);
     
@@ -326,7 +326,7 @@ async function initializeAudioMixing() {
       startVolumeMeter('left');
       startVolumeMeter('right');
       startVolumeMeter('mic');
-    }, 500); // Kurze Verzögerung für Audio-Kontext Stabilität
+    }, 500); // Kurze Verzï¿½gerung fï¿½r Audio-Kontext Stabilitï¿½t
     
     return true;
   } catch (error) {
@@ -335,7 +335,7 @@ async function initializeAudioMixing() {
   }
 }
 
-// Audio-Quellen zu Mixing-System hinzufügen
+// Audio-Quellen zu Mixing-System hinzufï¿½gen
 function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'right') {
   if (!audioContext) {
     console.error(`? AudioContext not initialized for ${side} player`);
@@ -353,17 +353,17 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'rig
       }
     }
     
-    // WICHTIG: Audio Element Eigenschaften für bessere Browser-Kompatibilität setzen
+    // WICHTIG: Audio Element Eigenschaften fï¿½r bessere Browser-Kompatibilitï¿½t setzen
     audioElement.crossOrigin = 'anonymous';
     audioElement.preservesPitch = false; // Weniger CPU-intensiv
     
     // MediaElementAudioSourceNode erstellen (mit Browser-Audio-Koexistenz)
     const sourceNode = audioContext.createMediaElementSource(audioElement);
-    (audioElement as any)._audioSourceNode = sourceNode; // Speichere Referenz für späteres Cleanup
+    (audioElement as any)._audioSourceNode = sourceNode; // Speichere Referenz fï¿½r spï¿½teres Cleanup
     
-    // BROWSER AUDIO KOMPATIBILITÄT: Duplex Output für normale Browser-Audio
+    // BROWSER AUDIO KOMPATIBILITï¿½T: Duplex Output fï¿½r normale Browser-Audio
     try {
-      // Versuche normale Audio-Pipeline beizubehalten (falls Browser es unterstützt)
+      // Versuche normale Audio-Pipeline beizubehalten (falls Browser es unterstï¿½tzt)
       if ('setSinkId' in audioElement) {
         console.log(`?? ${side} player: Browser supports setSinkId - maintaining dual audio pipeline`);
       }
@@ -386,7 +386,7 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'rig
     }
     
     // WICHTIG: Nach createMediaElementSource wird das Audio-Element stumm!
-    // Es muss über die Web Audio API Pipeline laufen
+    // Es muss ï¿½ber die Web Audio API Pipeline laufen
     console.log(`??  ${side} audio now routed through Web Audio API ? Stream`);
     
     // Debugging: Aktueller Audio-Flow anzeigen
@@ -508,7 +508,7 @@ function updateAlbumCover(side: 'left' | 'right', song: OpenSubsonicSong) {
     element: albumCoverElement,
     song: song.title,
     coverArt: song.coverArt,
-    OpenSubsonicClient: !!OpenSubsonicClient
+    openSubsonicClient: !!openSubsonicClient
   });
   
   if (!albumCoverElement) {
@@ -516,7 +516,7 @@ function updateAlbumCover(side: 'left' | 'right', song: OpenSubsonicSong) {
     return;
   }
   
-  if (!OpenSubsonicClient) {
+  if (!openSubsonicClient) {
     console.warn(`? OpenSubsonic client not available`);
     albumCoverElement.innerHTML = `
       <div class="no-cover">
@@ -527,7 +527,7 @@ function updateAlbumCover(side: 'left' | 'right', song: OpenSubsonicSong) {
   }
   
   if (song.coverArt) {
-    const coverUrl = OpenSubsonicClient.getCoverArtUrl(song.coverArt, 90);
+    const coverUrl = openSubsonicClient.getCoverArtUrl(song.coverArt, 90);
     console.log(`??? Setting cover URL: ${coverUrl}`);
     
     const img = document.createElement('img');
@@ -728,15 +728,15 @@ function cleanupWaveSurferSync(side: 'left' | 'right') {
   }
 }
 
-// OpenSubsonic Client (wird später mit echten Credentials initialisiert)
-let OpenSubsonicClient: OpenSubsonicClient;
+// OpenSubsonic Client (wird spï¿½ter mit echten Credentials initialisiert)
+let openSubsonicClient: SubsonicApiClient;
 
 // Globale Variablen
 let currentSongs: OpenSubsonicSong[] = [];
 let currentAlbums: OpenSubsonicAlbum[] = [];
 let currentArtists: OpenSubsonicArtist[] = [];
 let queue: OpenSubsonicSong[] = [];
-let autoQueueEnabled = true; // Auto-Queue standardmäßig aktiviert
+let autoQueueEnabled = true; // Auto-Queue standardmï¿½ï¿½ig aktiviert
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("DOM fully loaded and parsed");
@@ -750,7 +750,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Stream-Konfiguration Panel initialisieren
   initializeStreamConfigPanel();
   
-  // Mikrofon Toggle Funktionalität
+  // Initialize Media Library (nur Event Listeners, keine Daten)
+  initializeMediaLibrary();
+  
+  // Mikrofon Toggle Funktionalitï¿½t
   const micBtn = document.getElementById("mic-toggle") as HTMLButtonElement;
   const micVolumeSlider = document.getElementById("mic-volume") as HTMLInputElement;
   let micActive = false;
@@ -769,7 +772,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     micActive = !micActive;
     
     if (micActive) {
-      // Mikrofon einschalten und Audio-Mixing initialisieren falls nötig
+      // Mikrofon einschalten und Audio-Mixing initialisieren falls nï¿½tig
       if (!audioContext) {
         await initializeAudioMixing();
       }
@@ -796,11 +799,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   
 // Audio-Mixing-System initialisieren
-// Audio-Quellen zu Mixing-System hinzufügen
+// Audio-Quellen zu Mixing-System hinzufï¿½gen
 
 // CORS-Fehlermeldung anzeigen
 function showCORSErrorMessage() {
-  // Prüfen ob bereits eine Fehlermeldung angezeigt wird
+  // Prï¿½fen ob bereits eine Fehlermeldung angezeigt wird
   if (document.getElementById('cors-error-message')) return;
   
   const errorDiv = document.createElement('div');
@@ -828,10 +831,10 @@ function showCORSErrorMessage() {
     </div>
     <p style="margin: 8px 0;">Browser-Security (CORS) verhindert direkte Verbindungen zu Shoutcast-Servern.</p>
     <div style="margin-top: 12px; font-size: 12px; opacity: 0.9;">
-      <strong>Lösungen:</strong><br>
-      • Proxy-Server verwenden<br>
-      • Browser mit --disable-web-security starten<br>
-      • Server CORS-Header konfigurieren
+      <strong>Lï¿½sungen:</strong><br>
+      ï¿½ Proxy-Server verwenden<br>
+      ï¿½ Browser mit --disable-web-security starten<br>
+      ï¿½ Server CORS-Header konfigurieren
     </div>
     <button onclick="this.parentElement.remove()" style="
       position: absolute;
@@ -856,33 +859,33 @@ function showCORSErrorMessage() {
   }, 10000);
 }
 
-// Mikrofon zum Mixing-System hinzufügen
+// Mikrofon zum Mixing-System hinzufï¿½gen
 async function setupMicrophone() {
   if (!audioContext || !microphoneGain) return false;
   
   try {
-    // DYNAMISCHE SAMPLE RATE: Verwende AudioContext Sample Rate für Kompatibilität
+    // DYNAMISCHE SAMPLE RATE: Verwende AudioContext Sample Rate fï¿½r Kompatibilitï¿½t
     const contextSampleRate = audioContext.sampleRate;
     console.log(`?? Setting up microphone with dynamic sample rate: ${contextSampleRate} Hz`);
     
-    // Mikrofon-Konfiguration für DJ-Anwendung (ALLE Audio-Effekte deaktiviert für beste Verständlichkeit)
+    // Mikrofon-Konfiguration fï¿½r DJ-Anwendung (ALLE Audio-Effekte deaktiviert fï¿½r beste Verstï¿½ndlichkeit)
     microphoneStream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
-        // Basis-Audio-Einstellungen - ALLE Effekte AUS für natürliche Stimme
+        // Basis-Audio-Einstellungen - ALLE Effekte AUS fï¿½r natï¿½rliche Stimme
         echoCancellation: false,          // Echo-Cancel AUS - verschlechtert oft DJ-Mikrofone
         noiseSuppression: false,          // Noise-Suppress AUS - kann Stimme verzerren
-        autoGainControl: false,           // AGC aus für manuelle Lautstärke-Kontrolle
+        autoGainControl: false,           // AGC aus fï¿½r manuelle Lautstï¿½rke-Kontrolle
         
         // DYNAMISCHE Sample Rate - passt sich an AudioContext an
         sampleRate: { 
           ideal: contextSampleRate,       // Verwende AudioContext Sample Rate
-          min: 8000,                      // Minimum für Fallback
-          max: 192000                     // Maximum für High-End Mikrofone
+          min: 8000,                      // Minimum fï¿½r Fallback
+          max: 192000                     // Maximum fï¿½r High-End Mikrofone
         },
         sampleSize: { ideal: 16 },        // 16-bit Audio
-        channelCount: { ideal: 1 },       // Mono für geringere Bandbreite
+        channelCount: { ideal: 1 },       // Mono fï¿½r geringere Bandbreite
         
-        // Browser-spezifische Verbesserungen - ALLE AUS für natürliche Stimme
+        // Browser-spezifische Verbesserungen - ALLE AUS fï¿½r natï¿½rliche Stimme
         // @ts-ignore - Browser-spezifische Eigenschaften
         googEchoCancellation: false,      // Google Echo-Cancel AUS
         // @ts-ignore
@@ -900,7 +903,7 @@ async function setupMicrophone() {
     
     // Mikrofon-Track Sample Rate Analyse
     microphoneStream.getAudioTracks().forEach((track, index) => {
-      track.enabled = true; // Track ist aktiv für Aufnahme
+      track.enabled = true; // Track ist aktiv fï¿½r Aufnahme
       
       const settings = track.getSettings();
       console.log(`?? Microphone Track ${index + 1} Settings:`);
@@ -911,7 +914,7 @@ async function setupMicrophone() {
       console.log(`   - Noise Suppression: ${settings.noiseSuppression ? '?' : '?'}`);
       console.log(`   - Auto Gain Control: ${settings.autoGainControl ? '?' : '?'}`);
       
-      // Sample Rate Kompatibilität prüfen
+      // Sample Rate Kompatibilitï¿½t prï¿½fen
       if (settings.sampleRate && settings.sampleRate !== contextSampleRate) {
         console.warn(`??  Sample Rate Mismatch: Microphone=${settings.sampleRate}Hz, AudioContext=${contextSampleRate}Hz`);
         console.log(`?? Browser will automatically resample: ${settings.sampleRate}Hz ? ${contextSampleRate}Hz`);
@@ -919,12 +922,12 @@ async function setupMicrophone() {
         console.log(`? Perfect Sample Rate Match: ${contextSampleRate}Hz`);
       }
       
-      // Erweiterte Track-Einstellungen - ALLE Audio-Effekte deaktiviert für natürliche Stimme
+      // Erweiterte Track-Einstellungen - ALLE Audio-Effekte deaktiviert fï¿½r natï¿½rliche Stimme
       if (track.applyConstraints) {
         track.applyConstraints({
-          echoCancellation: false,      // Echo-Cancel AUS für DJ-Mikrofon
-          noiseSuppression: false,      // Noise-Suppress AUS für natürliche Stimme
-          autoGainControl: false,       // AGC AUS für manuelle Kontrolle
+          echoCancellation: false,      // Echo-Cancel AUS fï¿½r DJ-Mikrofon
+          noiseSuppression: false,      // Noise-Suppress AUS fï¿½r natï¿½rliche Stimme
+          autoGainControl: false,       // AGC AUS fï¿½r manuelle Kontrolle
           sampleRate: contextSampleRate // Dynamische Sample Rate
         }).catch(e => console.warn('Could not apply advanced mic constraints:', e));
       }
@@ -933,7 +936,7 @@ async function setupMicrophone() {
     // MediaStreamAudioSourceNode erstellen
     const micSourceNode = audioContext.createMediaStreamSource(microphoneStream);
     
-    // Optional: Kompressor für bessere Mikrofon-Qualität hinzufügen
+    // Optional: Kompressor fï¿½r bessere Mikrofon-Qualitï¿½t hinzufï¿½gen
     const compressor = audioContext.createDynamicsCompressor();
     compressor.threshold.setValueAtTime(-24, audioContext.currentTime);
     compressor.knee.setValueAtTime(30, audioContext.currentTime);
@@ -957,7 +960,7 @@ async function setupMicrophone() {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: false
-          // Keine Sample Rate Constraints ? Browser wählt automatisch
+          // Keine Sample Rate Constraints ? Browser wï¿½hlt automatisch
         } 
       });
       
@@ -985,11 +988,11 @@ function setCrossfaderPosition(position: number) {
   // Rechts: minimum bei 0, maximum bei 1
   const rightGain = Math.sin(position * Math.PI / 2);
   
-  // Monitor-Crossfader (für Speaker/Kopfhörer)
+  // Monitor-Crossfader (fï¿½r Speaker/Kopfhï¿½rer)
   crossfaderGain.left.gain.value = leftGain;
   crossfaderGain.right.gain.value = rightGain;
   
-  // Stream-Crossfader (für Live-Stream) - gleiche Werte
+  // Stream-Crossfader (fï¿½r Live-Stream) - gleiche Werte
   streamCrossfaderGain.left.gain.value = leftGain;
   streamCrossfaderGain.right.gain.value = rightGain;
   
@@ -1004,7 +1007,7 @@ function setMicrophoneEnabled(enabled: boolean, volume: number = 1) {
   console.log(`?? Microphone ${enabled ? 'enabled' : 'disabled'} with volume ${Math.round(volume * 100)}%`);
 }
 
-// MediaRecorder für Streaming einrichten
+// MediaRecorder fï¿½r Streaming einrichten
 async function initializeStreamRecorder() {
   if (!audioContext || !streamGainNode) {
     console.error('Audio context or stream gain node not initialized');
@@ -1012,7 +1015,7 @@ async function initializeStreamRecorder() {
   }
   
   try {
-    // MediaStreamDestination erstellen für Stream-Aufnahme
+    // MediaStreamDestination erstellen fï¿½r Stream-Aufnahme
     const destination = audioContext.createMediaStreamDestination();
     streamGainNode.connect(destination); // Verwende streamGainNode statt masterGainNode
     
@@ -1020,14 +1023,14 @@ async function initializeStreamRecorder() {
     let options: MediaRecorderOptions;
     
     if (streamConfig.format === 'mp3') {
-      // MP3 wird nicht direkt von MediaRecorder unterstützt
+      // MP3 wird nicht direkt von MediaRecorder unterstï¿½tzt
       // Fallback auf AAC in MP4 Container oder WebM/Opus
       options = {
-        mimeType: 'audio/mp4',  // AAC in MP4 - näher an MP3
+        mimeType: 'audio/mp4',  // AAC in MP4 - nï¿½her an MP3
         audioBitsPerSecond: streamConfig.bitrate * 1000
       };
       
-      // Fallback falls MP4 nicht unterstützt wird
+      // Fallback falls MP4 nicht unterstï¿½tzt wird
       if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
         options = {
           mimeType: 'audio/webm;codecs=opus',
@@ -1044,7 +1047,7 @@ async function initializeStreamRecorder() {
     
     mediaRecorder = new MediaRecorder(destination.stream, options);
     
-    // Event Handlers für MediaRecorder
+    // Event Handlers fï¿½r MediaRecorder
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         streamChunks.push(event.data);
@@ -1089,7 +1092,7 @@ function connectToStreamingServer() {
       // Verwende die bereits konfigurierte Stream-URL (mit Proxy-Logik)
       let streamUrl = streamConfig.serverUrl;
       
-      // Für Icecast Mount Point anhängen, außer bei Proxy (bereits enthalten)
+      // Fï¿½r Icecast Mount Point anhï¿½ngen, auï¿½er bei Proxy (bereits enthalten)
       const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
       if (!useProxy && streamConfig.serverType === 'icecast' && streamConfig.mountPoint) {
         streamUrl += streamConfig.mountPoint;
@@ -1098,10 +1101,10 @@ function connectToStreamingServer() {
       console.log(`Connecting to ${streamConfig.serverType} server: ${streamUrl}`);
       console.log(`Using proxy: ${useProxy}`);
       
-      // HTTP PUT Request für Streaming
+      // HTTP PUT Request fï¿½r Streaming
       streamConnection.open('PUT', streamUrl, true);
       
-      // Headers für Icecast/Shoutcast
+      // Headers fï¿½r Icecast/Shoutcast
       if (streamConfig.serverType === 'icecast') {
         // Icecast Headers
         streamConnection.setRequestHeader('Authorization', 
@@ -1145,7 +1148,7 @@ function connectToStreamingServer() {
         resolve(false);
       };
       
-      // Verbindung initialisieren (leerer Body für Initial-Request)
+      // Verbindung initialisieren (leerer Body fï¿½r Initial-Request)
       try {
         streamConnection.send();
       } catch (e) {
@@ -1167,7 +1170,7 @@ function sendAudioChunkToServer(audioChunk: Blob) {
     return;
   }
   
-  // Neuer Request für jeden Chunk (Shoutcast/Icecast Protokoll)
+  // Neuer Request fï¿½r jeden Chunk (Shoutcast/Icecast Protokoll)
   const chunkRequest = new XMLHttpRequest();
   const streamUrl = streamConfig.serverType === 'shoutcast' && !streamConfig.mountPoint 
     ? streamConfig.serverUrl 
@@ -1215,23 +1218,23 @@ async function startDirectStream(): Promise<boolean> {
       }
     }
     
-    // 2. MediaStreamDestination für direktes Streaming
+    // 2. MediaStreamDestination fï¿½r direktes Streaming
     if (!audioContext || !streamGainNode) {
       throw new Error('Audio context or stream gain node not ready');
     }
     
     const destination = audioContext.createMediaStreamDestination();
-    streamGainNode.connect(destination); // Verwende streamGainNode für Stream-Output
+    streamGainNode.connect(destination); // Verwende streamGainNode fï¿½r Stream-Output
     
-    // 3. MediaRecorder für ICY-kompatible Daten mit optimierten Einstellungen
+    // 3. MediaRecorder fï¿½r ICY-kompatible Daten mit optimierten Einstellungen
     const recorder = new MediaRecorder(destination.stream, {
       mimeType: 'audio/webm;codecs=opus',
       audioBitsPerSecond: streamConfig.bitrate * 1000,
-      // Opus-spezifische Optimierungen für bessere Qualität
+      // Opus-spezifische Optimierungen fï¿½r bessere Qualitï¿½t
       bitsPerSecond: streamConfig.bitrate * 1000
     });
     
-    // 4. Direkte HTTP-POST Verbindung zu Harbor (über unified server API)
+    // 4. Direkte HTTP-POST Verbindung zu Harbor (ï¿½ber unified server API)
     const harborUrl = `/api/stream`;
     
     // Verwende Credentials (Unified oder Individual aus .env)
@@ -1346,7 +1349,7 @@ async function stopLiveStream() {
       mediaRecorder.stop();
     }
     
-    // Stream-Verbindung schließen (für HTTP-Mode)
+    // Stream-Verbindung schlieï¿½en (fï¿½r HTTP-Mode)
     if (streamConnection) {
       streamConnection.abort();
       streamConnection = null;
@@ -1367,7 +1370,7 @@ async function stopLiveStream() {
   }
 }
 
-  // Live Status Indicator / Broadcast Button Funktionalität
+  // Live Status Indicator / Broadcast Button Funktionalitï¿½t
   const liveIndicator = document.getElementById("live-status") as HTMLButtonElement;
   let broadcastActive = false;
   
@@ -1375,7 +1378,7 @@ async function stopLiveStream() {
     broadcastActive = !broadcastActive;
     
     if (broadcastActive) {
-      // BROWSER AUDIO KOMPATIBILITÄT: AudioContext nur für Streaming aktivieren
+      // BROWSER AUDIO KOMPATIBILITï¿½T: AudioContext nur fï¿½r Streaming aktivieren
       if (audioContext && audioContext.state === 'suspended') {
         console.log('?? Resuming AudioContext for broadcasting (other tabs should remain unaffected)');
         try {
@@ -1396,7 +1399,7 @@ async function stopLiveStream() {
         // Streaming-Status anzeigen
         showStreamingStatus(true);
       } else {
-        // Fehler beim Starten - Status zurücksetzen
+        // Fehler beim Starten - Status zurï¿½cksetzen
         broadcastActive = false;
         liveIndicator.classList.remove("active");
         console.error("Failed to start live broadcast");
@@ -1404,7 +1407,7 @@ async function stopLiveStream() {
         // CORS-spezifische Fehlermeldung anzeigen
         showCORSErrorMessage();
         
-        // Nach 5 Sekunden zurück zu normalem State
+        // Nach 5 Sekunden zurï¿½ck zu normalem State
         setTimeout(() => {
           liveIndicator.classList.remove("active");
           liveIndicator.title = "Start Live Broadcast";
@@ -1414,7 +1417,7 @@ async function stopLiveStream() {
       // Live-Streaming stoppen
       await stopLiveStream();
       
-      // BROWSER AUDIO KOMPATIBILITÄT: AudioContext suspendieren um andere Tabs nicht zu beeinträchtigen
+      // BROWSER AUDIO KOMPATIBILITï¿½T: AudioContext suspendieren um andere Tabs nicht zu beeintrï¿½chtigen
       if (audioContext && audioContext.state === 'running') {
         console.log('?? Suspending AudioContext to restore normal browser audio for other tabs');
         try {
@@ -1465,7 +1468,7 @@ function showStreamingStatus(isLive: boolean) {
     statusElement.innerHTML = '<span class="material-icons">fiber_manual_record</span> LIVE ON AIR';
     statusElement.style.opacity = '1';
     
-    // Pulsing-Animation für Live-Indikator
+    // Pulsing-Animation fï¿½r Live-Indikator
     statusElement.style.animation = 'pulse 2s ease-in-out infinite';
   } else {
     statusElement.style.opacity = '0';
@@ -1480,7 +1483,7 @@ function showStreamingStatus(isLive: boolean) {
   }
 }
 
-// Stream-Konfiguration Panel Funktionalität
+// Stream-Konfiguration Panel Funktionalitï¿½t
 function initializeStreamConfigPanel() {
   const configBtn = document.getElementById('stream-config-btn');
   const configPanel = document.getElementById('stream-config-panel');
@@ -1490,7 +1493,7 @@ function initializeStreamConfigPanel() {
   // Konfiguration laden
   loadStreamConfig();
   
-  // Prüfen ob überhaupt konfigurierbare Felder vorhanden sind
+  // Prï¿½fen ob ï¿½berhaupt konfigurierbare Felder vorhanden sind
   const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
   const hasUnifiedCredentials = import.meta.env.VITE_UNIFIED_USERNAME && import.meta.env.VITE_UNIFIED_PASSWORD;
   const hasIndividualCredentials = import.meta.env.VITE_STREAM_USERNAME && import.meta.env.VITE_STREAM_PASSWORD;
@@ -1521,22 +1524,22 @@ function initializeStreamConfigPanel() {
     }
   });
   
-  // Panel schließen
+  // Panel schlieï¿½en
   cancelBtn?.addEventListener('click', () => {
-    loadStreamConfig(); // Änderungen verwerfen
+    loadStreamConfig(); // ï¿½nderungen verwerfen
     if (configPanel) {
       configPanel.style.display = 'none';
     }
   });
   
-  // Server-Type Änderung verwalten
+  // Server-Type ï¿½nderung verwalten
   const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
   typeSelect?.addEventListener('change', updateMountPointVisibility);
   
   // Initial Mount Point Sichtbarkeit setzen
   updateMountPointVisibility();
   
-  // Panel schließen bei Klick außerhalb
+  // Panel schlieï¿½en bei Klick auï¿½erhalb
   document.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
     if (configPanel && 
@@ -1619,7 +1622,7 @@ function loadStreamConfig() {
     if (mountGroup) mountGroup.style.display = 'none';
   }
   
-  // Felder verstecken wenn bereits gefüllt
+  // Felder verstecken wenn bereits gefï¿½llt
   if (finalUsername) {
     const usernameGroup = document.querySelector('.config-group:has(#stream-username)') as HTMLElement;
     if (usernameGroup) usernameGroup.style.display = 'none';
@@ -1697,7 +1700,7 @@ function saveStreamConfig() {
     sampleRate: streamConfig.sampleRate // Beibehalten
   };
   
-  // Validierung der ursprünglichen Server-URL (nicht Proxy)
+  // Validierung der ursprï¿½nglichen Server-URL (nicht Proxy)
   const originalUrl = urlInput?.value || streamConfig.serverUrl;
   if (!originalUrl || !newConfig.password) {
     alert('Please fill in server URL and password');
@@ -1717,7 +1720,7 @@ function saveStreamConfig() {
     localStorage.setItem('streamConfig', JSON.stringify(streamConfig));
     console.log('Stream configuration saved:', streamConfig);
     
-    // Kurze Bestätigung anzeigen
+    // Kurze Bestï¿½tigung anzeigen
     const saveBtn = document.getElementById('save-stream-config');
     if (saveBtn) {
       const originalText = saveBtn.textContent;
@@ -1746,7 +1749,7 @@ function updateMountPointVisibility() {
   }
 }
 
-  // Auto-Queue Toggle Funktionalität für alle Buttons
+  // Auto-Queue Toggle Funktionalitï¿½t fï¿½r alle Buttons
   const autoQueueButtons = document.querySelectorAll(".auto-queue-btn") as NodeListOf<HTMLButtonElement>;
   
   autoQueueButtons.forEach(autoQueueBtn => {
@@ -1771,7 +1774,7 @@ function updateMountPointVisibility() {
   // Tab Navigation
   initializeTabs();
   
-  // Search Funktionalität
+  // Search Funktionalitï¿½t
   initializeSearch();
   
   // Queue Drag & Drop (permanent initialisieren)
@@ -1797,6 +1800,14 @@ async function initializeMusicLibrary() {
     
     // Lade Artists
     await loadArtists();
+    
+    // Load browse content for new media library
+    await loadBrowseContent();
+    console.log("âœ… Media library browse content loaded");
+    
+    // Aktiviere Suchleiste wieder
+    enableSearchAfterLogin();
+    console.log("âœ… Search enabled after login");
     
   } catch (error) {
     console.error("Error loading music library:", error);
@@ -1856,13 +1867,13 @@ function initializeTabs() {
   });
 }
 
-// Search Funktionalität initialisieren
+// Search Funktionalitï¿½t initialisieren
 function initializeSearch() {
   const searchInput = document.getElementById('search-input') as HTMLInputElement;
   const searchBtn = document.getElementById('search-btn') as HTMLButtonElement;
   
   const performSearch = async () => {
-    if (!OpenSubsonicClient) {
+    if (!openSubsonicClient) {
       showError('Not connected to OpenSubsonic');
       return;
     }
@@ -1879,7 +1890,7 @@ function initializeSearch() {
     
     try {
       showSearchLoading();
-      const results = await OpenSubsonicClient.search(query);
+      const results = await openSubsonicClient.search(query);
       displaySearchResults(results);
     } catch (error) {
       console.error('Search error:', error);
@@ -1894,7 +1905,7 @@ function initializeSearch() {
     }
   });
   
-  // Bei Eingabe-Änderungen auch prüfen
+  // Bei Eingabe-ï¿½nderungen auch prï¿½fen
   searchInput?.addEventListener('input', () => {
     // Wenn Feld geleert wird, zeige No Search State
     if (!searchInput.value.trim()) {
@@ -1905,14 +1916,14 @@ function initializeSearch() {
 
 // Songs laden
 async function loadSongs() {
-  if (!OpenSubsonicClient) return;
+  if (!openSubsonicClient) return;
   
   console.log('Loading songs...');
   const songsContainer = document.getElementById('songs-list');
   if (!songsContainer) return;
   
   try {
-    currentSongs = await OpenSubsonicClient.getSongs(100);
+    currentSongs = await openSubsonicClient.getSongs(100);
     console.log(`Loaded ${currentSongs.length} songs`);
     
     // Erstelle Songs-Tabelle mit Header
@@ -1937,19 +1948,19 @@ async function loadSongs() {
 
 // Albums laden
 async function loadAlbums() {
-  if (!OpenSubsonicClient) return;
+  if (!openSubsonicClient) return;
   
   console.log('Loading albums...');
   const albumsContainer = document.getElementById('albums-grid');
   if (!albumsContainer) return;
   
   try {
-    currentAlbums = await OpenSubsonicClient.getAlbums(50);
+    currentAlbums = await openSubsonicClient.getAlbums(50);
     console.log(`Loaded ${currentAlbums.length} albums`);
     
     albumsContainer.innerHTML = currentAlbums.map(album => createAlbumHTML(album)).join('');
     
-    // Hinzufügen der Click Listener für Albums
+    // Hinzufï¿½gen der Click Listener fï¿½r Albums
     setTimeout(() => {
       addAlbumClickListeners(albumsContainer);
       console.log('Album click listeners added to albums grid');
@@ -1962,19 +1973,19 @@ async function loadAlbums() {
 
 // Artists laden
 async function loadArtists() {
-  if (!OpenSubsonicClient) return;
+  if (!openSubsonicClient) return;
   
   console.log('Loading artists...');
   const artistsContainer = document.getElementById('artists-list');
   if (!artistsContainer) return;
   
   try {
-    currentArtists = await OpenSubsonicClient.getArtists();
+    currentArtists = await openSubsonicClient.getArtists();
     console.log(`Loaded ${currentArtists.length} artists`);
     
     artistsContainer.innerHTML = currentArtists.map(artist => createArtistHTML(artist)).join('');
     
-    // Hinzufügen der Click Listener für Artists
+    // Hinzufï¿½gen der Click Listener fï¿½r Artists
     setTimeout(() => {
       addArtistClickListeners(artistsContainer);
       console.log('Artist click listeners added to artists list');
@@ -1986,11 +1997,11 @@ async function loadArtists() {
 }
 
 // Song HTML erstellen
-// Song HTML als Einzeiler für einheitliche Darstellung erstellen
+// Song HTML als Einzeiler fï¿½r einheitliche Darstellung erstellen
 
 // Hilfsfunktion zum Erstellen von Artist-Links aus dem artists Array
 function createArtistLinks(song: OpenSubsonicSong): string {
-  // Verwende artists Array falls verfügbar, sonst Fallback auf artist string
+  // Verwende artists Array falls verfï¿½gbar, sonst Fallback auf artist string
   if (song.artists && song.artists.length > 0) {
     if (song.artists.length === 1) {
       const artist = song.artists[0];
@@ -1999,18 +2010,18 @@ function createArtistLinks(song: OpenSubsonicSong): string {
       // Multiple Artists - jeder einzeln klickbar
       const artistLinks = song.artists.map(artist => 
         `<span class="clickable-artist" draggable="false" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}" title="View artist details">${escapeHtml(artist.name)}</span>`
-      ).join('<span class="artist-separator"> • </span>');
+      ).join('<span class="artist-separator"> ï¿½ </span>');
       
       return `<span class="multi-artist">${artistLinks}</span>`;
     }
   } else {
-    // Fallback für alte API oder wenn artists Array nicht verfügbar
+    // Fallback fï¿½r alte API oder wenn artists Array nicht verfï¿½gbar
     return `<span class="clickable-artist" draggable="false" data-artist-name="${escapeHtml(song.artist)}" title="View artist details">${escapeHtml(song.artist)}</span>`;
   }
 }
 function createSongHTMLOneline(song: OpenSubsonicSong): string {
   const duration = formatDuration(song.duration);
-  const coverUrl = song.coverArt && OpenSubsonicClient ? OpenSubsonicClient.getCoverArtUrl(song.coverArt, 60) : '';
+  const coverUrl = song.coverArt && openSubsonicClient ? openSubsonicClient.getCoverArtUrl(song.coverArt, 60) : '';
   
   return `
     <div class="track-item-oneline" draggable="true" data-song-id="${song.id}" data-cover-art="${song.coverArt || ''}" data-type="song">
@@ -2040,9 +2051,9 @@ function createStarRating(currentRating: number, songId: string): string {
 
 // Rating setzen
 async function setRating(songId: string, rating: number) {
-  if (!OpenSubsonicClient) return;
+  if (!openSubsonicClient) return;
   
-  const success = await OpenSubsonicClient.setRating(songId, rating);
+  const success = await openSubsonicClient.setRating(songId, rating);
   if (success) {
     // Update UI
     updateRatingDisplay(songId, rating);
@@ -2081,7 +2092,7 @@ function getCurrentSongId(player: string): string | null {
 
 // Album HTML erstellen
 function createAlbumHTML(album: OpenSubsonicAlbum): string {
-  const coverUrl = album.coverArt && OpenSubsonicClient ? OpenSubsonicClient.getCoverArtUrl(album.coverArt, 300) : '';
+  const coverUrl = album.coverArt && openSubsonicClient ? openSubsonicClient.getCoverArtUrl(album.coverArt, 300) : '';
   const year = (album as any).year || (album as any).date ? 
     new Date((album as any).year || (album as any).date).getFullYear() : '';
   const songCount = album.songCount || 0;
@@ -2179,7 +2190,7 @@ function displaySearchResults(results: any, addToHistory: boolean = true) {
   
   console.log('Search results displayed and saved');
   
-  // Kleine Verzögerung für DOM-Rendering
+  // Kleine Verzï¿½gerung fï¿½r DOM-Rendering
   setTimeout(() => {
     addDragListeners(searchContent);
     console.log('Drag listeners added to search results');
@@ -2192,7 +2203,7 @@ function displaySearchResults(results: any, addToHistory: boolean = true) {
   }, 50);
 }
 
-// Zurück zu den letzten Suchergebnissen
+// Zurï¿½ck zu den letzten Suchergebnissen
 function returnToLastSearchResults() {
   if (lastSearchResults) {
     console.log('Returning to last search results:', lastSearchQuery);
@@ -2221,7 +2232,7 @@ function returnToLastSearchResults() {
   }
 }
 
-// Drag & Drop Listeners hinzufügen
+// Drag & Drop Listeners hinzufï¿½gen
 function addDragListeners(container: Element) {
   const trackItems = container.querySelectorAll('.track-item, .track-item-oneline');
   const albumItems = container.querySelectorAll('.album-item-modern[draggable="true"]');
@@ -2270,7 +2281,7 @@ function addDragListeners(container: Element) {
   });
 }
 
-// Song-interne Click Listeners hinzufügen (für Artist und Album in Songs)
+// Song-interne Click Listeners hinzufï¿½gen (fï¿½r Artist und Album in Songs)
 function addSongClickListeners(container: Element) {
   console.log('Adding song click listeners to container:', container);
   
@@ -2293,11 +2304,11 @@ function addSongClickListeners(container: Element) {
         // Wenn wir eine Artist ID haben, verwende diese direkt
         console.log(`Calling showArtistDetails with ID: ${artistId} and name: ${artistName}`);
         await showArtistDetails(artistId, artistName);
-      } else if (artistName && OpenSubsonicClient) {
+      } else if (artistName && openSubsonicClient) {
         // Fallback: Suche nach Artist by Name
         console.log(`No artist ID found, searching by name: ${artistName}`);
         try {
-          const searchResults = await OpenSubsonicClient.search(artistName);
+          const searchResults = await openSubsonicClient.search(artistName);
           if (searchResults.artist && searchResults.artist.length > 0) {
             // Finde exakten Match oder ersten Treffer
             const artist = searchResults.artist.find((a: any) => 
@@ -2321,7 +2332,7 @@ function addSongClickListeners(container: Element) {
       }
     });
     
-    // Debug-Event für Mousedown
+    // Debug-Event fï¿½r Mousedown
     element.addEventListener('mousedown', () => {
       console.log(`Artist mousedown: ${artistName}`);
     });
@@ -2343,12 +2354,12 @@ function addSongClickListeners(container: Element) {
       
       if (albumId && albumId !== '') {
         await showAlbumSongs(albumId);
-      } else if (albumName && OpenSubsonicClient) {
+      } else if (albumName && openSubsonicClient) {
         console.log(`Album clicked from song (no ID): ${albumName}, searching...`);
         
         try {
           // Suche nach Album by Name
-          const searchResults = await OpenSubsonicClient.search(albumName);
+          const searchResults = await openSubsonicClient.search(albumName);
           if (searchResults.album && searchResults.album.length > 0) {
             // Finde exakten Match oder ersten Treffer
             const album = searchResults.album.find((a: any) => 
@@ -2369,14 +2380,14 @@ function addSongClickListeners(container: Element) {
       }
     });
     
-    // Debug-Event für Mousedown
+    // Debug-Event fï¿½r Mousedown
     element.addEventListener('mousedown', () => {
       console.log(`Album mousedown: ${albumName}`);
     });
   });
 }
 
-// Album Click Listeners hinzufügen
+// Album Click Listeners hinzufï¿½gen
 function addAlbumClickListeners(container: Element) {
   // Support both modern and legacy album items
   const albumItems = container.querySelectorAll('.album-item, .album-item-modern');
@@ -2412,14 +2423,14 @@ function addAlbumClickListeners(container: Element) {
       }
     });
     
-    // Zusätzlicher Debug-Event
+    // Zusï¿½tzlicher Debug-Event
     clonedItem.addEventListener('mousedown', () => {
       console.log(`Album mousedown: ${albumId}`);
     });
   });
 }
 
-// Artist Click Listeners hinzufügen
+// Artist Click Listeners hinzufï¿½gen
 function addArtistClickListeners(container: Element) {
   const artistItems = container.querySelectorAll('.artist-item');
   console.log(`Adding artist click listeners to ${artistItems.length} artists`);
@@ -2447,7 +2458,7 @@ function addArtistClickListeners(container: Element) {
       }
     });
     
-    // Zusätzlicher Debug-Event
+    // Zusï¿½tzlicher Debug-Event
     clonedItem.addEventListener('mousedown', () => {
       console.log(`Artist mousedown: ${artistId}`);
     });
@@ -2456,7 +2467,7 @@ function addArtistClickListeners(container: Element) {
 
 // Album Songs anzeigen
 async function showAlbumSongs(albumId: string, addToHistory: boolean = true) {
-  if (!OpenSubsonicClient) return;
+  if (!openSubsonicClient) return;
   
   try {
     console.log(`Loading songs for album ${albumId}`);
@@ -2468,7 +2479,7 @@ async function showAlbumSongs(albumId: string, addToHistory: boolean = true) {
     if (!album) {
       console.log('Album not in currentAlbums, fetching from OpenSubsonic...');
       try {
-        const fetchedAlbum = await OpenSubsonicClient.getAlbumInfo(albumId);
+        const fetchedAlbum = await openSubsonicClient.getAlbumInfo(albumId);
         if (fetchedAlbum) {
           album = fetchedAlbum;
         }
@@ -2477,7 +2488,7 @@ async function showAlbumSongs(albumId: string, addToHistory: boolean = true) {
       }
     }
     
-    const albumSongs = await OpenSubsonicClient.getAlbumSongs(albumId);
+    const albumSongs = await openSubsonicClient.getAlbumSongs(albumId);
     
     showAlbumSongsFromState({ albumId, album, songs: albumSongs });
     
@@ -2491,7 +2502,7 @@ async function showAlbumSongs(albumId: string, addToHistory: boolean = true) {
 function showAlbumSongsFromState(data: { albumId: string, album: any, songs: OpenSubsonicSong[] }) {
   const { album, songs } = data;
     
-    // Prüfe ob wir in Search-View sind oder in der normalen Songs-Liste
+    // Prï¿½fe ob wir in Search-View sind oder in der normalen Songs-Liste
     const searchContent = document.getElementById('search-content');
     const songsContainer = document.getElementById('songs-list');
     const targetContainer = searchContent?.style.display !== 'none' ? searchContent : songsContainer;
@@ -2525,14 +2536,14 @@ function showAlbumSongsFromState(data: { albumId: string, album: any, songs: Ope
 
 // Artist Details anzeigen
 async function showArtistDetails(artistId: string, artistName?: string, addToHistory: boolean = true) {
-  if (!OpenSubsonicClient) {
+  if (!openSubsonicClient) {
     console.error('OpenSubsonic client not available');
     return;
   }
   
   try {
     console.log(`Loading artist details for ${artistId}`);
-    const artistData = await OpenSubsonicClient.getArtistAlbums(artistId);
+    const artistData = await openSubsonicClient.getArtistAlbums(artistId);
     
     // Add to browser history
     
@@ -2568,14 +2579,14 @@ function escapeHtml(text: string): string {
 
 function showError(message: string) {
   console.error(message);
-  // Hier könnte eine Benutzeroberfläche für Fehler implementiert werden
+  // Hier kï¿½nnte eine Benutzeroberflï¿½che fï¿½r Fehler implementiert werden
 }
 
-// Status-Nachrichten anzeigen (für Bridge-Feedback)
+// Status-Nachrichten anzeigen (fï¿½r Bridge-Feedback)
 function showStatusMessage(message: string, type: 'success' | 'error' | 'info' = 'info') {
   console.log(`[${type.toUpperCase()}]`, message);
   
-  // Temporäres Status-Element erstellen falls noch nicht vorhanden
+  // Temporï¿½res Status-Element erstellen falls noch nicht vorhanden
   let statusElement = document.getElementById('bridge-status-message');
   if (!statusElement) {
     statusElement = document.createElement('div');
@@ -2642,7 +2653,7 @@ function showNoSearchState() {
     noSearchState.style.display = 'flex';
   }
   
-  // Lösche Suchhistorie, wenn zurück zum No Search State
+  // Lï¿½sche Suchhistorie, wenn zurï¿½ck zum No Search State
   lastSearchResults = null;
   lastSearchQuery = '';
   console.log('Search history cleared');
@@ -2689,14 +2700,14 @@ function initializeQueuePermanent() {
       }
     };
     
-    // Event Listener hinzufügen
+    // Event Listener hinzufï¿½gen
     queueContainer.addEventListener('dragover', dragoverHandler);
     queueContainer.addEventListener('dragleave', dragleaveHandler);
     queueContainer.addEventListener('drop', dropHandler);
   });
 }
 
-// Song zur Queue hinzufügen
+// Song zur Queue hinzufï¿½gen
 async function addToQueue(songId: string) {
   console.log('Adding song to queue:', songId);
   
@@ -2704,13 +2715,13 @@ async function addToQueue(songId: string) {
   let song = currentSongs.find(s => s.id === songId);
   
   if (!song) {
-    // Wenn nicht gefunden, versuche über Search Results zu finden
+    // Wenn nicht gefunden, versuche ï¿½ber Search Results zu finden
     const searchResults = document.querySelectorAll('.track-item');
     for (const item of searchResults) {
       const element = item as HTMLElement;
       if (element.dataset.songId === songId) {
-        // Hier müsste der Song aus der API abgerufen werden
-        // Für jetzt nehmen wir den ersten verfügbaren Song
+        // Hier mï¿½sste der Song aus der API abgerufen werden
+        // Fï¿½r jetzt nehmen wir den ersten verfï¿½gbaren Song
         song = currentSongs[0];
         break;
       }
@@ -2742,7 +2753,7 @@ function updateQueueDisplay() {
           <div class="queue-title">${escapeHtml(song.title)}</div>
           <div class="queue-artist">${escapeHtml(song.artist)}</div>
         </div>
-        <button class="queue-remove" onclick="removeFromQueue(${index})">×</button>
+        <button class="queue-remove" onclick="removeFromQueue(${index})">ï¿½</button>
       </div>
     `).join('');
   });
@@ -2757,7 +2768,7 @@ function removeFromQueue(index: number) {
   }
 }
 
-// Globale Funktion für HTML onclick
+// Globale Funktion fï¿½r HTML onclick
 (window as any).removeFromQueue = removeFromQueue;
 
 // OpenSubsonic Login initialisieren
@@ -2799,13 +2810,13 @@ function initializeOpenSubsonicLogin() {
       }
       
       // Erstelle OpenSubsonic Client mit Credentials
-      OpenSubsonicClient = new OpenSubsonicClient({
+      openSubsonicClient = new SubsonicApiClient({
         serverUrl: serverUrl,
         username: username,
         password: password
       });
       
-      const authenticated = await OpenSubsonicClient.authenticate();
+      const authenticated = await openSubsonicClient.authenticate();
       
       if (authenticated) {
         console.log("? OpenSubsonic connected successfully!");
@@ -2816,7 +2827,9 @@ function initializeOpenSubsonicLogin() {
         searchContainer.style.display = 'flex';
         
         // Initialisiere Musikbibliothek
+        console.log("ðŸŽµ About to call initializeMusicLibrary...");
         await initializeMusicLibrary();
+        console.log("ðŸŽµ Finished calling initializeMusicLibrary");
         
       } else {
         console.log('? Login failed - Wrong username or password');
@@ -2841,7 +2854,7 @@ function initializeOpenSubsonicLogin() {
     }
   };
   
-  // Felder verstecken wenn Werte verfügbar sind (Unified oder Individual)
+  // Felder verstecken wenn Werte verfï¿½gbar sind (Unified oder Individual)
   if (envUrl) {
     const serverGroup = document.querySelector('.form-group:has(#OpenSubsonic-server)') as HTMLElement;
     if (serverGroup) serverGroup.style.display = 'none';
@@ -2866,7 +2879,7 @@ function initializeOpenSubsonicLogin() {
     }
   }
   
-  // Auto-Login wenn alle Credentials verfügbar sind
+  // Auto-Login wenn alle Credentials verfï¿½gbar sind
   if (envUrl && finalUsername && finalPassword) {
     console.log(`?? Auto-login with ${useUnifiedLogin ? 'unified' : 'individual'} credentials...`);
     performLogin(envUrl, finalUsername, finalPassword);
@@ -2904,10 +2917,10 @@ function initializeAudioPlayers() {
     setupAudioPlayer('right', audioRight);
   }
   
-  // Crossfader Funktionalität
+  // Crossfader Funktionalitï¿½t
   initializeCrossfader();
   
-  // Drop Zones für Player
+  // Drop Zones fï¿½r Player
   initializePlayerDropZones();
 }
 
@@ -3085,7 +3098,7 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
   volumeSlider?.addEventListener('input', () => {
     const volume = parseInt(volumeSlider.value) / 100;
     
-    // Web Audio API Gain steuern (für Streaming)
+    // Web Audio API Gain steuern (fï¿½r Streaming)
     if (side === 'left' && leftPlayerGain) {
       leftPlayerGain.gain.value = volume;
       console.log(`??? Player ${side} Web Audio gain: ${volume}`);
@@ -3094,7 +3107,7 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
       console.log(`??? Player ${side} Web Audio gain: ${volume}`);
     }
     
-    // HTML Audio Element auch setzen (für direkte Abhörung ohne Web Audio)
+    // HTML Audio Element auch setzen (fï¿½r direkte Abhï¿½rung ohne Web Audio)
     audio.volume = volume;
     console.log(`Player ${side} volume: ${volume * 100}%`);
   });
@@ -3119,7 +3132,7 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
 
 // Track in Player laden
 function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoPlay: boolean = false) {
-  if (!OpenSubsonicClient) {
+  if (!openSubsonicClient) {
     console.error('OpenSubsonic client not initialized');
     return;
   }
@@ -3133,12 +3146,12 @@ function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoP
   console.log(`Loading "${song.title}" to Player ${side.toUpperCase()}${autoPlay ? ' (auto-play)' : ''}`);
   
   // Stream URL von OpenSubsonic
-  const streamUrl = OpenSubsonicClient.getStreamUrl(song.id);
+  const streamUrl = openSubsonicClient.getStreamUrl(song.id);
   
   // Reset WaveSurfer first (bevor neuer Track geladen wird)
   resetWaveform(side);
   
-  // Vorherigen Track stoppen und zurücksetzen
+  // Vorherigen Track stoppen und zurï¿½cksetzen
   audio.pause();
   audio.currentTime = 0;
   
@@ -3159,21 +3172,21 @@ function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoP
   // Album Cover aktualisieren
   updateAlbumCover(side, song);
   
-  // Play-Button zurücksetzen (Track ist gestoppt)
+  // Play-Button zurï¿½cksetzen (Track ist gestoppt)
   const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
   const icon = playPauseBtn?.querySelector('.material-icons');
   if (icon) icon.textContent = 'play_arrow';
   
-  // Load new waveform using WaveSurfer (lädt automatisch neue Waveform)
+  // Load new waveform using WaveSurfer (lï¿½dt automatisch neue Waveform)
   loadWaveform(side, audio.src);
   
-  // Audio-Event-Listener werden nach allen Funktionsdefinitionen hinzugefügt
+  // Audio-Event-Listener werden nach allen Funktionsdefinitionen hinzugefï¿½gt
   setupAudioEventListeners(audio, side);
   
   // Note: We don't sync WaveSurfer with audio to avoid double playback
   // WaveSurfer handles playback directly via play button
   
-  // Song ID für Rating-System speichern
+  // Song ID fï¿½r Rating-System speichern
   audio.dataset.songId = song.id;
   
   // Rating anzeigen (async laden)
@@ -3181,11 +3194,11 @@ function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoP
   if (playerRating) {
     playerRating.innerHTML = createStarRating(song.userRating || 0, song.id);
     
-    // Rating async nachladen für bessere Performance
+    // Rating async nachladen fï¿½r bessere Performance
     loadRatingAsync(song.id);
   }
   
-  // Auto-Play wenn gewünscht
+  // Auto-Play wenn gewï¿½nscht
   if (autoPlay) {
     // Warte bis Track geladen ist, dann spiele ab
     audio.addEventListener('loadeddata', () => {
@@ -3206,7 +3219,7 @@ function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoP
         console.error(`? Auto-play failed on Player ${side.toUpperCase()}:`, error);
         showError(`Auto-play failed on Player ${side.toUpperCase()}: ${error.message}`);
       });
-    }, { once: true }); // Event listener nur einmal ausführen
+    }, { once: true }); // Event listener nur einmal ausfï¿½hren
   }
   
   // Crossfader anwenden falls aktiv
@@ -3215,7 +3228,7 @@ function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoP
   console.log(`Player ${side.toUpperCase()}: "${song.title}" loaded successfully`);
 }
 
-// Crossfader anwenden (für neue Tracks)
+// Crossfader anwenden (fï¿½r neue Tracks)
 function applyCrossfader() {
   const crossfader = document.getElementById('crossfader') as HTMLInputElement;
   if (crossfader) {
@@ -3238,7 +3251,7 @@ function initializeCrossfader() {
     // Konvertiere Crossfader-Position (0-100) zu Audio-Pipeline-Position (0-1)
     const position = value / 100;
     
-    // Audio-Pipeline Crossfader setzen falls verfügbar
+    // Audio-Pipeline Crossfader setzen falls verfï¿½gbar
     if (crossfaderGain && streamCrossfaderGain) {
       // Position zwischen 0 und 1 begrenzen
       const clampedPosition = Math.max(0, Math.min(1, position));
@@ -3261,7 +3274,7 @@ function initializeCrossfader() {
     
     // Fallback: Direkte Audio-Element-Kontrolle
     // Crossfader: 0 = nur links, 50 = beide gleich, 100 = nur rechts
-    // Korrekte Berechnung für fließenden Übergang
+    // Korrekte Berechnung fï¿½r flieï¿½enden ï¿½bergang
     let leftVolume, rightVolume;
     
     if (value <= 50) {
@@ -3337,7 +3350,7 @@ function initializePlayerDropZone(side: 'left' | 'right') {
   });
 }
 
-// Song nach ID in allen verfügbaren Listen finden
+// Song nach ID in allen verfï¿½gbaren Listen finden
 function findSongById(songId: string): OpenSubsonicSong | null {
   // Suche in aktuellen Songs
   let song = currentSongs.find(s => s.id === songId);
@@ -3349,7 +3362,7 @@ function findSongById(songId: string): OpenSubsonicSong | null {
     const element = item as HTMLElement;
     if (element.dataset.songId === songId) {
       
-      // Für neue einzeilige Track-Items
+      // Fï¿½r neue einzeilige Track-Items
       if (element.classList.contains('track-item-oneline')) {
         const titleElement = element.querySelector('.track-title');
         const artistElement = element.querySelector('.track-artist');
@@ -3371,7 +3384,7 @@ function findSongById(songId: string): OpenSubsonicSong | null {
         }
       }
       
-      // Für alte Track-Items (Fallback)
+      // Fï¿½r alte Track-Items (Fallback)
       const titleElement = element.querySelector('h4');
       const infoElement = element.querySelector('p');
       const coverArt = element.dataset.coverArt || undefined;
@@ -3390,7 +3403,7 @@ function findSongById(songId: string): OpenSubsonicSong | null {
           size: 0,
           suffix: 'mp3',
           bitRate: 0,
-          coverArt: coverArt // Cover Art auch für alte Items
+          coverArt: coverArt // Cover Art auch fï¿½r alte Items
         };
       }
     }
@@ -3412,13 +3425,13 @@ function initializeRatingListeners() {
       if (songId && rating > 0) {
         await setRating(songId, rating);
         
-        // Async Rating laden für bessere Performance
+        // Async Rating laden fï¿½r bessere Performance
         loadRatingAsync(songId);
       }
     }
   });
   
-  // Hover-Effekte für Sterne
+  // Hover-Effekte fï¿½r Sterne
   document.addEventListener('mouseover', (event) => {
     const target = event.target as HTMLElement;
     
@@ -3445,7 +3458,7 @@ function initializeRatingListeners() {
   });
 }
 
-// Sterne für Hover-Effekt hervorheben
+// Sterne fï¿½r Hover-Effekt hervorheben
 function highlightStars(songId: string, rating: number) {
   const stars = document.querySelectorAll(`[data-song-id="${songId}"] .star`);
   stars.forEach((star, index) => {
@@ -3458,7 +3471,7 @@ function highlightStars(songId: string, rating: number) {
   });
 }
 
-// Stern-Highlight zurücksetzen
+// Stern-Highlight zurï¿½cksetzen
 function resetStarHighlight(songId: string) {
   const stars = document.querySelectorAll(`[data-song-id="${songId}"] .star`);
   stars.forEach(star => {
@@ -3466,12 +3479,12 @@ function resetStarHighlight(songId: string) {
   });
 }
 
-// Rating asynchron laden (für bessere Performance)
+// Rating asynchron laden (fï¿½r bessere Performance)
 async function loadRatingAsync(songId: string) {
-  if (!OpenSubsonicClient) return;
+  if (!openSubsonicClient) return;
   
   try {
-    const rating = await OpenSubsonicClient.getRating(songId);
+    const rating = await openSubsonicClient.getRating(songId);
     if (rating !== null) {
       updateRatingDisplay(songId, rating);
     }
@@ -3480,7 +3493,7 @@ async function loadRatingAsync(songId: string) {
   }
 }
 
-// Audio Level Monitoring für Volume Meter
+// Audio Level Monitoring fï¿½r Volume Meter
 let volumeMeterIntervals: { [key: string]: NodeJS.Timeout } = {};
 
 function startVolumeMeter(side: 'left' | 'right' | 'mic') {
@@ -3494,7 +3507,7 @@ function startVolumeMeter(side: 'left' | 'right' | 'mic') {
   
   if (!meterElement || !audioContext) return;
   
-  // AnalyserNode für Audio-Level-Messung erstellen
+  // AnalyserNode fï¿½r Audio-Level-Messung erstellen
   let analyser: AnalyserNode;
   let gainNode: GainNode | null = null;
   
@@ -3513,7 +3526,7 @@ function startVolumeMeter(side: 'left' | 'right' | 'mic') {
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.8;
     
-    // Verbinde Gain Node mit Analyser (ohne Audio-Flow zu stören)
+    // Verbinde Gain Node mit Analyser (ohne Audio-Flow zu stï¿½ren)
     gainNode.connect(analyser);
     
     const bufferLength = analyser.frequencyBinCount;
@@ -3523,7 +3536,7 @@ function startVolumeMeter(side: 'left' | 'right' | 'mic') {
     volumeMeterIntervals[side] = setInterval(() => {
       analyser.getByteFrequencyData(dataArray);
       
-      // Berechne RMS (Root Mean Square) für bessere Level-Anzeige
+      // Berechne RMS (Root Mean Square) fï¿½r bessere Level-Anzeige
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) {
         sum += dataArray[i] * dataArray[i];
@@ -3547,7 +3560,7 @@ function updateVolumeMeter(meterId: string, level: number) {
   const meterElement = document.getElementById(meterId);
   if (!meterElement) return;
   
-  // Support für beide Meter-Typen: kompakt und regular
+  // Support fï¿½r beide Meter-Typen: kompakt und regular
   const bars = meterElement.querySelectorAll('.meter-bar-compact, .meter-bar');
   bars.forEach((bar, index) => {
     if (index < level) {
@@ -3568,7 +3581,7 @@ function stopVolumeMeter(side: 'left' | 'right' | 'mic') {
 
 // Audio Event Listeners Setup
 function setupAudioEventListeners(audio: HTMLAudioElement, side: 'left' | 'right') {
-  // Audio zu Mixing-System hinzufügen für Live-Streaming
+  // Audio zu Mixing-System hinzufï¿½gen fï¿½r Live-Streaming
   audio.addEventListener('loadeddata', () => {
     console.log(`?? TRACK LOADED: ${side} player audio element src: ${audio.src}`);
     setTimeout(async () => {
@@ -3591,10 +3604,10 @@ function setupAudioEventListeners(audio: HTMLAudioElement, side: 'left' | 'right
     }, 0);
   });
   
-  // ZUSÄTZLICH: Sicherstellen dass Verbindung bei Play-Event existiert
+  // ZUSï¿½TZLICH: Sicherstellen dass Verbindung bei Play-Event existiert
   audio.addEventListener('play', () => {
     console.log(`?? PLAY EVENT: ${side} player starting playback`);
-    // Verbindung nochmals prüfen/herstellen bei Wiedergabe
+    // Verbindung nochmals prï¿½fen/herstellen bei Wiedergabe
     if (audioContext && (leftPlayerGain || rightPlayerGain)) {
       const connected = connectAudioToMixer(audio, side);
       if (connected) {
@@ -3638,4 +3651,309 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 1000);
 });
 
-// Recent Albums Funktion entfernt - wird nicht mehr benötigt
+// Recent Albums Funktion entfernt - wird nicht mehr benï¿½tigt
+
+// ======= MEDIA LIBRARY FUNCTIONS =======
+
+// Initialize Media Library with Tab Navigation
+function initializeMediaLibrary() {
+  // Tab switching functionality
+  const tabButtons = document.querySelectorAll('.tab-btn');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const targetTab = (button as HTMLElement).dataset.tab;
+      
+      // Remove active class from all tabs and contents
+      tabButtons.forEach(btn => btn.classList.remove('active'));
+      tabContents.forEach(content => content.classList.remove('active'));
+      
+      // Add active class to clicked tab and corresponding content
+      button.classList.add('active');
+      const targetContent = document.getElementById(`${targetTab}-content`);
+      if (targetContent) {
+        targetContent.classList.add('active');
+      }
+    });
+  });
+
+  // Zeige Login-Hinweis anstatt Content zu laden
+  showLoginHintForLibrary();
+}
+
+// Zeige Login-Hinweis fÃ¼r Media Library
+function showLoginHintForLibrary() {
+  // Set loading placeholders fÃ¼r Browse tab
+  const recentAlbums = document.getElementById('recent-albums');
+  const randomAlbums = document.getElementById('random-albums');
+  const randomArtists = document.getElementById('random-artists');
+
+  if (recentAlbums) {
+    recentAlbums.innerHTML = '<div class="login-hint">ðŸ”’ Please login to browse music</div>';
+  }
+  if (randomAlbums) {
+    randomAlbums.innerHTML = '<div class="login-hint">ðŸ”’ Please login to browse music</div>';
+  }
+  if (randomArtists) {
+    randomArtists.innerHTML = '<div class="login-hint">ðŸ”’ Please login to browse music</div>';
+  }
+
+  // Set login hint fÃ¼r Search tab
+  const searchResults = document.getElementById('search-results');
+  if (searchResults) {
+    searchResults.innerHTML = '<div class="login-hint">ðŸ”’ Please login to search music</div>';
+  }
+
+  // Deaktiviere Suchleiste
+  const searchInput = document.getElementById('search-input') as HTMLInputElement;
+  const searchBtn = document.getElementById('search-btn') as HTMLButtonElement;
+  
+  if (searchInput) {
+    searchInput.disabled = true;
+    searchInput.placeholder = 'ðŸ”’ Login required to search music';
+  }
+  if (searchBtn) {
+    searchBtn.disabled = true;
+  }
+}
+
+// Aktiviere Suchleiste nach erfolgreichem Login
+function enableSearchAfterLogin() {
+  const searchInput = document.getElementById('search-input') as HTMLInputElement;
+  const searchBtn = document.getElementById('search-btn') as HTMLButtonElement;
+  
+  if (searchInput) {
+    searchInput.disabled = false;
+    searchInput.placeholder = 'Search music...';
+  }
+  if (searchBtn) {
+    searchBtn.disabled = false;
+  }
+}
+
+// Load content for Browse tab
+async function loadBrowseContent() {
+  if (!openSubsonicClient) {
+    console.warn('OpenSubsonic client not available for browse content');
+    return;
+  }
+
+  console.log('Starting to load browse content...');
+
+  try {
+    // Load all sections in parallel
+    await Promise.all([
+      loadRecentAlbums(),
+      loadRandomAlbums(),
+      loadRandomArtists()
+    ]);
+    console.log('âœ… All browse content loaded successfully');
+  } catch (error) {
+    console.error('Failed to load browse content:', error);
+  }
+}
+
+// Load recent albums
+async function loadRecentAlbums() {
+  console.log('Loading recent albums...');
+  const container = document.getElementById('recent-albums');
+  if (!container || !openSubsonicClient) {
+    console.warn('Container or client not available for recent albums');
+    return;
+  }
+
+  try {
+    const albums = await openSubsonicClient.getNewestAlbums(20);
+    console.log(`âœ… Loaded ${albums.length} recent albums`);
+    container.innerHTML = '';
+    
+    albums.forEach((album: OpenSubsonicAlbum) => {
+      const albumCard = createAlbumCard(album);
+      container.appendChild(albumCard);
+    });
+  } catch (error) {
+    console.error('Failed to load recent albums:', error);
+    container.innerHTML = '<div class="loading-placeholder">Failed to load recent albums</div>';
+  }
+}
+
+// Load random albums
+async function loadRandomAlbums() {
+  const container = document.getElementById('random-albums');
+  if (!container || !openSubsonicClient) return;
+
+  try {
+    const albums = await openSubsonicClient.getRandomAlbums(20);
+    container.innerHTML = '';
+    
+    albums.forEach((album: OpenSubsonicAlbum) => {
+      const albumCard = createAlbumCard(album);
+      container.appendChild(albumCard);
+    });
+  } catch (error) {
+    console.error('Failed to load random albums:', error);
+    container.innerHTML = '<div class="loading-placeholder">Failed to load random albums</div>';
+  }
+}
+
+// Load random artists
+async function loadRandomArtists() {
+  const container = document.getElementById('random-artists');
+  if (!container || !openSubsonicClient) return;
+
+  try {
+    const artists = await openSubsonicClient.getRandomArtists(20);
+    container.innerHTML = '';
+    
+    console.log('Random artists loaded:', artists.map(a => ({ 
+      name: a.name, 
+      artistImageUrl: a.artistImageUrl, 
+      coverArt: a.coverArt 
+    })));
+    
+    artists.forEach((artist: OpenSubsonicArtist) => {
+      const artistCard = createArtistCard(artist);
+      container.appendChild(artistCard);
+    });
+  } catch (error) {
+    console.error('Failed to load random artists:', error);
+    container.innerHTML = '<div class="loading-placeholder">Failed to load random artists</div>';
+  }
+}
+
+// Create album card element
+function createAlbumCard(album: OpenSubsonicAlbum): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'album-card';
+  card.dataset.albumId = album.id;
+
+  const coverUrl = album.coverArt 
+    ? openSubsonicClient.getCoverArtUrl(album.coverArt, 160)
+    : '';
+
+  card.innerHTML = `
+    <div class="album-cover">
+      ${coverUrl 
+        ? `<img src="${coverUrl}" alt="${album.name}" loading="lazy">`
+        : '<span class="material-icons">album</span>'
+      }
+      <div class="play-overlay">
+        <span class="material-icons">play_arrow</span>
+      </div>
+    </div>
+    <div class="album-info">
+      <div class="album-title" title="${album.name}">${album.name}</div>
+      <div class="album-artist" title="${album.artist}">${album.artist}</div>
+      ${album.year ? `<div class="album-year">${album.year}</div>` : ''}
+    </div>
+  `;
+
+  // Add click handler to load album tracks
+  card.addEventListener('click', () => loadAlbumTracks(album));
+
+  return card;
+}
+
+// Create artist card element
+function createArtistCard(artist: OpenSubsonicArtist): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'artist-card';
+  card.dataset.artistId = artist.id;
+
+  // Verwende artistImageUrl falls verfÃ¼gbar, sonst coverArt, sonst Fallback Icon
+  let imageHtml = '<span class="material-icons">person</span>';
+  
+  if (artist.artistImageUrl) {
+    imageHtml = `<img src="${artist.artistImageUrl}" alt="${artist.name}" onerror="this.parentElement.innerHTML='<span class=\\"material-icons\\">person</span>'">`;
+  } else if (artist.coverArt) {
+    const coverUrl = openSubsonicClient.getCoverArtUrl(artist.coverArt, 160);
+    imageHtml = `<img src="${coverUrl}" alt="${artist.name}" onerror="this.parentElement.innerHTML='<span class=\\"material-icons\\">person</span>'">`;
+  }
+
+  card.innerHTML = `
+    <div class="artist-avatar">
+      ${imageHtml}
+    </div>
+    <div class="artist-name" title="${artist.name}">${artist.name}</div>
+  `;
+
+  // Add click handler to load artist albums
+  card.addEventListener('click', () => loadArtistAlbums(artist));
+
+  return card;
+}
+
+// Load tracks from an album and display in search results
+async function loadAlbumTracks(album: OpenSubsonicAlbum) {
+  if (!openSubsonicClient) return;
+
+  try {
+    // Switch to search tab to show results
+    const searchTab = document.querySelector('[data-tab="search"]') as HTMLElement;
+    const browseTab = document.querySelector('[data-tab="browse"]') as HTMLElement;
+    const searchContent = document.getElementById('search-content');
+    const browseContent = document.getElementById('browse-content');
+
+    if (searchTab && browseTab && searchContent && browseContent) {
+      browseTab.classList.remove('active');
+      searchTab.classList.add('active');
+      browseContent.classList.remove('active');
+      searchContent.classList.add('active');
+    }
+
+    // Load album tracks
+    const tracks = await openSubsonicClient.getAlbumTracks(album.id);
+    
+    // Display in search results
+    const searchResults = document.getElementById('search-results');
+    if (searchResults && tracks.length > 0) {
+      displaySearchResults({ song: tracks, album: [], artist: [] });
+      
+      // Update search input to show what was loaded
+      const searchInput = document.getElementById('search-input') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.value = `Album: ${album.name}`;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load album tracks:', error);
+  }
+}
+
+// Load albums from an artist and display in search results
+async function loadArtistAlbums(artist: OpenSubsonicArtist) {
+  if (!openSubsonicClient) return;
+
+  try {
+    // Switch to search tab to show results
+    const searchTab = document.querySelector('[data-tab="search"]') as HTMLElement;
+    const browseTab = document.querySelector('[data-tab="browse"]') as HTMLElement;
+    const searchContent = document.getElementById('search-content');
+    const browseContent = document.getElementById('browse-content');
+
+    if (searchTab && browseTab && searchContent && browseContent) {
+      browseTab.classList.remove('active');
+      searchTab.classList.add('active');
+      browseContent.classList.remove('active');
+      searchContent.classList.add('active');
+    }
+
+    // Load artist albums
+    const albums = await openSubsonicClient.getArtistAlbums(artist.id);
+    
+    // Display in search results
+    const searchResults = document.getElementById('search-results');
+    if (searchResults && albums.length > 0) {
+      displaySearchResults({ song: [], album: albums, artist: [] });
+      
+      // Update search input to show what was loaded
+      const searchInput = document.getElementById('search-input') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.value = `Artist: ${artist.name}`;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load artist albums:', error);
+  }
+}

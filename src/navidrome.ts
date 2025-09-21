@@ -55,6 +55,8 @@ interface OpenSubsonicArtist {
   name: string;
   albumCount: number;
   starred?: string;
+  coverArt?: string;  // Cover art from first album
+  artistImageUrl?: string;  // Direct artist image URL from API
 }
 
 interface OpenSubsonicSearchResult {
@@ -63,7 +65,7 @@ interface OpenSubsonicSearchResult {
   artist?: OpenSubsonicArtist[];
 }
 
-class OpenSubsonicClient {
+class SubsonicApiClient {
   private config: OpenSubsonicConfig;
   private auth: OpenSubsonicAuth | null = null;
 
@@ -432,6 +434,20 @@ class OpenSubsonicClient {
     return response.artist?.album || [];
   }
 
+  // Get artist cover art from first album
+  async getArtistCoverArt(artistId: string): Promise<string | null> {
+    try {
+      const albums = await this.getArtistAlbums(artistId);
+      if (albums.length > 0 && albums[0].coverArt) {
+        return albums[0].coverArt;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting artist cover art:', error);
+      return null;
+    }
+  }
+
   // Get single artist by ID
   async getArtist(artistId: string): Promise<OpenSubsonicArtist | null> {
     try {
@@ -525,7 +541,7 @@ class OpenSubsonicClient {
     // CORS-Fix: Über SAME-ORIGIN API Route leiten (löst Cross-Origin Problem)
     const proxiedUrl = `/api/OpenSubsonic-stream?url=${encodeURIComponent(originalUrl)}`;
     
-    console.log(`🎵 Stream URL (same-origin): ${proxiedUrl}`);
+    console.log(`🎵 Stream URL (proxied): ${proxiedUrl}`);
     return proxiedUrl;
   }
 
@@ -616,7 +632,62 @@ class OpenSubsonicClient {
       return [];
     }
   }
+
+  // Zufällige Alben abrufen
+  async getRandomAlbums(size = 20): Promise<OpenSubsonicAlbum[]> {
+    try {
+      const response = await this.makeRequest('getAlbumList2', { 
+        type: 'random',
+        size: size.toString()
+      });
+      
+      return response.albumList2?.album || [];
+    } catch (error) {
+      console.error('Error getting random albums:', error);
+      return [];
+    }
+  }
+
+  // Zufällige Künstler abrufen
+  async getRandomArtists(size = 20): Promise<OpenSubsonicArtist[]> {
+    try {
+      // Da es keine direkte "random artists" API gibt, holen wir alle Künstler und mischen sie
+      const allArtists = await this.getArtists();
+      
+      // Fisher-Yates Shuffle für echte Zufälligkeit
+      const shuffled = [...allArtists];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      
+      const selectedArtists = shuffled.slice(0, size);
+      
+      // Cover Art für Artists ohne artistImageUrl laden (parallel für bessere Performance)
+      const artistsWithCover = await Promise.all(
+        selectedArtists.map(async (artist) => {
+          // Verwende artistImageUrl falls verfügbar, sonst lade Cover Art vom ersten Album
+          if (artist.artistImageUrl) {
+            return artist;
+          } else {
+            const coverArt = await this.getArtistCoverArt(artist.id);
+            return { ...artist, coverArt: coverArt || undefined };
+          }
+        })
+      );
+      
+      return artistsWithCover;
+    } catch (error) {
+      console.error('Error getting random artists:', error);
+      return [];
+    }
+  }
+
+  // Tracks eines Albums abrufen (Alias für getAlbumSongs)
+  async getAlbumTracks(albumId: string): Promise<OpenSubsonicSong[]> {
+    return this.getAlbumSongs(albumId);
+  }
 }
 
 // Exportiere für Verwendung in main.ts
-export { OpenSubsonicClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist, type OpenSubsonicSearchResult };
+export { SubsonicApiClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist, type OpenSubsonicSearchResult };

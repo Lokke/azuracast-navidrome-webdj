@@ -168,18 +168,50 @@
       <!-- Bottom Section: Music Library -->
       <div class="music-library">
         <!-- Search Bar -->
-        <div class="search-container">
+        <div class="search-container" id="search-container">
           <input type="text" id="search-input" placeholder="Search music...">
           <button id="search-btn"><span class="material-icons">search</span></button>
         </div>
         
         <!-- Main Content Area -->
         <div class="content-main">
+          <!-- Media Library Tabs -->
+          <div class="library-tabs">
+            <button class="tab-btn active" data-tab="browse">Browse</button>
+            <button class="tab-btn" data-tab="search">Search</button>
+          </div>
+
+          <!-- Browse Content (Default View) -->
+          <div class="tab-content active" id="browse-content">
+            <!-- Recent Albums Section -->
+            <div class="media-section">
+              <h3 class="section-title">Recent Albums</h3>
+              <div class="horizontal-scroll" id="recent-albums">
+                <div class="loading-placeholder">Loading recent albums...</div>
+              </div>
+            </div>
+
+            <!-- Random Albums Section -->
+            <div class="media-section">
+              <h3 class="section-title">Random Albums</h3>
+              <div class="horizontal-scroll" id="random-albums">
+                <div class="loading-placeholder">Loading random albums...</div>
+              </div>
+            </div>
+
+            <!-- Random Artists Section -->
+            <div class="media-section">
+              <h3 class="section-title">Random Artists</h3>
+              <div class="horizontal-scroll" id="random-artists">
+                <div class="loading-placeholder">Loading random artists...</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Search Results -->
-          <div class="library-content" id="library-content">
-            <div class="search-results" id="search-results" style="display: none;">
-              <h3>Search Results</h3>
-              <div id="search-content"></div>
+          <div class="tab-content" id="search-content">
+            <div class="search-results" id="search-results">
+              <div class="no-results">Use the search bar above to find music</div>
             </div>
             <div class="no-search-state" id="no-search-state">
               <div class="search-prompt">
@@ -205,13 +237,6 @@
       </div>
     </div>
 
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-          </div>
-        </div>
-      </div>
-    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
