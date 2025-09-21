@@ -1,91 +1,174 @@
-# SubCaster - Professional Streaming & Podcasting Software
+# SubCaster# SubCaster
 
-A browser-based streaming application for live broadcasting and podcasting with Navidrome music library integration.
 
-## 🎵 Features
 
-- Browse and play music from Navidrome
-- Real-time microphone input with dynamic sample rate
-- Live streaming to Liquidsoap Harbor
-- Smart metadata management with priority system
-- Complete deck reset functionality
-- Browser audio compatibility
-- Crossfader and volume controls
-- Professional web-based interface
+Web interface for radio moderators. Provides access to music from OpenSubsonic-compatible servers (Navidrome, Gonic) with live streaming to AzuraCast.Web-Interface für Radiomoderatoren. Ermöglicht Zugriff auf Musik von OpenSubsonic-kompatiblen Servern (Navidrome, Gonic) und Live-Streaming an AzuraCast.
 
-## 📄 License
 
-**⚠️ NON-COMMERCIAL USE ONLY**
 
-- 🆓 **Free for private/educational use**
+## Features## Features
+
+
+
+- Music library browser for OpenSubsonic servers- Musikbibliothek-Browser für OpenSubsonic-Server
+
+- Dual-deck audio player with crossfader- Dual-Deck Audio-Player mit Crossfader
+
+- Microphone input with live mixing- Mikrofon-Eingang mit Live-Mixing
+
+- Direct streaming to AzuraCast Harbor- Direktes Streaming an AzuraCast Harbor
+
+- Smart metadata transmission- Intelligente Metadaten-Übertragung
+
+- Browser-based interface- Browser-basierte Bedienung
+
+
+
+## License## 📄 License
+
+
+
+Non-commercial use only.**⚠️ NON-COMMERCIAL USE ONLY**
+
+
+
+See LICENSE and COMMERCIAL-LICENSE.md for details.- 🆓 **Free for private/educational use**
+
 - ❌ **Commercial use strictly prohibited**
-- � **Commercial licensing may be offered in the future**
 
-See [LICENSE](LICENSE) and [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) for details.
+## Docker Setup- � **Commercial licensing may be offered in the future**
 
-**Commercial Use?** Currently not available. Contact: felix@pielok.de
 
-## Docker Setup (Recommended)
+
+Clone repository:See [LICENSE](LICENSE) and [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) for details.
+
+
+
+```bash**Commercial Use?** Currently not available. Contact: felix@pielok.de
+
+git clone https://github.com/Lokke/subcaster.git
+
+cd subcaster## Docker Setup (Recommended)
+
+```
 
 ### Quick Start with Docker Compose
 
+Start with Docker Compose:
+
 1. Clone the repository:
-```bash
-git clone https://github.com/Lokke/subcaster.git
-cd subcaster
+
+```bash```bash
+
+docker-compose up -dgit clone https://github.com/Lokke/subcaster.git
+
+```cd subcaster
+
 ```
+
+Open interface at http://localhost:5173
 
 2. Start with Docker Compose:
-```bash
+
+### Environment Variables```bash
+
 docker-compose up -d
-```
 
-3. Open http://localhost:5173 in your browser
+- `STREAM_USERNAME`: Harbor streaming username```
 
-### Custom Docker Run
+- `STREAM_PASSWORD`: Harbor streaming password  
 
-```bash
+- `STREAM_SERVER`: Streaming server hostname3. Open http://localhost:5173 in your browser
+
+- `STREAM_PORT`: Harbor port (default: 8015)
+
+- `STREAM_MOUNT`: Mount point (default: /)### Custom Docker Run
+
+
+
+## Manual Installation```bash
+
 docker build -t subcaster .
-docker run -d \
+
+Install dependencies:docker run -d \
+
   --name subcaster \
-  -p 5173:5173 \
-  -p 8082:8082 \
-  -e STREAM_USERNAME=your_username \
+
+```bash  -p 5173:5173 \
+
+npm install  -p 8082:8082 \
+
+```  -e STREAM_USERNAME=your_username \
+
   -e STREAM_PASSWORD=your_password \
-  -e STREAM_SERVER=your.streaming.server \
+
+Configure streaming in `.env`:  -e STREAM_SERVER=your.streaming.server \
+
   -e STREAM_PORT=8015 \
-  -e STREAM_MOUNT=/ \
-  subcaster
+
+```env  -e STREAM_MOUNT=/ \
+
+VITE_STREAM_USERNAME=username  subcaster
+
+VITE_STREAM_PASSWORD=password```
+
 ```
 
 ### Environment Variables
 
+Start CORS proxy:
+
 - `STREAM_USERNAME`: Harbor streaming username
-- `STREAM_PASSWORD`: Harbor streaming password  
-- `STREAM_SERVER`: Streaming server hostname
-- `STREAM_PORT`: Harbor port (default: 8015)
+
+```bash- `STREAM_PASSWORD`: Harbor streaming password  
+
+node cors-proxy-fixed.js- `STREAM_SERVER`: Streaming server hostname
+
+```- `STREAM_PORT`: Harbor port (default: 8015)
+
 - `STREAM_MOUNT`: Mount point (default: /)
+
+Start development server:
 
 ## Manual Setup
 
-1. Install dependencies:
 ```bash
+
+npm run dev1. Install dependencies:
+
+``````bash
+
 npm install
+
+Open interface at http://localhost:5173```
+
+
+
+## Configuration2. Configure streaming credentials in `.env`:
+
 ```
 
-2. Configure streaming credentials in `.env`:
-```
-VITE_STREAM_USERNAME=your_username
-VITE_STREAM_PASSWORD=your_password
-```
+Connects to:VITE_STREAM_USERNAME=your_username
+
+- Streaming server: funkturm.radio-endstation.de:8015VITE_STREAM_PASSWORD=your_password
+
+- Mount point: /```
+
+- Protocol: HTTP POST via SOURCE
 
 3. Start the CORS proxy:
-```bash
-node cors-proxy-fixed.js
-```
 
-4. Start the development server:
-```bash
+## Usage```bash
+
+node cors-proxy-fixed.js
+
+1. Load tracks into both players```
+
+2. Adjust volumes and crossfader
+
+3. Click "Start Streaming" for live broadcast4. Start the development server:
+
+4. Use microphone for live announcements```bash
 npm run dev
 ```
 
