@@ -48,6 +48,7 @@ interface OpenSubsonicAlbum {
   year?: number;
   genre?: string;
   coverArt?: string;
+  created?: string;  // Creation date for newest albums
 }
 
 interface OpenSubsonicArtist {
@@ -351,12 +352,12 @@ class SubsonicApiClient {
 
   // Alle Alben abrufen
   async getAlbums(size = 50, offset = 0): Promise<OpenSubsonicAlbum[]> {
-    const response = await this.makeRequest('getAlbumList2', { 
+    const response = await this.makeRequest('getAlbumList', { 
       type: 'alphabeticalByName',
       size, 
       offset 
     });
-    return response.albumList2?.album || [];
+    return response.albumList?.album || [];
   }
 
   // Alle Künstler abrufen
@@ -621,12 +622,20 @@ class SubsonicApiClient {
   // Neueste Alben abrufen
   async getNewestAlbums(size = 20): Promise<OpenSubsonicAlbum[]> {
     try {
-      const response = await this.makeRequest('getAlbumList2', { 
+      console.log('🔗 API Call: getAlbumList with type=newest, size=' + size);
+      const response = await this.makeRequest('getAlbumList', { 
         type: 'newest',
         size: size.toString()
       });
       
-      return response.albumList2?.album || [];
+      const albums = response.albumList?.album || [];
+      console.log('📦 Newest Albums API returned:', albums.length, 'albums');
+      if (albums.length > 0) {
+        console.log('📝 First album from API:', albums[0]);
+        console.log('📅 Album dates:', albums.slice(0, 3).map((a: any) => ({ name: a.name, created: a.created })));
+      }
+      
+      return albums;
     } catch (error) {
       console.error('Error getting newest albums:', error);
       return [];
@@ -636,12 +645,20 @@ class SubsonicApiClient {
   // Zufällige Alben abrufen
   async getRandomAlbums(size = 20): Promise<OpenSubsonicAlbum[]> {
     try {
-      const response = await this.makeRequest('getAlbumList2', { 
+      console.log('🔗 API Call: getAlbumList with type=random, size=' + size);
+      const response = await this.makeRequest('getAlbumList', { 
         type: 'random',
         size: size.toString()
       });
       
-      return response.albumList2?.album || [];
+      const albums = response.albumList?.album || [];
+      console.log('📦 Random Albums API returned:', albums.length, 'albums');
+      if (albums.length > 0) {
+        console.log('📝 First album from API:', albums[0]);
+        console.log('🎲 Random sample of albums returned:', albums.slice(0, 5).map((a: any) => a.name));
+      }
+      
+      return albums;
     } catch (error) {
       console.error('Error getting random albums:', error);
       return [];

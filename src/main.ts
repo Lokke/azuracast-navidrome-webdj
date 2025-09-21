@@ -411,10 +411,12 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'rig
 // Player Deck Fragment Template
 function createPlayerDeckHTML(side: 'left' | 'right'): string {
   const playerLetter = side === 'left' ? 'A' : 'B';
+  const labelClass = side === 'left' ? 'left' : 'right';
   
   return `
-    <div class="player-header">
-      <h3>Player ${playerLetter}</h3>
+    <div class="player-label ${labelClass}">
+      <div class="player-label-dot"></div>
+      <span class="player-label-text">Player ${playerLetter}</span>
       <audio id="audio-${side}" preload="metadata"></audio>
     </div>
     
@@ -1789,28 +1791,28 @@ function updateMountPointVisibility() {
 
 // Musikbibliothek initialisieren
 async function initializeMusicLibrary() {
-  console.log("Initializing music library...");
+  console.log("📚 initializeMusicLibrary started");
   
   try {
     // Lade initial Songs
+    console.log("🎵 Loading songs...");
     await loadSongs();
     
     // Lade Albums
+    console.log("💿 Loading albums...");
     await loadAlbums();
     
     // Lade Artists
+    console.log("👨‍🎤 Loading artists...");
     await loadArtists();
     
-    // Load browse content for new media library
-    await loadBrowseContent();
-    console.log("✅ Media library browse content loaded");
-    
-    // Aktiviere Suchleiste wieder
-    enableSearchAfterLogin();
-    console.log("✅ Search enabled after login");
+    // Initialize and show the unified library browser after login
+    console.log("🌐 Calling enableLibraryAfterLogin...");
+    enableLibraryAfterLogin();
+    console.log("✅ Library browser initialized after login");
     
   } catch (error) {
-    console.error("Error loading music library:", error);
+    console.error("❌ Error loading music library:", error);
     showError("Error loading music library: " + error);
   }
 }
@@ -1935,7 +1937,17 @@ async function loadSongs() {
     html += '<div class="header-rating">Rating</div>';
     html += '<div class="header-duration">Duration</div>';
     html += '</div>';
-    html += '<div class="songs-table">' + currentSongs.map(song => createSongHTMLOneline(song)).join('') + '</div>';
+    // Use unified song container instead of HTML string
+    const songsContainer = createUnifiedSongsContainer(currentSongs, 'album');
+    const albumDetailsContainer = document.getElementById('album-details');
+    if (albumDetailsContainer) {
+      const existingSongsTable = albumDetailsContainer.querySelector('.songs-table, .unified-songs-container');
+      if (existingSongsTable) {
+        existingSongsTable.replaceWith(songsContainer);
+      } else {
+        albumDetailsContainer.appendChild(songsContainer);
+      }
+    }
     
     songsContainer.innerHTML = html;
     addDragListeners(songsContainer);
@@ -2019,22 +2031,76 @@ function createArtistLinks(song: OpenSubsonicSong): string {
     return `<span class="clickable-artist" draggable="false" data-artist-name="${escapeHtml(song.artist)}" title="View artist details">${escapeHtml(song.artist)}</span>`;
   }
 }
+// Einheitliche Song-Darstellung für alle Bereiche (Search, Album-Details, Queue)
+function createUnifiedSongElement(song: OpenSubsonicSong, context: 'search' | 'album' | 'queue' = 'search'): HTMLElement {
+  const trackItem = document.createElement('div');
+  trackItem.className = 'spotify-card spotify-song-row';
+  trackItem.dataset.songId = song.id;
+  trackItem.dataset.coverArt = song.coverArt || '';
+  trackItem.dataset.type = 'song';
+  
+  const duration = formatDuration(song.duration);
+  const coverUrl = song.coverArt && openSubsonicClient ? openSubsonicClient.getCoverArtUrl(song.coverArt, 40) : '';
+  
+  // Spotify-style row layout für Song-Listen
+  trackItem.innerHTML = `
+    <div class="spotify-track-cover">
+      ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="spotify-no-cover"><span class="material-icons">music_note</span></div>'}
+    </div>
+    <div class="spotify-track-title">${escapeHtml(song.title)}</div>
+    <div class="spotify-track-artist">${createArtistLinks(song)}</div>
+    <div class="spotify-track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
+    <div class="spotify-track-rating" data-song-id="${song.id}">
+      ${generateStarRating(getStoredTrackRating(song.id))}
+    </div>
+    <div class="spotify-track-duration">${duration}</div>
+  `;
+  
+  // Drag and Drop aktivieren
+  trackItem.draggable = true;
+  trackItem.addEventListener('dragstart', (e) => {
+    if (e.dataTransfer) {
+      e.dataTransfer.setData('application/json', JSON.stringify({
+        type: 'song',
+        song: song,
+        sourceUrl: openSubsonicClient?.getStreamUrl(song.id)
+      }));
+      e.dataTransfer.effectAllowed = 'copy';
+    }
+  });
+  
+  return trackItem;
+}
+
+// Container function for song lists
+function createUnifiedSongsContainer(songs: OpenSubsonicSong[], context: 'search' | 'album' | 'queue' = 'album'): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'spotify-songs-container';
+  
+  songs.forEach(song => {
+    const songElement = createUnifiedSongElement(song, context);
+    container.appendChild(songElement);
+  });
+  
+  return container;
+}
+
 function createSongHTMLOneline(song: OpenSubsonicSong): string {
   const duration = formatDuration(song.duration);
   const coverUrl = song.coverArt && openSubsonicClient ? openSubsonicClient.getCoverArtUrl(song.coverArt, 60) : '';
   
   return `
-    <div class="track-item-oneline" draggable="true" data-song-id="${song.id}" data-cover-art="${song.coverArt || ''}" data-type="song">
-      <div class="track-cover">
-        ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="no-cover"><span class="material-icons">music_note</span></div>'}
+    <div class="spotify-card spotify-song-row" draggable="true" data-song-id="${song.id}" data-cover-art="${song.coverArt || ''}" data-type="song">
+      <div class="spotify-track-cover">
+        ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="spotify-no-cover"><span class="material-icons">music_note</span></div>'}
       </div>
-      <div class="track-title">${escapeHtml(song.title)}</div>
-      <div class="track-artist">${createArtistLinks(song)}</div>
-      <div class="track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
-      <div class="track-rating" data-song-id="${song.id}">
+      <div class="spotify-track-title">${escapeHtml(song.title)}</div>
+      <div class="spotify-track-artist">${createArtistLinks(song)}</div>
+      <div class="spotify-track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
+      <div class="spotify-track-rating" data-song-id="${song.id}">
         ${createStarRating(song.userRating || 0, song.id)}
       </div>
-      <div class="track-duration">${duration}</div>
+      <div class="spotify-track-duration">${duration}</div>
     </div>
   `;
 }
@@ -2131,14 +2197,24 @@ function createArtistHTML(artist: OpenSubsonicArtist): string {
   `;
 }
 
-// Search Results anzeigen
+// Search Results anzeigen mit MediaContainer
 function displaySearchResults(results: any, addToHistory: boolean = true) {
-  const searchResultsSection = document.getElementById('search-results');
-  const noSearchState = document.getElementById('no-search-state');
+  // FIRST: Switch to search tab to make elements accessible
+  const searchTabBtn = document.querySelector('.tab-btn[data-tab="search"]') as HTMLElement;
+  const browseTabBtn = document.querySelector('.tab-btn[data-tab="browse"]') as HTMLElement;
   const searchContent = document.getElementById('search-content');
+  const browseContent = document.getElementById('browse-content');
   
-  if (!searchResultsSection || !searchContent) {
-    console.error('Search results containers not found');
+  if (searchTabBtn && browseTabBtn && searchContent && browseContent) {
+    // Switch to search tab
+    browseTabBtn.classList.remove('active');
+    searchTabBtn.classList.add('active');
+    browseContent.classList.remove('active');
+    searchContent.classList.add('active');
+  }
+
+  if (!searchContent) {
+    console.error('Search content container not found');
     return;
   }
 
@@ -2149,58 +2225,113 @@ function displaySearchResults(results: any, addToHistory: boolean = true) {
     lastSearchQuery = searchInput.value.trim();
   }
   
-  let html = '';
+  // Clear previous content and use searchContent directly as universal container
+  searchContent.innerHTML = '';
   
-  // Artists zuerst
+  let hasResults = false;
+  
+  // Artists mit MediaContainer
   if (results.artist && results.artist.length > 0) {
-    html += '<h4>Artists</h4>';
-    html += '<div class="artists-section">' + results.artist.map((artist: OpenSubsonicArtist) => createArtistHTML(artist)).join('') + '</div>';
+    hasResults = true;
+    const artistsContainer = document.createElement('div');
+    artistsContainer.innerHTML = '<h4>Artists</h4><div id="search-artists"></div>';
+    searchContent.appendChild(artistsContainer);
+    
+    const artistItems: MediaItem[] = results.artist.map((artist: OpenSubsonicArtist) => ({
+      id: artist.id,
+      name: artist.name,
+      type: 'artist' as const,
+      coverArt: artist.coverArt,
+      artistImageUrl: artist.artistImageUrl,
+      albumCount: artist.albumCount
+    }));
+
+    const artistContainer = new MediaContainer({
+      containerId: 'search-artists',
+      items: artistItems,
+      displayMode: 'grid',
+      itemType: 'artist',
+      showInfo: false,
+      onItemClick: (item) => {
+        const artist = results.artist.find((a: OpenSubsonicArtist) => a.id === item.id);
+        if (artist) loadArtistAlbums(artist);
+      }
+    });
+
+    artistContainer.render();
   }
   
-  // Dann Albums
+  // Albums mit MediaContainer
   if (results.album && results.album.length > 0) {
-    html += '<h4>Albums</h4>';
-    html += '<div class="albums-grid">' + results.album.map((album: OpenSubsonicAlbum) => createAlbumHTML(album)).join('') + '</div>';
+    hasResults = true;
+    const albumsContainer = document.createElement('div');
+    albumsContainer.innerHTML = '<h4>Albums</h4><div id="search-albums"></div>';
+    searchContent.appendChild(albumsContainer);
+    
+    const albumItems: MediaItem[] = results.album.map((album: OpenSubsonicAlbum) => ({
+      id: album.id,
+      name: album.name,
+      type: 'album' as const,
+      coverArt: album.coverArt,
+      artist: album.artist,
+      year: album.year
+    }));
+
+    const albumContainer = new MediaContainer({
+      containerId: 'search-albums',
+      items: albumItems,
+      displayMode: 'grid',
+      itemType: 'album',
+      showInfo: false,
+      onItemClick: (item) => {
+        const album = results.album.find((a: OpenSubsonicAlbum) => a.id === item.id);
+        if (album) loadAlbumTracks(album);
+      }
+    });
+
+    albumContainer.render();
   }
   
-  // Songs zuletzt
+  // Songs mit MediaContainer
   if (results.song && results.song.length > 0) {
-    html += '<h4>Songs</h4>';
-    html += '<div class="songs-table-header">';
-    html += '<div class="header-cover">Cover</div>';
-    html += '<div class="header-title">Title</div>';
-    html += '<div class="header-artist">Artist</div>';
-    html += '<div class="header-album">Album</div>';
-    html += '<div class="header-rating">Rating</div>';
-    html += '<div class="header-duration">Duration</div>';
-    html += '</div>';
-    html += '<div class="songs-table">' + results.song.map((song: OpenSubsonicSong) => createSongHTMLOneline(song)).join('') + '</div>';
+    hasResults = true;
+    const songsContainer = document.createElement('div');
+    songsContainer.innerHTML = '<h4>Songs</h4><div id="search-songs"></div>';
+    searchContent.appendChild(songsContainer);
+    
+    const songItems: MediaItem[] = results.song.map((song: OpenSubsonicSong) => ({
+      id: song.id,
+      name: song.title,
+      type: 'song' as const,
+      coverArt: song.coverArt,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration
+    }));
+
+    const songContainer = new MediaContainer({
+      containerId: 'search-songs',
+      items: songItems,
+      displayMode: 'list',
+      itemType: 'song',
+      showInfo: false,
+      onItemClick: (item) => {
+        const song = results.song.find((s: OpenSubsonicSong) => s.id === item.id);
+        if (song) {
+          console.log('Playing song:', song.title);
+          // TODO: Add to player or start playing
+        }
+      }
+    });
+
+    songContainer.render();
   }
   
-  if (!html) {
-    html = '<div class="no-results">No results found</div>';
+  if (!hasResults) {
+    searchContent.innerHTML = '<div class="no-results">No results found</div>';
   }
   
-  // Search results anzeigen, No Search State verstecken
-  searchContent.innerHTML = html;
-  searchResultsSection.style.display = 'block';
-  if (noSearchState) {
-    noSearchState.style.display = 'none';
-  }
-  
-  console.log('Search results displayed and saved');
-  
-  // Kleine Verz�gerung f�r DOM-Rendering
-  setTimeout(() => {
-    addDragListeners(searchContent);
-    console.log('Drag listeners added to search results');
-    addAlbumClickListeners(searchContent);
-    console.log('Album click listeners added to search results');
-    addArtistClickListeners(searchContent);
-    console.log('Artist click listeners added to search results');
-    addSongClickListeners(searchContent);
-    console.log('Song click listeners added to search results');
-  }, 50);
+  console.log('Search results displayed with MediaContainer');
 }
 
 // Zur�ck zu den letzten Suchergebnissen
@@ -2234,7 +2365,7 @@ function returnToLastSearchResults() {
 
 // Drag & Drop Listeners hinzuf�gen
 function addDragListeners(container: Element) {
-  const trackItems = container.querySelectorAll('.track-item, .track-item-oneline');
+  const trackItems = container.querySelectorAll('.track-item, .track-item-oneline, .spotify-song-row, .unified-song-item');
   const albumItems = container.querySelectorAll('.album-item-modern[draggable="true"]');
   
   console.log(`Adding drag listeners to ${trackItems.length} track items and ${albumItems.length} album items`);
@@ -2301,9 +2432,17 @@ function addSongClickListeners(container: Element) {
       console.log('Click event details:', { target: e.target, currentTarget: e.currentTarget });
       
       if (artistId) {
-        // Wenn wir eine Artist ID haben, verwende diese direkt
-        console.log(`Calling showArtistDetails with ID: ${artistId} and name: ${artistName}`);
-        await showArtistDetails(artistId, artistName);
+        // Use the new LibraryBrowser system
+        const artist: OpenSubsonicArtist = {
+          id: artistId,
+          name: artistName || 'Unknown Artist',
+          albumCount: 0
+        };
+        if (libraryBrowser) {
+          libraryBrowser.showArtist(artist);
+        } else {
+          console.error('LibraryBrowser not available');
+        }
       } else if (artistName && openSubsonicClient) {
         // Fallback: Suche nach Artist by Name
         console.log(`No artist ID found, searching by name: ${artistName}`);
@@ -2317,7 +2456,11 @@ function addSongClickListeners(container: Element) {
             
             if (artist) {
               console.log(`Found artist through search: ${artist.name} (ID: ${artist.id})`);
-              await showArtistDetails(artist.id);
+              if (libraryBrowser) {
+                libraryBrowser.showArtist(artist);
+              } else {
+                console.error('LibraryBrowser not available');
+              }
             } else {
               console.error('Artist not found in search results');
             }
@@ -2526,7 +2669,17 @@ function showAlbumSongsFromState(data: { albumId: string, album: any, songs: Ope
       html += '<div class="header-rating">Rating</div>';
       html += '<div class="header-duration">Duration</div>';
       html += '</div>';
-      html += '<div class="songs-table">' + songs.map((song: OpenSubsonicSong) => createSongHTMLOneline(song)).join('') + '</div>';
+      // Use unified song container for artist songs
+      const songsContainer = createUnifiedSongsContainer(songs, 'album');
+      const artistDetailsContainer = document.getElementById('artist-details');
+      if (artistDetailsContainer) {
+        const existingSongsTable = artistDetailsContainer.querySelector('.songs-table, .unified-songs-container');
+        if (existingSongsTable) {
+          existingSongsTable.replaceWith(songsContainer);
+        } else {
+          artistDetailsContainer.appendChild(songsContainer);
+        }
+      }
       
       targetContainer.innerHTML = html;
       addDragListeners(targetContainer);
@@ -2629,31 +2782,22 @@ function showStatusMessage(message: string, type: 'success' | 'error' | 'info' =
 }
 
 function showSearchLoading() {
-  const searchResultsSection = document.getElementById('search-results');
-  const noSearchState = document.getElementById('no-search-state');
   const searchContent = document.getElementById('search-content');
   
-  if (searchResultsSection && searchContent) {
-    // Search results anzeigen, No Search State verstecken
+  if (searchContent) {
     searchContent.innerHTML = '<div class="loading">Searching...</div>';
-    searchResultsSection.style.display = 'block';
-    if (noSearchState) {
-      noSearchState.style.display = 'none';
-    }
   }
 }
 
-// No Search State anzeigen (verstecke Search Results)
+// No Search State anzeigen (leere Suchergebnisse)
 function showNoSearchState() {
-  const searchResultsSection = document.getElementById('search-results');
-  const noSearchState = document.getElementById('no-search-state');
+  const searchContent = document.getElementById('search-content');
   
-  if (searchResultsSection && noSearchState) {
-    searchResultsSection.style.display = 'none';
-    noSearchState.style.display = 'flex';
+  if (searchContent) {
+    searchContent.innerHTML = '<div class="search-prompt"><span class="material-icons">search</span><h3>Search for music</h3><p>Enter a song, album or artist name to find music</p></div>';
   }
   
-  // L�sche Suchhistorie, wenn zur�ck zum No Search State
+  // Lösche Suchhistorie, wenn zurück zum No Search State
   lastSearchResults = null;
   lastSearchQuery = '';
   console.log('Search history cleared');
@@ -2716,7 +2860,7 @@ async function addToQueue(songId: string) {
   
   if (!song) {
     // Wenn nicht gefunden, versuche �ber Search Results zu finden
-    const searchResults = document.querySelectorAll('.track-item');
+    const searchResults = document.querySelectorAll('.track-item, .spotify-song-row, .unified-song-item');
     for (const item of searchResults) {
       const element = item as HTMLElement;
       if (element.dataset.songId === songId) {
@@ -2779,7 +2923,7 @@ function initializeOpenSubsonicLogin() {
   const serverInput = document.getElementById('OpenSubsonic-server') as HTMLInputElement;
   const loginForm = document.getElementById('OpenSubsonic-login') as HTMLElement;
   const djControls = document.getElementById('dj-controls') as HTMLElement;
-  const searchContainer = document.getElementById('search-container') as HTMLElement;
+  // Note: searchContainer no longer exists - removed with tab system
   
   // Umgebungsvariablen aus Vite abrufen
   const envUrl = import.meta.env.VITE_OpenSubsonic_URL;
@@ -2821,15 +2965,20 @@ function initializeOpenSubsonicLogin() {
       if (authenticated) {
         console.log("? OpenSubsonic connected successfully!");
         
-        // Verstecke Login-Form, zeige DJ-Controls und Suchfeld
+        // Verstecke Login-Form, zeige DJ-Controls
         loginForm.style.display = 'none';
         djControls.style.display = 'flex';
-        searchContainer.style.display = 'flex';
+        // Note: searchContainer no longer exists - search is now integrated in LibraryBrowser
         
         // Initialisiere Musikbibliothek
         console.log("🎵 About to call initializeMusicLibrary...");
         await initializeMusicLibrary();
         console.log("🎵 Finished calling initializeMusicLibrary");
+        
+        console.log("📊 Final state check:");
+        console.log("  - libraryBrowser exists:", !!libraryBrowser);
+        console.log("  - browse-content element:", !!document.getElementById('browse-content'));
+        console.log("  - openSubsonicClient exists:", !!openSubsonicClient);
         
       } else {
         console.log('? Login failed - Wrong username or password');
@@ -3357,7 +3506,7 @@ function findSongById(songId: string): OpenSubsonicSong | null {
   if (song) return song;
   
   // Suche in Search Results (DOM) - sowohl alte als auch neue Track-Items
-  const searchResults = document.querySelectorAll('.track-item, .track-item-oneline');
+  const searchResults = document.querySelectorAll('.track-item, .track-item-oneline, .spotify-song-row, .unified-song-item');
   for (const item of searchResults) {
     const element = item as HTMLElement;
     if (element.dataset.songId === songId) {
@@ -3655,80 +3804,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ======= MEDIA LIBRARY FUNCTIONS =======
 
-// Initialize Media Library with Tab Navigation
+// Initialize Media Library with Unified Browser
 function initializeMediaLibrary() {
-  // Tab switching functionality
-  const tabButtons = document.querySelectorAll('.tab-btn');
-  const tabContents = document.querySelectorAll('.tab-content');
-
-  tabButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      const targetTab = (button as HTMLElement).dataset.tab;
-      
-      // Remove active class from all tabs and contents
-      tabButtons.forEach(btn => btn.classList.remove('active'));
-      tabContents.forEach(content => content.classList.remove('active'));
-      
-      // Add active class to clicked tab and corresponding content
-      button.classList.add('active');
-      const targetContent = document.getElementById(`${targetTab}-content`);
-      if (targetContent) {
-        targetContent.classList.add('active');
-      }
-    });
-  });
-
-  // Zeige Login-Hinweis anstatt Content zu laden
+  // Don't initialize the browser yet - only show login hint
+  // The browser will be initialized after successful login
   showLoginHintForLibrary();
 }
 
 // Zeige Login-Hinweis für Media Library
 function showLoginHintForLibrary() {
-  // Set loading placeholders für Browse tab
-  const recentAlbums = document.getElementById('recent-albums');
-  const randomAlbums = document.getElementById('random-albums');
-  const randomArtists = document.getElementById('random-artists');
-
-  if (recentAlbums) {
-    recentAlbums.innerHTML = '<div class="login-hint">🔒 Please login to browse music</div>';
-  }
-  if (randomAlbums) {
-    randomAlbums.innerHTML = '<div class="login-hint">🔒 Please login to browse music</div>';
-  }
-  if (randomArtists) {
-    randomArtists.innerHTML = '<div class="login-hint">🔒 Please login to browse music</div>';
-  }
-
-  // Set login hint für Search tab
-  const searchResults = document.getElementById('search-results');
-  if (searchResults) {
-    searchResults.innerHTML = '<div class="login-hint">🔒 Please login to search music</div>';
-  }
-
-  // Deaktiviere Suchleiste
-  const searchInput = document.getElementById('search-input') as HTMLInputElement;
-  const searchBtn = document.getElementById('search-btn') as HTMLButtonElement;
+  console.log("🔒 showLoginHintForLibrary called");
   
-  if (searchInput) {
-    searchInput.disabled = true;
-    searchInput.placeholder = '🔒 Login required to search music';
-  }
-  if (searchBtn) {
-    searchBtn.disabled = true;
+  // Show login hint in the browser content
+  const browseContent = document.getElementById('browse-content');
+  if (browseContent) {
+    console.log("📦 Setting login hint in browse-content");
+    browseContent.innerHTML = `
+      <div class="library-login-hint">
+        <div class="login-prompt">
+          <span class="material-icons">lock</span>
+          <h3>Login Required</h3>
+          <p>Please login to your OpenSubsonic server to browse and play music</p>
+        </div>
+      </div>
+    `;
+  } else {
+    console.error("❌ browse-content not found for login hint");
   }
 }
 
-// Aktiviere Suchleiste nach erfolgreichem Login
-function enableSearchAfterLogin() {
-  const searchInput = document.getElementById('search-input') as HTMLInputElement;
-  const searchBtn = document.getElementById('search-btn') as HTMLButtonElement;
+// Aktiviere Media Library nach erfolgreichem Login
+function enableLibraryAfterLogin() {
+  console.log("🔓 enableLibraryAfterLogin called!");
+  console.log("📡 openSubsonicClient available:", !!openSubsonicClient);
   
-  if (searchInput) {
-    searchInput.disabled = false;
-    searchInput.placeholder = 'Search music...';
+  const browseContent = document.getElementById('browse-content');
+  console.log("📦 browse-content element found:", !!browseContent);
+  
+  if (!browseContent) {
+    console.error("❌ browse-content element not found!");
+    return;
   }
-  if (searchBtn) {
-    searchBtn.disabled = false;
+  
+  // Initialize and show the library browser with content
+  try {
+    console.log("🚀 Creating new LibraryBrowser...");
+    libraryBrowser = new LibraryBrowser();
+    console.log("✅ LibraryBrowser created successfully");
+  } catch (error) {
+    console.error("❌ Error initializing LibraryBrowser:", error);
   }
 }
 
@@ -3748,90 +3872,27 @@ async function loadBrowseContent() {
       loadRandomAlbums(),
       loadRandomArtists()
     ]);
+    
     console.log('✅ All browse content loaded successfully');
   } catch (error) {
     console.error('Failed to load browse content:', error);
   }
 }
 
-// Load recent albums
-async function loadRecentAlbums() {
-  console.log('Loading recent albums...');
-  const container = document.getElementById('recent-albums');
-  if (!container || !openSubsonicClient) {
-    console.warn('Container or client not available for recent albums');
-    return;
-  }
-
-  try {
-    const albums = await openSubsonicClient.getNewestAlbums(20);
-    console.log(`✅ Loaded ${albums.length} recent albums`);
-    container.innerHTML = '';
-    
-    albums.forEach((album: OpenSubsonicAlbum) => {
-      const albumCard = createAlbumCard(album);
-      container.appendChild(albumCard);
-    });
-  } catch (error) {
-    console.error('Failed to load recent albums:', error);
-    container.innerHTML = '<div class="loading-placeholder">Failed to load recent albums</div>';
-  }
-}
-
-// Load random albums
-async function loadRandomAlbums() {
-  const container = document.getElementById('random-albums');
-  if (!container || !openSubsonicClient) return;
-
-  try {
-    const albums = await openSubsonicClient.getRandomAlbums(20);
-    container.innerHTML = '';
-    
-    albums.forEach((album: OpenSubsonicAlbum) => {
-      const albumCard = createAlbumCard(album);
-      container.appendChild(albumCard);
-    });
-  } catch (error) {
-    console.error('Failed to load random albums:', error);
-    container.innerHTML = '<div class="loading-placeholder">Failed to load random albums</div>';
-  }
-}
-
-// Load random artists
-async function loadRandomArtists() {
-  const container = document.getElementById('random-artists');
-  if (!container || !openSubsonicClient) return;
-
-  try {
-    const artists = await openSubsonicClient.getRandomArtists(20);
-    container.innerHTML = '';
-    
-    console.log('Random artists loaded:', artists.map(a => ({ 
-      name: a.name, 
-      artistImageUrl: a.artistImageUrl, 
-      coverArt: a.coverArt 
-    })));
-    
-    artists.forEach((artist: OpenSubsonicArtist) => {
-      const artistCard = createArtistCard(artist);
-      container.appendChild(artistCard);
-    });
-  } catch (error) {
-    console.error('Failed to load random artists:', error);
-    container.innerHTML = '<div class="loading-placeholder">Failed to load random artists</div>';
-  }
-}
-
 // Create album card element
 function createAlbumCard(album: OpenSubsonicAlbum): HTMLElement {
+  const cardContainer = document.createElement('div');
+  cardContainer.className = 'album-card-container';
+
   const card = document.createElement('div');
   card.className = 'album-card';
   card.dataset.albumId = album.id;
 
   const coverUrl = album.coverArt 
-    ? openSubsonicClient.getCoverArtUrl(album.coverArt, 160)
+    ? openSubsonicClient.getCoverArtUrl(album.coverArt, 300)
     : '';
 
+  // Card contains only the cover and play overlay
   card.innerHTML = `
     <div class="album-cover">
       ${coverUrl 
@@ -3842,17 +3903,24 @@ function createAlbumCard(album: OpenSubsonicAlbum): HTMLElement {
         <span class="material-icons">play_arrow</span>
       </div>
     </div>
-    <div class="album-info">
-      <div class="album-title" title="${album.name}">${album.name}</div>
-      <div class="album-artist" title="${album.artist}">${album.artist}</div>
-      ${album.year ? `<div class="album-year">${album.year}</div>` : ''}
-    </div>
   `;
 
-  // Add click handler to load album tracks
-  card.addEventListener('click', () => loadAlbumTracks(album));
+  // Info goes below the card
+  const info = document.createElement('div');
+  info.className = 'album-info-external';
+  info.innerHTML = `
+    <div class="album-title" title="${album.name}">${album.name}</div>
+    <div class="album-artist" title="${album.artist}">${album.artist}</div>
+    ${album.year ? `<div class="album-year">${album.year}</div>` : ''}
+  `;
 
-  return card;
+  cardContainer.appendChild(card);
+  cardContainer.appendChild(info);
+
+  // Add click handler to the entire container
+  cardContainer.addEventListener('click', () => loadAlbumTracks(album));
+
+  return cardContainer;
 }
 
 // Create artist card element
@@ -3861,22 +3929,20 @@ function createArtistCard(artist: OpenSubsonicArtist): HTMLElement {
   card.className = 'artist-card';
   card.dataset.artistId = artist.id;
 
-  // Verwende artistImageUrl falls verfügbar, sonst coverArt, sonst Fallback Icon
-  let imageHtml = '<span class="material-icons">person</span>';
-  
-  if (artist.artistImageUrl) {
-    imageHtml = `<img src="${artist.artistImageUrl}" alt="${artist.name}" onerror="this.parentElement.innerHTML='<span class=\\"material-icons\\">person</span>'">`;
-  } else if (artist.coverArt) {
-    const coverUrl = openSubsonicClient.getCoverArtUrl(artist.coverArt, 160);
-    imageHtml = `<img src="${coverUrl}" alt="${artist.name}" onerror="this.parentElement.innerHTML='<span class=\\"material-icons\\">person</span>'">`;
-  }
+  const avatarDiv = document.createElement('div');
+  avatarDiv.className = 'artist-avatar';
 
-  card.innerHTML = `
-    <div class="artist-avatar">
-      ${imageHtml}
-    </div>
-    <div class="artist-name" title="${artist.name}">${artist.name}</div>
-  `;
+  // Verwende artistImageUrl falls verfügbar, sonst coverArt, sonst Fallback Icon
+  // Always show fallback icon - no image loading
+  avatarDiv.innerHTML = '<span class="material-icons">artist</span>';
+
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'artist-name';
+  nameDiv.title = artist.name;
+  nameDiv.textContent = artist.name;
+
+  card.appendChild(avatarDiv);
+  card.appendChild(nameDiv);
 
   // Add click handler to load artist albums
   card.addEventListener('click', () => loadArtistAlbums(artist));
@@ -3884,76 +3950,1397 @@ function createArtistCard(artist: OpenSubsonicArtist): HTMLElement {
   return card;
 }
 
-// Load tracks from an album and display in search results
+// Load tracks from an album and display results
 async function loadAlbumTracks(album: OpenSubsonicAlbum) {
   if (!openSubsonicClient) return;
 
   try {
-    // Switch to search tab to show results
-    const searchTab = document.querySelector('[data-tab="search"]') as HTMLElement;
-    const browseTab = document.querySelector('[data-tab="browse"]') as HTMLElement;
-    const searchContent = document.getElementById('search-content');
-    const browseContent = document.getElementById('browse-content');
-
-    if (searchTab && browseTab && searchContent && browseContent) {
-      browseTab.classList.remove('active');
-      searchTab.classList.add('active');
-      browseContent.classList.remove('active');
-      searchContent.classList.add('active');
-    }
-
+    console.log(`Loading tracks for album: ${album.name}`);
+    
     // Load album tracks
     const tracks = await openSubsonicClient.getAlbumTracks(album.id);
     
-    // Display in search results
-    const searchResults = document.getElementById('search-results');
-    if (searchResults && tracks.length > 0) {
-      displaySearchResults({ song: tracks, album: [], artist: [] });
-      
-      // Update search input to show what was loaded
-      const searchInput = document.getElementById('search-input') as HTMLInputElement;
-      if (searchInput) {
-        searchInput.value = `Album: ${album.name}`;
-      }
-    }
+    // Show album detail view in browse tab
+    showAlbumDetailView(album, tracks);
   } catch (error) {
     console.error('Failed to load album tracks:', error);
   }
 }
 
-// Load albums from an artist and display in search results
+// Load albums from an artist and display in detail view
 async function loadArtistAlbums(artist: OpenSubsonicArtist) {
   if (!openSubsonicClient) return;
 
   try {
-    // Switch to search tab to show results
-    const searchTab = document.querySelector('[data-tab="search"]') as HTMLElement;
-    const browseTab = document.querySelector('[data-tab="browse"]') as HTMLElement;
-    const searchContent = document.getElementById('search-content');
-    const browseContent = document.getElementById('browse-content');
-
-    if (searchTab && browseTab && searchContent && browseContent) {
-      browseTab.classList.remove('active');
-      searchTab.classList.add('active');
-      browseContent.classList.remove('active');
-      searchContent.classList.add('active');
-    }
-
+    console.log(`Loading albums for artist: ${artist.name}`);
+    
     // Load artist albums
     const albums = await openSubsonicClient.getArtistAlbums(artist.id);
     
-    // Display in search results
-    const searchResults = document.getElementById('search-results');
-    if (searchResults && albums.length > 0) {
-      displaySearchResults({ song: [], album: albums, artist: [] });
-      
-      // Update search input to show what was loaded
-      const searchInput = document.getElementById('search-input') as HTMLInputElement;
-      if (searchInput) {
-        searchInput.value = `Artist: ${artist.name}`;
-      }
-    }
+    // Show artist detail view in browse tab
+    showArtistDetailView(artist, albums);
   } catch (error) {
     console.error('Failed to load artist albums:', error);
+  }
+}
+
+// Generate star rating HTML
+function generateStarRating(rating: number): string {
+  const stars = [];
+  for (let i = 1; i <= 5; i++) {
+    const filled = i <= rating ? 'filled' : '';
+    stars.push(`<span class="star ${filled}" data-rating="${i}">★</span>`);
+  }
+  return stars.join('');
+}
+
+// Update track rating
+function updateTrackRating(trackId: string, rating: number) {
+  if (!openSubsonicClient) return;
+  
+  try {
+    // Store rating locally (in future could sync with server)
+    const storedRatings = JSON.parse(localStorage.getItem('trackRatings') || '{}');
+    storedRatings[trackId] = rating;
+    localStorage.setItem('trackRatings', JSON.stringify(storedRatings));
+    
+    console.log(`Rated track ${trackId}: ${rating} stars`);
+    
+    // TODO: If OpenSubsonic supports rating API, call it here
+    // openSubsonicClient.setRating(trackId, rating);
+  } catch (error) {
+    console.error('Failed to update track rating:', error);
+  }
+}
+
+// Get stored track rating
+function getStoredTrackRating(trackId: string): number {
+  try {
+    const storedRatings = JSON.parse(localStorage.getItem('trackRatings') || '{}');
+    return storedRatings[trackId] || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Show album detail view
+function showAlbumDetailView(album: OpenSubsonicAlbum, tracks: OpenSubsonicSong[]) {
+  const browseContent = document.getElementById('browse-content');
+  if (!browseContent) return;
+
+  // Hide all sections
+  const sections = browseContent.querySelectorAll('.media-section');
+  sections.forEach(section => {
+    (section as HTMLElement).style.display = 'none';
+  });
+
+  // Remove existing detail view
+  const existingDetail = browseContent.querySelector('.detail-view');
+  if (existingDetail) {
+    existingDetail.remove();
+  }
+
+  // Create album detail view
+  const detailView = document.createElement('div');
+  detailView.className = 'detail-view';
+  
+  const coverUrl = album.coverArt 
+    ? openSubsonicClient.getCoverArtUrl(album.coverArt, 300)
+    : '';
+
+  detailView.innerHTML = `
+    <div class="album-detail">
+      <div class="album-info">
+        <button class="back-btn" onclick="showBrowseView()">
+          <span class="material-icons">arrow_back</span> Back
+        </button>
+        <div class="album-info-content">
+          <div class="album-cover-large">
+            ${coverUrl 
+              ? `<img src="${coverUrl}" alt="${album.name}">`
+              : '<span class="material-icons">album</span>'
+            }
+          </div>
+          <div class="album-meta">
+            <h2>${album.name}</h2>
+            <h3>${album.artist || 'Unknown Artist'}</h3>
+            ${album.year ? `<p>Year: ${album.year}</p>` : ''}
+            <p>${tracks.length} tracks</p>
+          </div>
+        </div>
+      </div>
+      <div class="track-list">
+        <h4>Tracks</h4>
+        <div class="tracks">
+          ${tracks.map((track, index) => `
+            <div class="track-item" data-track-id="${track.id}" draggable="true">
+              <span class="track-number">${index + 1}</span>
+              <span class="track-title">${track.title}</span>
+              <div class="track-rating" data-track-id="${track.id}">
+                ${generateStarRating(getStoredTrackRating(track.id))}
+              </div>
+              <span class="track-duration">${formatDuration(track.duration || 0)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  browseContent.appendChild(detailView);
+  
+  // Add drag and drop handlers for tracks
+  const trackItems = detailView.querySelectorAll('.track-item');
+  trackItems.forEach((item, index) => {
+    const trackElement = item as HTMLElement;
+    const trackId = trackElement.getAttribute('data-track-id');
+    const track = tracks.find(t => t.id === trackId);
+    
+    // Drag handlers
+    trackElement.addEventListener('dragstart', (e) => {
+      trackElement.classList.add('dragging');
+      if (track && e.dataTransfer) {
+        e.dataTransfer.setData('application/json', JSON.stringify({
+          type: 'track',
+          track: track,
+          sourceUrl: openSubsonicClient?.getStreamUrl(track.id)
+        }));
+        e.dataTransfer.effectAllowed = 'copy';
+      }
+    });
+    
+    trackElement.addEventListener('dragend', () => {
+      trackElement.classList.remove('dragging');
+    });
+    
+    // Click handler for playing
+    trackElement.addEventListener('click', (e) => {
+      // Ignore clicks on rating stars
+      if ((e.target as HTMLElement).classList.contains('star')) return;
+      
+      if (track) {
+        console.log('Playing track:', track.title);
+        // TODO: Add to player or start playing
+      }
+    });
+  });
+  
+  // Add rating handlers
+  const ratingContainers = detailView.querySelectorAll('.track-rating');
+  ratingContainers.forEach(container => {
+    const trackId = container.getAttribute('data-track-id');
+    const stars = container.querySelectorAll('.star');
+    
+    stars.forEach((star, index) => {
+      const starElement = star as HTMLElement;
+      
+      // Hover effects
+      starElement.addEventListener('mouseenter', () => {
+        stars.forEach((s, i) => {
+          s.classList.toggle('hover', i <= index);
+        });
+      });
+      
+      starElement.addEventListener('mouseleave', () => {
+        stars.forEach(s => s.classList.remove('hover'));
+      });
+      
+      // Click to rate
+      starElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rating = parseInt(starElement.getAttribute('data-rating') || '0');
+        updateTrackRating(trackId!, rating);
+        
+        // Update visual state
+        stars.forEach((s, i) => {
+          s.classList.toggle('filled', i < rating);
+        });
+      });
+    });
+  });
+}
+
+// Show artist detail view
+function showArtistDetailView(artist: OpenSubsonicArtist, albums: OpenSubsonicAlbum[]) {
+  const browseContent = document.getElementById('browse-content');
+  if (!browseContent) return;
+
+  // Hide all sections
+  const sections = browseContent.querySelectorAll('.media-section');
+  sections.forEach(section => {
+    (section as HTMLElement).style.display = 'none';
+  });
+
+  // Remove existing detail view
+  const existingDetail = browseContent.querySelector('.detail-view');
+  if (existingDetail) {
+    existingDetail.remove();
+  }
+
+  // Create artist detail view
+  const detailView = document.createElement('div');
+  detailView.className = 'detail-view';
+  
+  let artistImageUrl = '';
+  if (artist.artistImageUrl) {
+    // Remove existing size parameter and add size=300
+    artistImageUrl = artist.artistImageUrl.replace(/[?&]size=\d+/g, '');
+    artistImageUrl += (artistImageUrl.includes('?') ? '&' : '?') + 'size=300';
+  } else if (artist.coverArt) {
+    artistImageUrl = openSubsonicClient.getCoverArtUrl(artist.coverArt, 300);
+  }
+
+  detailView.innerHTML = `
+    <div class="detail-header">
+      <button class="back-btn" onclick="showBrowseView()">
+        <span class="material-icons">arrow_back</span> Back to Browse
+      </button>
+    </div>
+    <div class="artist-detail">
+      <div class="artist-info">
+        <div class="artist-image-large">
+          ${artistImageUrl 
+            ? `<img src="${artistImageUrl}" alt="${artist.name}">`
+            : '<span class="material-icons">person</span>'
+          }
+        </div>
+        <div class="artist-meta">
+          <h2>${artist.name}</h2>
+          ${artist.albumCount ? `<p>${artist.albumCount} albums</p>` : ''}
+        </div>
+      </div>
+      <div class="album-grid">
+        <h4>Albums</h4>
+        <div class="albums" id="artist-albums">
+          <!-- Albums will be loaded via MediaContainer -->
+        </div>
+      </div>
+    </div>
+  `;
+
+  browseContent.appendChild(detailView);
+  
+  // Load albums using MediaContainer
+  const mediaItems: MediaItem[] = albums.map((album: OpenSubsonicAlbum) => ({
+    id: album.id,
+    name: album.name,
+    type: 'album' as const,
+    coverArt: album.coverArt,
+    artist: album.artist,
+    year: album.year
+  }));
+
+  const container = new MediaContainer({
+    containerId: 'artist-albums',
+    items: mediaItems,
+    displayMode: 'grid',
+    itemType: 'album',
+    onItemClick: (item) => {
+      const album = albums.find((a: OpenSubsonicAlbum) => a.id === item.id);
+      if (album) loadAlbumTracks(album);
+    }
+  });
+
+  container.render();
+}
+
+// Unified Library Browser System
+interface BrowseContext {
+  type: 'home' | 'artist' | 'album' | 'search';
+  data?: any;
+  breadcrumbs: BreadcrumbItem[];
+}
+
+interface BreadcrumbItem {
+  label: string;
+  type: 'home' | 'artist' | 'album';
+  id?: string;
+  action: () => void;
+}
+
+class LibraryBrowser {
+  private currentContext: BrowseContext = {
+    type: 'home',
+    breadcrumbs: [{ label: 'Library', type: 'home', action: () => this.showHome() }]
+  };
+
+  private container: HTMLElement;
+
+  constructor() {
+    console.log("🏗️ LibraryBrowser constructor called");
+    this.container = document.getElementById('browse-content')!;
+    
+    if (!this.container) {
+      console.error("❌ browse-content container not found in LibraryBrowser constructor!");
+      throw new Error("Container 'browse-content' not found");
+    }
+    
+    console.log("📦 Container found:", this.container);
+    console.log("🔧 Initializing browser...");
+    this.initializeBrowser();
+    console.log("✅ LibraryBrowser initialization complete");
+  }
+
+  private initializeBrowser() {
+    // Create compact navigation header with tilted breadcrumbs and search
+    const header = document.createElement('div');
+    header.className = 'library-header';
+    header.innerHTML = `
+      <div class="compact-nav-container">
+        <div class="tilted-breadcrumbs" id="breadcrumbs"></div>
+        <div class="tilted-search-container">
+          <input type="text" id="search-input" placeholder="Search...">
+          <button id="search-btn"><span class="material-icons">search</span></button>
+        </div>
+      </div>
+    `;
+
+    // Create content area
+    const content = document.createElement('div');
+    content.className = 'library-content';
+    content.id = 'library-content';
+
+    this.container.innerHTML = '';
+    this.container.appendChild(header);
+    this.container.appendChild(content);
+
+    this.updateBreadcrumbs();
+    
+    // Only show home content if we have an authenticated client
+    if (openSubsonicClient) {
+      this.showHome();
+    } else {
+      content.innerHTML = '<div class="loading-placeholder">Initializing library...</div>';
+    }
+
+    // Setup search
+    this.setupSearch();
+  }
+
+  private updateBreadcrumbs() {
+    const breadcrumbContainer = document.getElementById('breadcrumbs')!;
+    breadcrumbContainer.innerHTML = this.currentContext.breadcrumbs
+      .map((item, index) => {
+        const isLast = index === this.currentContext.breadcrumbs.length - 1;
+        return `<div class="tilted-breadcrumb-item ${isLast ? 'active' : 'clickable'}" 
+                      ${!isLast ? `onclick="libraryBrowser.navigateToBreadcrumb(${index})"` : ''}>
+                  ${item.label}
+                </div>`;
+      })
+      .join('');
+  }
+
+  navigateToBreadcrumb(index: number) {
+    const breadcrumb = this.currentContext.breadcrumbs[index];
+    breadcrumb.action();
+  }
+
+  showHome() {
+    this.currentContext = {
+      type: 'home',
+      breadcrumbs: [{ label: 'Library', type: 'home', action: () => this.showHome() }]
+    };
+    
+    this.updateBreadcrumbs();
+    this.loadHomeContent();
+  }
+
+  showArtist(artist: OpenSubsonicArtist) {
+    this.currentContext = {
+      type: 'artist',
+      data: artist,
+      breadcrumbs: [
+        { label: 'Library', type: 'home', action: () => this.showHome() },
+        { label: artist.name, type: 'artist', id: artist.id, action: () => this.showArtist(artist) }
+      ]
+    };
+    
+    this.updateBreadcrumbs();
+    this.loadArtistContent(artist);
+  }
+
+  showAlbum(album: OpenSubsonicAlbum) {
+    // Create album display name with year if available
+    const albumDisplayName = album.year ? `${album.name} (${album.year})` : album.name;
+    
+    this.currentContext = {
+      type: 'album',
+      data: album,
+      breadcrumbs: [
+        { label: 'Library', type: 'home', action: () => this.showHome() },
+        { label: album.artist, type: 'artist', action: () => this.showArtist({id: album.artistId, name: album.artist} as OpenSubsonicArtist) },
+        { label: albumDisplayName, type: 'album', id: album.id, action: () => this.showAlbum(album) }
+      ]
+    };
+    
+    this.updateBreadcrumbs();
+    this.loadAlbumContent(album);
+  }
+
+  private async loadHomeContent() {
+    const content = document.getElementById('library-content')!;
+    content.innerHTML = `
+      <div class="media-section">
+        <h3 class="spotify-section-title">Recent Albums</h3>
+        <div class="horizontal-scroll" id="recent-albums">
+          <div class="loading-placeholder">Loading recent albums...</div>
+        </div>
+      </div>
+
+      <div class="media-section">
+        <h3 class="spotify-section-title">Random Albums</h3>
+        <div class="horizontal-scroll" id="random-albums">
+          <div class="loading-placeholder">Loading random albums...</div>
+        </div>
+      </div>
+
+      <div class="media-section">
+        <h3 class="spotify-section-title">Random Artists</h3>
+        <div class="horizontal-scroll" id="random-artists">
+          <div class="loading-placeholder">Loading random artists...</div>
+        </div>
+      </div>
+    `;
+
+    // Load content
+    await this.loadBrowseData();
+  }
+
+  private async loadArtistContent(artist: OpenSubsonicArtist) {
+    const content = document.getElementById('library-content')!;
+    content.innerHTML = `
+      <div class="artist-header">
+        <div class="artist-info">
+          <div class="artist-image-large">
+            <span class="material-icons">person</span>
+          </div>
+          <div class="artist-details">
+            <h1 class="artist-name">${escapeHtml(artist.name)}</h1>
+            <p class="artist-album-count">${artist.albumCount || 0} Albums</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="media-section">
+        <h3 class="spotify-section-title">Albums</h3>
+        <div class="horizontal-scroll" id="artist-albums">
+          <div class="loading-placeholder">Loading albums...</div>
+        </div>
+      </div>
+
+      <div class="media-section">
+        <h3 class="spotify-section-title">Top Songs</h3>
+        <div class="spotify-songs-container" id="artist-songs">
+          <div class="loading-placeholder">Loading songs...</div>
+        </div>
+      </div>
+    `;
+
+    // Load artist data
+    try {
+      const [albums, songs] = await Promise.all([
+        openSubsonicClient.getArtistAlbums(artist.id),
+        openSubsonicClient.getArtistSongs(artist.id)
+      ]);
+
+      // Load albums
+      const albumsContainer = document.getElementById('artist-albums')!;
+      if (albums.length > 0) {
+        const albumsHtml = albums.map(album => `
+          <div class="spotify-card spotify-album-card clickable" data-album-id="${album.id}">
+            <div class="spotify-album-image">
+              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+              <div class="spotify-play-overlay">
+                <span class="material-icons">play_arrow</span>
+              </div>
+            </div>
+            <h4 class="spotify-album-title">${escapeHtml(album.name)}</h4>
+            <p class="spotify-album-artist">${album.year || 'Unknown Year'}</p>
+          </div>
+        `).join('');
+        
+        albumsContainer.className = 'spotify-horizontal-scroll';
+        albumsContainer.innerHTML = albumsHtml;
+        
+        // Add event listeners for album cards
+        albumsContainer.querySelectorAll('[data-album-id]').forEach(card => {
+          card.addEventListener('click', () => {
+            const albumId = card.getAttribute('data-album-id');
+            const album = albums.find(a => a.id === albumId);
+            if (album) {
+              libraryBrowser.showAlbum(album);
+            }
+          });
+        });
+      } else {
+        albumsContainer.innerHTML = '<p class="no-items">No albums found</p>';
+      }
+
+      // Load songs
+      const songsContainer = document.getElementById('artist-songs')!;
+      if (songs.length > 0) {
+        const songsListContainer = createUnifiedSongsContainer(songs, 'album');
+        songsContainer.innerHTML = '';
+        songsContainer.className = 'spotify-songs-container';
+        songsContainer.appendChild(songsListContainer);
+        
+        // Add click listeners for artist and album links in songs
+        addSongClickListeners(songsContainer);
+      } else {
+        songsContainer.innerHTML = '<p class="no-items">No songs found</p>';
+      }
+
+    } catch (error) {
+      console.error('Error loading artist content:', error);
+    }
+  }
+
+  private async loadAlbumContent(album: OpenSubsonicAlbum) {
+    const content = document.getElementById('library-content')!;
+    content.innerHTML = `
+      <div class="album-header">
+        <div class="album-info">
+          <div class="album-cover-large">
+            <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${album.name}">
+          </div>
+          <div class="album-details">
+            <h1 class="album-name">${escapeHtml(album.name)}</h1>
+            <p class="album-artist clickable-artist" data-artist-id="${album.artistId}" data-artist-name="${escapeHtml(album.artist)}">${escapeHtml(album.artist)}</p>
+            <p class="album-year">${album.year || 'Unknown Year'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="media-section">
+        <h3 class="spotify-section-title">Tracks</h3>
+        <div class="spotify-songs-container" id="album-songs">
+          <div class="loading-placeholder">Loading tracks...</div>
+        </div>
+      </div>
+    `;
+
+    // Load album songs
+    try {
+      const songs = await openSubsonicClient.getAlbumSongs(album.id);
+      
+      const songsContainer = document.getElementById('album-songs')!;
+      if (songs.length > 0) {
+        const songsListContainer = createUnifiedSongsContainer(songs, 'album');
+        songsContainer.innerHTML = '';
+        songsContainer.className = 'spotify-songs-container';
+        songsContainer.appendChild(songsListContainer);
+        
+        // Add click listeners for artist and album links in songs
+        addSongClickListeners(songsContainer);
+      } else {
+        songsContainer.innerHTML = '<p class="no-items">No tracks found</p>';
+      }
+
+    } catch (error) {
+      console.error('Error loading album content:', error);
+    }
+  }
+
+  private setupSearch() {
+    const searchInput = document.getElementById('search-input') as HTMLInputElement;
+    const searchBtn = document.getElementById('search-btn');
+
+    const performSearch = async () => {
+      const query = searchInput.value.trim();
+      if (!query) return;
+
+      this.currentContext = {
+        type: 'search',
+        data: { query },
+        breadcrumbs: [
+          { label: 'Library', type: 'home', action: () => this.showHome() },
+          { label: `Search: "${query}"`, type: 'home', action: () => {} }
+        ]
+      };
+
+      this.updateBreadcrumbs();
+      await this.loadSearchResults(query);
+    };
+
+    searchBtn?.addEventListener('click', performSearch);
+    searchInput?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') performSearch();
+    });
+  }
+
+  private async loadSearchResults(query: string) {
+    const content = document.getElementById('library-content')!;
+    content.innerHTML = '<div class="loading-placeholder">Searching...</div>';
+
+    try {
+      const results = await openSubsonicClient.search(query, 20, 20, 20);
+      
+      content.innerHTML = '';
+
+      // Artists
+      if (results.artist && results.artist.length > 0) {
+        const artistSection = document.createElement('div');
+        artistSection.className = 'media-section';
+        artistSection.innerHTML = '<h3 class="section-title">Artists</h3>';
+        
+        const artistsHtml = results.artist.map(artist => `
+          <div class="artist-item clickable" data-artist-id="${artist.id}">
+            <div class="artist-image">
+              <img src="${artist.coverArt ? openSubsonicClient.getCoverArtUrl(artist.coverArt, 300) : 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 fill=%22%23666%22%3E%3Crect width=%22200%22 height=%22200%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%22100%22 y=%22100%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'}" 
+                   alt="${escapeHtml(artist.name)}" 
+                   onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 fill=%22%23666%22%3E%3Crect width=%22200%22 height=%22200%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%22100%22 y=%22100%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+            </div>
+            <div class="artist-info">
+              <h4 class="artist-name">${escapeHtml(artist.name)}</h4>
+              <p class="artist-album-count">${artist.albumCount || 0} Albums</p>
+            </div>
+          </div>
+        `).join('');
+        
+        const artistContainer = document.createElement('div');
+        artistContainer.className = 'horizontal-scroll';
+        artistContainer.innerHTML = artistsHtml;
+        
+        // Add event listeners for artist cards
+        artistContainer.querySelectorAll('[data-artist-id]').forEach(card => {
+          card.addEventListener('click', () => {
+            const artistId = card.getAttribute('data-artist-id');
+            const artist = results.artist?.find(a => a.id === artistId);
+            if (artist) {
+              libraryBrowser.showArtist(artist);
+            }
+          });
+        });
+        
+        artistSection.appendChild(artistContainer);
+        content.appendChild(artistSection);
+      }
+
+      // Albums
+      if (results.album && results.album.length > 0) {
+        const albumSection = document.createElement('div');
+        albumSection.className = 'media-section';
+        albumSection.innerHTML = '<h3 class="section-title">Albums</h3>';
+        
+        const albumsHtml = results.album.map(album => `
+          <div class="album-item clickable" data-album-id="${album.id}">
+            <div class="album-cover">
+              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 fill=%22%23666%22%3E%3Crect width=%22200%22 height=%22200%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%22100%22 y=%22100%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+            </div>
+            <div class="album-info">
+              <h4 class="album-title">${escapeHtml(album.name)}</h4>
+              <p class="album-artist">${escapeHtml(album.artist)}</p>
+            </div>
+          </div>
+        `).join('');
+        
+        const albumContainer = document.createElement('div');
+        albumContainer.className = 'horizontal-scroll';
+        albumContainer.innerHTML = albumsHtml;
+        
+        // Add event listeners for album cards
+        albumContainer.querySelectorAll('[data-album-id]').forEach(card => {
+          card.addEventListener('click', () => {
+            const albumId = card.getAttribute('data-album-id');
+            const album = results.album?.find(a => a.id === albumId);
+            if (album) {
+              libraryBrowser.showAlbum(album);
+            }
+          });
+        });
+        
+        albumSection.appendChild(albumContainer);
+        content.appendChild(albumSection);
+      }
+
+      // Songs
+      if (results.song && results.song.length > 0) {
+        const songSection = document.createElement('div');
+        songSection.className = 'media-section';
+        songSection.innerHTML = '<h3 class="section-title">Songs</h3>';
+        
+        const songsContainer = createUnifiedSongsContainer(results.song, 'search');
+        songSection.appendChild(songsContainer);
+        content.appendChild(songSection);
+        
+        // Add click listeners for artist and album links in search results
+        addSongClickListeners(songSection);
+      }
+
+      if (!results.artist?.length && !results.album?.length && !results.song?.length) {
+        content.innerHTML = '<p class="no-items">No results found</p>';
+      }
+
+    } catch (error) {
+      console.error('Search error:', error);
+      content.innerHTML = '<p class="error-message">Search failed. Please try again.</p>';
+    }
+  }
+
+  private async loadBrowseData() {
+    // Same as existing loadBrowseData function but integrated
+    if (!openSubsonicClient) return;
+
+    try {
+      const [recentAlbums, randomAlbums, randomArtists] = await Promise.all([
+        openSubsonicClient.getAlbums(20, 0),
+        openSubsonicClient.getAlbums(20, 20), // Use offset to get different albums
+        openSubsonicClient.getRandomArtists(20)
+      ]);
+
+      // Recent Albums
+      const recentContainer = document.getElementById('recent-albums');
+      if (recentContainer && recentAlbums.length > 0) {
+        const albumsHtml = recentAlbums.map(album => `
+          <div class="spotify-card spotify-album-card clickable" data-album-id="${album.id}">
+            <div class="spotify-album-cover">
+              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+              <div class="spotify-play-overlay">
+                <span class="material-icons">play_arrow</span>
+              </div>
+            </div>
+            <h4 class="spotify-album-title">${escapeHtml(album.name)}</h4>
+            <p class="spotify-album-artist">${escapeHtml(album.artist)}</p>
+          </div>
+        `).join('');
+        
+        recentContainer.className = 'spotify-horizontal-scroll';
+        recentContainer.innerHTML = albumsHtml;
+        
+        // Add event listeners for recent album cards
+        recentContainer.querySelectorAll('[data-album-id]').forEach(card => {
+          card.addEventListener('click', () => {
+            const albumId = card.getAttribute('data-album-id');
+            const album = recentAlbums.find(a => a.id === albumId);
+            if (album) {
+              libraryBrowser.showAlbum(album);
+            }
+          });
+        });
+      }
+
+      // Random Albums
+      const randomContainer = document.getElementById('random-albums');
+      if (randomContainer && randomAlbums.length > 0) {
+        const albumsHtml = randomAlbums.map(album => `
+          <div class="spotify-card spotify-album-card clickable" data-album-id="${album.id}">
+            <div class="spotify-album-cover">
+              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+              <div class="spotify-play-overlay">
+                <span class="material-icons">play_arrow</span>
+              </div>
+            </div>
+            <h4 class="spotify-album-title">${escapeHtml(album.name)}</h4>
+            <p class="spotify-album-artist">${escapeHtml(album.artist)}</p>
+          </div>
+        `).join('');
+        
+        randomContainer.className = 'spotify-horizontal-scroll';
+        randomContainer.innerHTML = albumsHtml;
+        
+        // Add event listeners for random album cards
+        randomContainer.querySelectorAll('[data-album-id]').forEach(card => {
+          card.addEventListener('click', () => {
+            const albumId = card.getAttribute('data-album-id');
+            const album = randomAlbums.find(a => a.id === albumId);
+            if (album) {
+              libraryBrowser.showAlbum(album);
+            }
+          });
+        });
+      }
+
+      // Random Artists
+      const artistsContainer = document.getElementById('random-artists');
+      if (artistsContainer && randomArtists.length > 0) {
+        const artistsHtml = randomArtists.map(artist => `
+          <div class="spotify-card spotify-artist-card clickable" data-artist-id="${artist.id}">
+            <div class="spotify-artist-image">
+              <img src="${artist.coverArt ? openSubsonicClient.getCoverArtUrl(artist.coverArt, 300) : 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Ccircle cx=%2290%22 cy=%2290%22 r=%2280%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2295%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'}" 
+                   alt="${escapeHtml(artist.name)}" 
+                   onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Ccircle cx=%2290%22 cy=%2290%22 r=%2280%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2295%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+              <div class="spotify-play-overlay">
+                <span class="material-icons">play_arrow</span>
+              </div>
+            </div>
+            <h4 class="spotify-artist-name">${escapeHtml(artist.name)}</h4>
+            <p class="spotify-artist-type">Artist</p>
+          </div>
+        `).join('');
+        
+        artistsContainer.className = 'spotify-horizontal-scroll';
+        artistsContainer.innerHTML = artistsHtml;
+        
+        // Add event listeners for random artist cards
+        artistsContainer.querySelectorAll('[data-artist-id]').forEach(card => {
+          card.addEventListener('click', () => {
+            const artistId = card.getAttribute('data-artist-id');
+            const artist = randomArtists.find(a => a.id === artistId);
+            if (artist) {
+              libraryBrowser.showArtist(artist);
+            }
+          });
+        });
+      }
+
+    } catch (error) {
+      console.error('Error loading browse content:', error);
+    }
+  }
+}
+
+// Global instance
+let libraryBrowser: LibraryBrowser;
+
+// Replace old showBrowseView with new browser system
+function showBrowseView() {
+  if (!libraryBrowser) {
+    libraryBrowser = new LibraryBrowser();
+  } else {
+    libraryBrowser.showHome();
+  }
+}
+
+// Make navigation functions globally available
+(window as any).libraryBrowser = {
+  showHome: () => libraryBrowser?.showHome(),
+  showArtist: (artist: OpenSubsonicArtist) => libraryBrowser?.showArtist(artist),
+  showAlbum: (album: OpenSubsonicAlbum) => libraryBrowser?.showAlbum(album),
+  navigateToBreadcrumb: (index: number) => libraryBrowser?.navigateToBreadcrumb(index)
+};
+(window as any).showBrowseView = showBrowseView;
+
+// Wiederverwendbarer Media Container
+interface MediaItem {
+  id: string;
+  name: string;
+  type: 'album' | 'artist' | 'song' | 'playlist';
+  coverArt?: string;
+  artistImageUrl?: string;
+  artist?: string;
+  albumCount?: number;
+  songCount?: number;
+  duration?: number;
+  year?: number;
+  [key: string]: any; // Für zusätzliche Eigenschaften
+}
+
+interface MediaContainerConfig {
+  containerId: string;
+  items: MediaItem[];
+  displayMode: 'grid' | 'list';
+  itemType: 'album' | 'artist' | 'song' | 'playlist';
+  showInfo?: boolean;
+  onItemClick?: (item: MediaItem) => void;
+}
+
+class MediaContainer {
+  private config: MediaContainerConfig;
+  private container: HTMLElement;
+
+  constructor(config: MediaContainerConfig) {
+    this.config = config;
+    this.container = document.getElementById(config.containerId) as HTMLElement;
+    if (!this.container) {
+      throw new Error(`Container with id '${config.containerId}' not found`);
+    }
+  }
+
+  render() {
+    if (!this.container) return;
+
+    this.container.innerHTML = '';
+    this.container.className = `media-container ${this.config.displayMode}-mode ${this.config.itemType}-type`;
+
+    this.config.items.forEach(item => {
+      const element = this.createMediaElement(item);
+      this.container.appendChild(element);
+    });
+
+    // Enable drag scrolling after rendering
+    this.enableSmartDragScrolling();
+    
+    // Add rating handlers for songs
+    this.setupSongRatingHandlers();
+  }
+  
+  private setupSongRatingHandlers() {
+    if (!this.container) return;
+    
+    const ratingContainers = this.container.querySelectorAll('.song-rating');
+    ratingContainers.forEach(container => {
+      const songId = container.getAttribute('data-song-id');
+      const stars = container.querySelectorAll('.star');
+      
+      stars.forEach((star, index) => {
+        const starElement = star as HTMLElement;
+        
+        // Hover effects
+        starElement.addEventListener('mouseenter', () => {
+          stars.forEach((s, i) => {
+            s.classList.toggle('hover', i <= index);
+          });
+        });
+        
+        starElement.addEventListener('mouseleave', () => {
+          stars.forEach(s => s.classList.remove('hover'));
+        });
+        
+        // Click to rate
+        starElement.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const rating = parseInt(starElement.getAttribute('data-rating') || '0');
+          if (songId) {
+            updateTrackRating(songId, rating);
+            
+            // Update visual state
+            stars.forEach((s, i) => {
+              s.classList.toggle('filled', i < rating);
+            });
+          }
+        });
+      });
+    });
+  }
+
+  private createMediaElement(item: MediaItem): HTMLElement {
+    // For search results, use simplified single-element structure
+    if (document.getElementById('search-content')) {
+      const element = document.createElement('div');
+      element.className = `media-item ${item.type}-item`;
+      element.dataset.id = item.id;
+      element.dataset.type = item.type;
+
+      // Create content based on type
+      switch (item.type) {
+        case 'album':
+          this.createAlbumElement(element, item);
+          break;
+        case 'artist':
+          this.createArtistElement(element, item);
+          break;
+        case 'song':
+          this.createSongElement(element, item);
+          break;
+        case 'playlist':
+          this.createPlaylistElement(element, item);
+          break;
+      }
+
+      // Add click handler directly to element
+      element.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.config.onItemClick) {
+          this.config.onItemClick(item);
+        }
+      });
+
+      return element;
+    }
+
+    // For browse content, keep wrapper structure for info display
+    const wrapper = document.createElement('div');
+    wrapper.className = `media-item-wrapper ${item.type}-wrapper`;
+    
+    const element = document.createElement('div');
+    element.className = `media-item ${item.type}-item`;
+    element.dataset.id = item.id;
+    element.dataset.type = item.type;
+
+    // Create content based on type
+    switch (item.type) {
+      case 'album':
+        this.createAlbumElement(element, item);
+        break;
+      case 'artist':
+        this.createArtistElement(element, item);
+        break;
+      case 'song':
+        this.createSongElement(element, item);
+        break;
+      case 'playlist':
+        this.createPlaylistElement(element, item);
+        break;
+    }
+
+    // Add info section if enabled
+    if (this.config.showInfo !== false) {
+      const info = this.createInfoElement(item);
+      wrapper.appendChild(element);
+      wrapper.appendChild(info);
+    } else {
+      wrapper.appendChild(element);
+    }
+
+    // Add click handler
+    wrapper.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.config.onItemClick) {
+        this.config.onItemClick(item);
+      }
+    });
+
+    return wrapper;
+  }
+
+  private createAlbumElement(element: HTMLElement, item: MediaItem) {
+    const coverUrl = item.coverArt && openSubsonicClient 
+      ? openSubsonicClient.getCoverArtUrl(item.coverArt, 300)
+      : '';
+
+    element.className += ' album-card';
+    element.innerHTML = `
+      <div class="album-cover">
+        ${coverUrl 
+          ? `<img src="${coverUrl}" alt="${item.name}" loading="lazy">`
+          : '<span class="material-icons">album</span>'
+        }
+        <div class="play-overlay">
+          <span class="material-icons">play_arrow</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private createArtistElement(element: HTMLElement, item: MediaItem) {
+    // Always show fallback icon - no image loading
+    let imageHtml = '<span class="material-icons artist-placeholder">artist</span>';
+    
+    // For search results, use simplified structure with all styling on main element
+    if (element.closest('#search-content') || document.getElementById('search-content')) {
+      element.className = 'artist-wrapper';
+      element.innerHTML = `
+        ${imageHtml}
+        <div class="artist-content">
+          <div class="artist-name">${escapeHtml(item.name)}</div>
+          <div class="artist-album-count">${item.albumCount || 0} Albums</div>
+        </div>
+      `;
+    } else {
+      // For browse content, use card layout
+      element.className += ' artist-card';
+      element.innerHTML = `
+        <div class="artist-avatar">
+          ${imageHtml}
+        </div>
+        <div class="artist-name">${escapeHtml(item.name)}</div>
+      `;
+    }
+  }
+
+  private createSongElement(element: HTMLElement, item: MediaItem) {
+    // Use unified song design for consistency
+    const song: OpenSubsonicSong = {
+      id: item.id,
+      title: item.name,
+      artist: item.artist || 'Unknown Artist',
+      album: item.album || '',
+      albumId: item.albumId,
+      duration: item.duration || 0,
+      size: 0,
+      suffix: 'mp3',
+      bitRate: 320,
+      coverArt: item.coverArt,
+      year: item.year || 0,
+      genre: item.genre || '',
+      userRating: item.userRating || 0
+    };
+    
+    // Create unified song element
+    const unifiedElement = createUnifiedSongElement(song, 'search');
+    
+    // Copy classes and properties to provided element
+    element.className = unifiedElement.className;
+    element.innerHTML = unifiedElement.innerHTML;
+    element.draggable = unifiedElement.draggable;
+    
+    // Copy event listeners
+    const dragHandler = (e: DragEvent) => {
+      if (e.dataTransfer) {
+        e.dataTransfer.setData('application/json', JSON.stringify({
+          type: 'song',
+          song: song,
+          sourceUrl: openSubsonicClient?.getStreamUrl(item.id)
+        }));
+        e.dataTransfer.effectAllowed = 'copy';
+      }
+    };
+    element.addEventListener('dragstart', dragHandler);
+  }
+
+  private createPlaylistElement(element: HTMLElement, item: MediaItem) {
+    element.className += ' playlist-item';
+    element.innerHTML = `
+      <div class="playlist-cover">
+        <span class="material-icons">queue_music</span>
+      </div>
+    `;
+  }
+
+  private createInfoElement(item: MediaItem): HTMLElement {
+    const info = document.createElement('div');
+    info.className = 'media-info-external';
+
+    switch (item.type) {
+      case 'album':
+        info.innerHTML = `
+          <div class="media-title">${item.name}</div>
+          <div class="media-artist">${item.artist || 'Unknown Artist'}</div>
+          ${item.year ? `<div class="media-year">${item.year}</div>` : ''}
+        `;
+        break;
+      case 'artist':
+        info.innerHTML = `
+          <div class="media-title">${item.name}</div>
+          ${item.albumCount ? `<div class="media-subtitle">${item.albumCount} Albums</div>` : ''}
+        `;
+        break;
+      case 'song':
+        info.innerHTML = `
+          <div class="media-title">${item.name}</div>
+          <div class="media-artist">${item.artist || 'Unknown Artist'}</div>
+        `;
+        break;
+      case 'playlist':
+        info.innerHTML = `
+          <div class="media-title">${item.name}</div>
+          ${item.songCount ? `<div class="media-subtitle">${item.songCount} Songs</div>` : ''}
+        `;
+        break;
+    }
+
+    return info;
+  }
+
+  private formatDuration(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  private enableSmartDragScrolling() {
+    if (!this.container) return;
+
+    let isDown = false;
+    let startX: number;
+    let scrollLeft: number;
+    let hasDragged = false;
+
+    this.container.addEventListener('mousedown', (e) => {
+      // Nur auf dem Container selbst, nicht auf Items
+      if ((e.target as HTMLElement).closest('.media-item-wrapper')) return;
+      
+      isDown = true;
+      hasDragged = false;
+      this.container.classList.add('active-drag');
+      startX = (e as MouseEvent).pageX - this.container.getBoundingClientRect().left;
+      scrollLeft = this.container.scrollLeft;
+    });
+
+    this.container.addEventListener('mouseleave', () => {
+      isDown = false;
+      this.container.classList.remove('active-drag');
+    });
+
+    this.container.addEventListener('mouseup', () => {
+      isDown = false;
+      this.container.classList.remove('active-drag');
+    });
+
+    this.container.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      hasDragged = true;
+      
+      const x = (e as MouseEvent).pageX - this.container.getBoundingClientRect().left;
+      const walk = (x - startX) * 2;
+      this.container.scrollLeft = scrollLeft - walk;
+    });
+  }
+}
+
+// Legacy functions converted to use MediaContainer
+async function loadRecentAlbums() {
+  console.log('🔍 Loading recent albums...');
+  if (!openSubsonicClient) {
+    console.warn('OpenSubsonic client not available for recent albums');
+    return;
+  }
+
+  try {
+    console.log('📡 Calling getNewestAlbums API...');
+    const albums = await openSubsonicClient.getNewestAlbums(20);
+    console.log('✅ Recent albums API response:', albums.slice(0, 3)); // Show first 3 for debugging
+    console.log(`📊 Total albums returned: ${albums.length}`);
+    
+    // Check if albums have creation/modification dates
+    if (albums.length > 0) {
+      console.log('🗓️ First album details:', {
+        name: albums[0].name,
+        artist: albums[0].artist,
+        year: albums[0].year,
+        id: albums[0].id,
+        songCount: albums[0].songCount,
+        duration: albums[0].duration,
+        created: albums[0].created || 'no created field'
+      });
+      
+      // Test: Sortierung analysieren
+      console.log('🔍 Recent Albums Sortierung Test:');
+      if (albums.length > 1) {
+        const sortedByName = [...albums].sort((a, b) => a.name.localeCompare(b.name));
+        const isAlphabetical = albums.every((album, index) => album.name === sortedByName[index]?.name);
+        console.log('❌ Alphabetical sorting detected:', isAlphabetical);
+        
+        console.log('📝 First 5 album names in order received:');
+        albums.slice(0, 5).forEach((album, index) => {
+          console.log(`  ${index + 1}. ${album.name} (Year: ${album.year || 'unknown'})`);
+        });
+        
+        // Datum-basierte Analyse falls verfügbar
+        if (albums[0].created) {
+          console.log('📅 First 3 albums with creation dates:');
+          albums.slice(0, 3).forEach(album => {
+            console.log(`  - ${album.name} (${album.created})`);
+          });
+        }
+      }
+    }
+    
+    const mediaItems: MediaItem[] = albums.map((album: OpenSubsonicAlbum) => ({
+      id: album.id,
+      name: album.name,
+      type: 'album' as const,
+      coverArt: album.coverArt,
+      artist: album.artist,
+      year: album.year
+    }));
+
+    const container = new MediaContainer({
+      containerId: 'recent-albums',
+      items: mediaItems,
+      displayMode: 'grid',
+      itemType: 'album',
+      onItemClick: (item) => {
+        const album = albums.find((a: OpenSubsonicAlbum) => a.id === item.id);
+        if (album) loadAlbumTracks(album);
+      }
+    });
+
+    container.render();
+    console.log('✅ Recent albums loaded successfully');
+  } catch (error) {
+    console.error('Failed to load recent albums:', error);
+    const container = document.getElementById('recent-albums');
+    if (container) {
+      container.innerHTML = '<div class="loading-placeholder">Failed to load recent albums</div>';
+    }
+  }
+}
+
+async function loadRandomAlbums() {
+  console.log('🎲 Loading random albums...');
+  if (!openSubsonicClient) {
+    console.warn('OpenSubsonic client not available for random albums');
+    return;
+  }
+
+  try {
+    console.log('📡 Calling getRandomAlbums API...');
+    const albums = await openSubsonicClient.getRandomAlbums(20);
+    console.log('✅ Random albums API response:', albums.slice(0, 3)); // Show first 3 for debugging
+    console.log(`📊 Total albums returned: ${albums.length}`);
+    
+    // Check if truly random by looking at first few names
+    if (albums.length > 0) {
+      console.log('🎲 Random album sample:', albums.slice(0, 5).map(a => `${a.artist} - ${a.name}`));
+      
+      // Test: Randomness-Test
+      console.log('🔍 Random Albums Randomness Test:');
+      if (albums.length > 1) {
+        const sortedByName = [...albums].sort((a, b) => a.name.localeCompare(b.name));
+        const isAlphabetical = albums.every((album, index) => album.name === sortedByName[index]?.name);
+        console.log('❌ Alphabetical sorting detected (should be false for random):', isAlphabetical);
+        
+        const sortedByArtist = [...albums].sort((a, b) => a.artist.localeCompare(b.artist));
+        const isArtistSorted = albums.every((album, index) => album.artist === sortedByArtist[index]?.artist);
+        console.log('❌ Artist sorting detected (should be false for random):', isArtistSorted);
+        
+        console.log('📝 First 5 albums in order received:');
+        albums.slice(0, 5).forEach((album, index) => {
+          console.log(`  ${index + 1}. ${album.artist} - ${album.name}`);
+        });
+      }
+    }
+    const mediaItems: MediaItem[] = albums.map((album: OpenSubsonicAlbum) => ({
+      id: album.id,
+      name: album.name,
+      type: 'album' as const,
+      coverArt: album.coverArt,
+      artist: album.artist,
+      year: album.year
+    }));
+
+    const container = new MediaContainer({
+      containerId: 'random-albums',
+      items: mediaItems,
+      displayMode: 'grid',
+      itemType: 'album',
+      onItemClick: (item) => {
+        const album = albums.find((a: OpenSubsonicAlbum) => a.id === item.id);
+        if (album) loadAlbumTracks(album);
+      }
+    });
+
+    container.render();
+    console.log('✅ Random albums loaded successfully');
+  } catch (error) {
+    console.error('Failed to load random albums:', error);
+    const container = document.getElementById('random-albums');
+    if (container) {
+      container.innerHTML = '<div class="loading-placeholder">Failed to load random albums</div>';
+    }
+  }
+}
+
+async function loadRandomArtists() {
+  console.log('Loading random artists...');
+  if (!openSubsonicClient) {
+    console.warn('OpenSubsonic client not available for random artists');
+    return;
+  }
+
+  try {
+    const artists = await openSubsonicClient.getRandomArtists(20);
+    const mediaItems: MediaItem[] = artists.map((artist: OpenSubsonicArtist) => ({
+      id: artist.id,
+      name: artist.name,
+      type: 'artist' as const,
+      coverArt: artist.coverArt,
+      artistImageUrl: artist.artistImageUrl,
+      albumCount: artist.albumCount
+    }));
+
+    const container = new MediaContainer({
+      containerId: 'random-artists',
+      items: mediaItems,
+      displayMode: 'grid',
+      itemType: 'artist',
+      onItemClick: (item) => {
+        const artist = artists.find((a: OpenSubsonicArtist) => a.id === item.id);
+        if (artist) loadArtistAlbums(artist);
+      }
+    });
+
+    container.render();
+    console.log('✅ Random artists loaded successfully');
+  } catch (error) {
+    console.error('Failed to load random artists:', error);
+    const container = document.getElementById('random-artists');
+    if (container) {
+      container.innerHTML = '<div class="loading-placeholder">Failed to load random artists</div>';
+    }
   }
 }
