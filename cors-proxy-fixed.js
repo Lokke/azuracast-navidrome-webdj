@@ -144,8 +144,8 @@ function connectToHarbor(headers) {
     });
 }
 
-// Audio-Proxy für Navidrome Streams (CORS-Fix)
-app.get('/navidrome-stream', async (req, res) => {
+// Audio-Proxy für OpenSubsonic Streams (CORS-Fix)
+app.get('/OpenSubsonic-stream', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
         return res.status(400).json({ error: 'Missing URL parameter' });
@@ -159,7 +159,7 @@ app.get('/navidrome-stream', async (req, res) => {
         
         // Headers für Request vorbereiten
         const requestHeaders = {
-            'User-Agent': req.headers['user-agent'] || 'Navidrome-SubCaster-Proxy'
+            'User-Agent': req.headers['user-agent'] || 'OpenSubsonic-SubCaster-Proxy'
         };
         
         // Range-Header nur hinzufügen wenn vorhanden
@@ -178,7 +178,7 @@ app.get('/navidrome-stream', async (req, res) => {
             headers: requestHeaders
         });
         
-        console.log(`📥 Navidrome response: ${response.status} ${response.statusText}`);
+        console.log(`📥 OpenSubsonic response: ${response.status} ${response.statusText}`);
         
         // CORS-Headers hinzufügen
         res.set({
@@ -221,8 +221,8 @@ app.get('/navidrome-stream', async (req, res) => {
     }
 });
 
-// Cover Art Proxy für Navidrome
-app.get('/navidrome-cover', async (req, res) => {
+// Cover Art Proxy für OpenSubsonic
+app.get('/OpenSubsonic-cover', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
         return res.status(400).json({ error: 'Missing URL parameter' });
@@ -235,7 +235,7 @@ app.get('/navidrome-cover', async (req, res) => {
         
         // Headers für Request vorbereiten
         const requestHeaders = {
-            'User-Agent': req.headers['user-agent'] || 'Navidrome-SubCaster-Proxy'
+            'User-Agent': req.headers['user-agent'] || 'OpenSubsonic-SubCaster-Proxy'
         };
         
         // Authorization hinzufügen falls vorhanden

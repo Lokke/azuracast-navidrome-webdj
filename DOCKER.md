@@ -30,10 +30,10 @@ STREAM_SERVER=funkturm.radio-endstation.de
 STREAM_PORT=8015
 STREAM_MOUNT=/
 
-# Navidrome Configuration (automatisch vorausgefüllt im Browser)
-VITE_NAVIDROME_URL=https://your.navidrome.server
-VITE_NAVIDROME_USERNAME=your_username
-VITE_NAVIDROME_PASSWORD=your_password
+# OpenSubsonic Configuration (automatisch vorausgefüllt im Browser)
+VITE_OpenSubsonic_URL=https://your.OpenSubsonic.server
+VITE_OpenSubsonic_USERNAME=your_username
+VITE_OpenSubsonic_PASSWORD=your_password
 ```
 
 ### 3. Container starten
@@ -51,7 +51,7 @@ docker-compose down
 
 ### 4. Zugriff
 
-Öffne <http://localhost:5173> in deinem Browser. Sowohl die Streaming- als auch die Navidrome-Credentials sind bereits vorausgefüllt!
+Öffne <http://localhost:5173> in deinem Browser. Sowohl die Streaming- als auch die OpenSubsonic-Credentials sind bereits vorausgefüllt!
 
 ## Wie es funktioniert
 
@@ -69,9 +69,9 @@ docker-compose down
 | `STREAM_SERVER` | Streaming server | JS + Proxy |
 | `STREAM_PORT` | Harbor port | JS + Proxy |
 | `STREAM_MOUNT` | Mount point | JS + Proxy |
-| `VITE_NAVIDROME_URL` | Navidrome Server URL | Nur JS |
-| `VITE_NAVIDROME_USERNAME` | Navidrome Username | Nur JS |
-| `VITE_NAVIDROME_PASSWORD` | Navidrome Password | Nur JS |
+| `VITE_OpenSubsonic_URL` | OpenSubsonic Server URL | Nur JS |
+| `VITE_OpenSubsonic_USERNAME` | OpenSubsonic Username | Nur JS |
+| `VITE_OpenSubsonic_PASSWORD` | OpenSubsonic Password | Nur JS |
 
 ## Development
 
@@ -104,7 +104,7 @@ npx http-server dist -p 5173 --cors
 ## Usage
 
 1. Open http://localhost:5173 in your browser
-2. Configure Navidrome credentials in the interface
+2. Configure OpenSubsonic credentials in the interface
 3. Load tracks into the left and right players
 4. Adjust volumes and crossfader position
 5. Click "Start Streaming" to go live

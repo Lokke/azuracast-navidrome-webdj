@@ -10,10 +10,10 @@ services:
         VITE_STREAM_SERVER: ${STREAM_SERVER:-funkturm.radio-endstation.de}
         VITE_STREAM_PORT: ${STREAM_PORT:-8015}
         VITE_STREAM_MOUNT: ${STREAM_MOUNT:-/}
-        # Navidrome Credentials (werden auch in das JavaScript eingebaut)
-        VITE_NAVIDROME_URL: ${VITE_NAVIDROME_URL}
-        VITE_NAVIDROME_USERNAME: ${VITE_NAVIDROME_USERNAME}
-        VITE_NAVIDROME_PASSWORD: ${VITE_NAVIDROME_PASSWORD}
+        # OpenSubsonic Credentials (werden auch in das JavaScript eingebaut)
+        VITE_OPENSUBSONIC_URL: ${VITE_OPENSUBSONIC_URL}
+        VITE_OPENSUBSONIC_USERNAME: ${VITE_OPENSUBSONIC_USERNAME}
+        VITE_OPENSUBSONIC_PASSWORD: ${VITE_OPENSUBSONIC_PASSWORD}
         # Unified Login (optional)
         VITE_USE_UNIFIED_LOGIN: ${VITE_USE_UNIFIED_LOGIN}
         VITE_UNIFIED_USERNAME: ${VITE_UNIFIED_USERNAME}

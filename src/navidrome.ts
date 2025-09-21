@@ -1,24 +1,24 @@
-// Navidrome API Client für SubCaster
+// OpenSubsonic API Client für SubCaster
 // Server: https://musik.radio-endstation.de
 // Credentials: a/b
 
-interface NavidromeConfig {
+interface OpenSubsonicConfig {
   serverUrl: string;
   username: string;
   password: string;
 }
 
-interface NavidromeAuth {
+interface OpenSubsonicAuth {
   token: string;
   salt: string;
 }
 
-interface NavidromeArtistRef {
+interface OpenSubsonicArtistRef {
   id: string;
   name: string;
 }
 
-interface NavidromeSong {
+interface OpenSubsonicSong {
   id: string;
   title: string;
   artist: string;  // Fallback string für Kompatibilität
@@ -32,13 +32,13 @@ interface NavidromeSong {
   genre?: string;
   coverArt?: string;
   userRating?: number;  // 1-5 stars rating
-  artists?: NavidromeArtistRef[];  // Array von Artists mit ID und Name
-  albumArtists?: NavidromeArtistRef[];  // Array von Album Artists
+  artists?: OpenSubsonicArtistRef[];  // Array von Artists mit ID und Name
+  albumArtists?: OpenSubsonicArtistRef[];  // Array von Album Artists
   displayArtist?: string;  // Anzeige-String für Artists
   displayAlbumArtist?: string;  // Anzeige-String für Album Artists
 }
 
-interface NavidromeAlbum {
+interface OpenSubsonicAlbum {
   id: string;
   name: string;
   artist: string;
@@ -50,30 +50,30 @@ interface NavidromeAlbum {
   coverArt?: string;
 }
 
-interface NavidromeArtist {
+interface OpenSubsonicArtist {
   id: string;
   name: string;
   albumCount: number;
   starred?: string;
 }
 
-interface NavidromeSearchResult {
-  song?: NavidromeSong[];
-  album?: NavidromeAlbum[];
-  artist?: NavidromeArtist[];
+interface OpenSubsonicSearchResult {
+  song?: OpenSubsonicSong[];
+  album?: OpenSubsonicAlbum[];
+  artist?: OpenSubsonicArtist[];
 }
 
-class NavidromeClient {
-  private config: NavidromeConfig;
-  private auth: NavidromeAuth | null = null;
+class OpenSubsonicClient {
+  private config: OpenSubsonicConfig;
+  private auth: OpenSubsonicAuth | null = null;
 
-  constructor(config: NavidromeConfig) {
+  constructor(config: OpenSubsonicConfig) {
     this.config = config;
   }
 
   // MD5 Hash Funktion für Authentifizierung (echte MD5-Implementierung)
   private md5(text: string): string {
-    // Echte MD5-Implementierung für korrekte Navidrome-Authentifizierung
+    // Echte MD5-Implementierung für korrekte OpenSubsonic-Authentifizierung
     function rotateLeft(lValue: number, iShiftBits: number): number {
       return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits));
     }
@@ -251,7 +251,7 @@ class NavidromeClient {
     return (wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d)).toLowerCase();
   }
 
-  // Authentifizierung mit Navidrome
+  // Authentifizierung mit OpenSubsonic
   async authenticate(): Promise<boolean> {
     try {
       // Generiere Salt (random string)
@@ -271,12 +271,12 @@ class NavidromeClient {
       const response = await this.makeRequest('ping');
       return response.status === 'ok';
     } catch (error) {
-      console.error('Navidrome Authentication failed:', error);
+      console.error('OpenSubsonic Authentication failed:', error);
       return false;
     }
   }
 
-  // HTTP Request zu Navidrome API
+  // HTTP Request zu OpenSubsonic API
   private async makeRequest(method: string, params: Record<string, any> = {}): Promise<any> {
     if (!this.auth) {
       throw new Error('Not authenticated. Call authenticate() first.');
@@ -295,7 +295,7 @@ class NavidromeClient {
     const queryString = new URLSearchParams(allParams).toString();
     const url = `${this.config.serverUrl}/rest/${method}?${queryString}`;
 
-    console.log('🌐 Navidrome API Request:', method, 'URL:', url.split('?')[0]);
+    console.log('🌐 OpenSubsonic API Request:', method, 'URL:', url.split('?')[0]);
     console.log('📋 Parameters:', Object.keys(allParams));
 
     try {
@@ -318,8 +318,8 @@ class NavidromeClient {
       
       if (data['subsonic-response'].status !== 'ok') {
         const errorMsg = data['subsonic-response'].error?.message || 'Unknown error';
-        console.error('🚫 Navidrome API error:', errorMsg);
-        throw new Error(`Navidrome API error: ${errorMsg}`);
+        console.error('🚫 OpenSubsonic API error:', errorMsg);
+        throw new Error(`OpenSubsonic API error: ${errorMsg}`);
       }
 
       return data['subsonic-response'];
@@ -330,7 +330,7 @@ class NavidromeClient {
   }
 
   // Suche nach Songs, Alben, Künstlern
-  async search(query: string, songCount = 20, albumCount = 10, artistCount = 10): Promise<NavidromeSearchResult> {
+  async search(query: string, songCount = 20, albumCount = 10, artistCount = 10): Promise<OpenSubsonicSearchResult> {
     const response = await this.makeRequest('search3', {
       query,
       songCount,
@@ -342,13 +342,13 @@ class NavidromeClient {
   }
 
   // Alle Songs abrufen (paginiert)
-  async getSongs(size = 50, offset = 0): Promise<NavidromeSong[]> {
+  async getSongs(size = 50, offset = 0): Promise<OpenSubsonicSong[]> {
     const response = await this.makeRequest('getSong', { size, offset });
     return response.song || [];
   }
 
   // Alle Alben abrufen
-  async getAlbums(size = 50, offset = 0): Promise<NavidromeAlbum[]> {
+  async getAlbums(size = 50, offset = 0): Promise<OpenSubsonicAlbum[]> {
     const response = await this.makeRequest('getAlbumList2', { 
       type: 'alphabeticalByName',
       size, 
@@ -358,10 +358,10 @@ class NavidromeClient {
   }
 
   // Alle Künstler abrufen
-  async getArtists(): Promise<NavidromeArtist[]> {
+  async getArtists(): Promise<OpenSubsonicArtist[]> {
     const response = await this.makeRequest('getArtists');
     const indexes = response.artists?.index || [];
-    const artists: NavidromeArtist[] = [];
+    const artists: OpenSubsonicArtist[] = [];
     
     indexes.forEach((index: any) => {
       if (index.artist) {
@@ -373,13 +373,13 @@ class NavidromeClient {
   }
 
   // Songs eines Albums abrufen
-  async getAlbumSongs(albumId: string): Promise<NavidromeSong[]> {
+  async getAlbumSongs(albumId: string): Promise<OpenSubsonicSong[]> {
     const response = await this.makeRequest('getAlbum', { id: albumId });
     return response.album?.song || [];
   }
 
   // Songs eines Artists abrufen (Top Songs)
-  async getArtistSongs(artistId: string): Promise<NavidromeSong[]> {
+  async getArtistSongs(artistId: string): Promise<OpenSubsonicSong[]> {
     try {
       // Versuche zuerst mit Artist ID über getArtistInfo2
       const response = await this.makeRequest('getArtistInfo2', { id: artistId });
@@ -427,13 +427,13 @@ class NavidromeClient {
   }
 
   // Albums eines Artists abrufen
-  async getArtistAlbums(artistId: string): Promise<NavidromeAlbum[]> {
+  async getArtistAlbums(artistId: string): Promise<OpenSubsonicAlbum[]> {
     const response = await this.makeRequest('getArtist', { id: artistId });
     return response.artist?.album || [];
   }
 
   // Get single artist by ID
-  async getArtist(artistId: string): Promise<NavidromeArtist | null> {
+  async getArtist(artistId: string): Promise<OpenSubsonicArtist | null> {
     try {
       const response = await this.makeRequest('getArtist', { id: artistId });
       return response.artist || null;
@@ -444,7 +444,7 @@ class NavidromeClient {
   }
 
   // Alle Alben finden, auf denen ein Künstler vorkommt (auch Sampler)
-  async getAllAlbumsWithArtist(artistName: string): Promise<NavidromeAlbum[]> {
+  async getAllAlbumsWithArtist(artistName: string): Promise<OpenSubsonicAlbum[]> {
     try {
       // Suche nach Songs des Künstlers, um alle Alben zu finden
       const searchResponse = await this.makeRequest('search3', { 
@@ -458,7 +458,7 @@ class NavidromeClient {
       // Sammle alle Album-Namen aus Songs wo der Künstler beteiligt ist
       const albumNames = new Set<string>();
       
-      songs.forEach((song: NavidromeSong) => {
+      songs.forEach((song: OpenSubsonicSong) => {
         // Prüfe ob der Künstler in Artist-Field vorkommt (exakter Match oder Teil)
         if (song.artist && song.artist.toLowerCase().includes(artistName.toLowerCase())) {
           if (song.album) {
@@ -468,7 +468,7 @@ class NavidromeClient {
       });
       
       // Jetzt suche nach jedem Album-Namen um die Album-Details zu bekommen
-      const albums: NavidromeAlbum[] = [];
+      const albums: OpenSubsonicAlbum[] = [];
       const albumSet = new Set<string>(); // Duplikate vermeiden
       
       for (const albumName of albumNames) {
@@ -479,7 +479,7 @@ class NavidromeClient {
           });
           
           const foundAlbums = albumSearchResponse.searchResult3?.album || [];
-          foundAlbums.forEach((album: NavidromeAlbum) => {
+          foundAlbums.forEach((album: OpenSubsonicAlbum) => {
             // Nur hinzufügen wenn exakter Album-Name Match
             if (album.name.toLowerCase() === albumName.toLowerCase() && !albumSet.has(album.id)) {
               albums.push(album);
@@ -499,7 +499,7 @@ class NavidromeClient {
   }
 
   // Album-Informationen abrufen
-  async getAlbumInfo(albumId: string): Promise<NavidromeAlbum | null> {
+  async getAlbumInfo(albumId: string): Promise<OpenSubsonicAlbum | null> {
     const response = await this.makeRequest('getAlbum', { id: albumId });
     return response.album || null;
   }
@@ -519,11 +519,11 @@ class NavidromeClient {
       id: songId
     });
 
-    // Ursprüngliche Navidrome URL
+    // Ursprüngliche OpenSubsonic URL
     const originalUrl = `${this.config.serverUrl}/rest/stream?${params.toString()}`;
     
     // CORS-Fix: Über SAME-ORIGIN API Route leiten (löst Cross-Origin Problem)
-    const proxiedUrl = `/api/navidrome-stream?url=${encodeURIComponent(originalUrl)}`;
+    const proxiedUrl = `/api/OpenSubsonic-stream?url=${encodeURIComponent(originalUrl)}`;
     
     console.log(`🎵 Stream URL (same-origin): ${proxiedUrl}`);
     return proxiedUrl;
@@ -549,7 +549,7 @@ class NavidromeClient {
     const originalUrl = `${this.config.serverUrl}/rest/getCoverArt?${params.toString()}`;
     
     // CORS-Fix: Über SAME-ORIGIN API Route leiten (löst Cross-Origin Problem)
-    const proxiedUrl = `/api/navidrome-cover?url=${encodeURIComponent(originalUrl)}`;
+    const proxiedUrl = `/api/OpenSubsonic-cover?url=${encodeURIComponent(originalUrl)}`;
     
     return proxiedUrl;
   }
@@ -603,7 +603,7 @@ class NavidromeClient {
   }
 
   // Neueste Alben abrufen
-  async getNewestAlbums(size = 20): Promise<NavidromeAlbum[]> {
+  async getNewestAlbums(size = 20): Promise<OpenSubsonicAlbum[]> {
     try {
       const response = await this.makeRequest('getAlbumList2', { 
         type: 'newest',
@@ -619,4 +619,4 @@ class NavidromeClient {
 }
 
 // Exportiere für Verwendung in main.ts
-export { NavidromeClient, type NavidromeSong, type NavidromeAlbum, type NavidromeArtist, type NavidromeSearchResult };
+export { OpenSubsonicClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist, type OpenSubsonicSearchResult };

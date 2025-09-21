@@ -25,8 +25,8 @@ const MOUNT_POINTS = ['/', '/radio.mp3', '/teststream', '/live'];
 let currentMountIndex = 0;
 
 // CORS-Proxy Routes ZUERST definieren (vor static files)
-// Audio-Proxy für Navidrome Streams
-app.get('/api/navidrome-stream', async (req, res) => {
+// Audio-Proxy für OpenSubsonic Streams
+app.get('/api/OpenSubsonic-stream', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
         return res.status(400).json({ error: 'Missing URL parameter' });
@@ -40,7 +40,7 @@ app.get('/api/navidrome-stream', async (req, res) => {
         
         // Headers für Request vorbereiten
         const requestHeaders = {
-            'User-Agent': req.headers['user-agent'] || 'Navidrome-SubCaster-Proxy'
+            'User-Agent': req.headers['user-agent'] || 'OpenSubsonic-SubCaster-Proxy'
         };
         
         // Range-Header nur hinzufügen wenn vorhanden
@@ -59,7 +59,7 @@ app.get('/api/navidrome-stream', async (req, res) => {
             headers: requestHeaders
         });
         
-        console.log(`📥 Navidrome response: ${response.status} ${response.statusText}`);
+        console.log(`📥 OpenSubsonic response: ${response.status} ${response.statusText}`);
         
         // CORS-Headers hinzufügen
         res.set({
@@ -102,8 +102,8 @@ app.get('/api/navidrome-stream', async (req, res) => {
     }
 });
 
-// Cover Art Proxy für Navidrome
-app.get('/api/navidrome-cover', async (req, res) => {
+// Cover Art Proxy für OpenSubsonic
+app.get('/api/OpenSubsonic-cover', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
         return res.status(400).json({ error: 'Missing URL parameter' });
@@ -116,7 +116,7 @@ app.get('/api/navidrome-cover', async (req, res) => {
         
         // Headers für Request vorbereiten
         const requestHeaders = {
-            'User-Agent': req.headers['user-agent'] || 'Navidrome-SubCaster-Proxy'
+            'User-Agent': req.headers['user-agent'] || 'OpenSubsonic-SubCaster-Proxy'
         };
         
         // Authorization hinzufügen falls vorhanden
@@ -293,7 +293,7 @@ app.use(express.static(path.join(__dirname, 'dist'), {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌐 Unified SubCaster Server läuft auf Port ${PORT}`);
     console.log(`🎯 Ziel: ${process.env.STREAM_SERVER || 'funkturm.radio-endstation.de'}:${process.env.STREAM_PORT || '8015'}`);
-    console.log(`📡 CORS Proxy: /api/navidrome-stream, /api/navidrome-cover`);
+    console.log(`📡 CORS Proxy: /api/OpenSubsonic-stream, /api/OpenSubsonic-cover`);
     console.log(`🔄 Harbor Stream: /api/stream`);
     console.log(`🔄 Mount-Points: ${MOUNT_POINTS.join(', ')}`);
 });
