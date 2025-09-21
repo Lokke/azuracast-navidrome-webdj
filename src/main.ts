@@ -227,14 +227,27 @@ function getStreamServerUrl(): string {
 // Audio-Mixing-System initialisieren
 async function initializeAudioMixing() {
   try {
-    // AudioContext mit spezifischen Optionen erstellen für bessere Browser-Kompatibilität
+    // AudioContext mit dynamischer Sample Rate (Browser-Standard)
     const audioContextOptions: AudioContextOptions = {
-      latencyHint: 'playback', // Optimiert für Playback statt Interaktion
-      sampleRate: 48000
+      latencyHint: 'playback' // Optimiert für Playback statt Interaktion
+      // sampleRate bewusst weggelassen → Browser wählt optimale Sample Rate
     };
     
     audioContext = new (window.AudioContext || (window as any).webkitAudioContext)(audioContextOptions);
-    console.log('AudioContext created:', audioContext.state);
+    
+    // Log der tatsächlich verwendeten Sample Rate
+    console.log(`🎵 AudioContext created with dynamic sample rate: ${audioContext.sampleRate} Hz`);
+    console.log(`📊 AudioContext state: ${audioContext.state}`);
+    
+    // Sample Rate Kompatibilität prüfen
+    const supportedRates = [8000, 16000, 22050, 44100, 48000, 96000, 192000];
+    const currentRate = audioContext.sampleRate;
+    const isStandardRate = supportedRates.includes(currentRate);
+    
+    console.log(`🔍 Sample Rate Analysis:`);
+    console.log(`   - Current: ${currentRate} Hz`);
+    console.log(`   - Is Standard: ${isStandardRate ? '✅' : '⚠️'}`);
+    console.log(`   - Browser optimized for: ${currentRate >= 48000 ? 'High Quality' : 'Standard Quality'}`);
     
     // BROWSER AUDIO KOMPATIBILITÄT: AudioContext sofort suspendieren
     // Wird nur bei Broadcast aktiviert, sodass andere Tabs normal funktionieren
@@ -848,6 +861,10 @@ async function setupMicrophone() {
   if (!audioContext || !microphoneGain) return false;
   
   try {
+    // DYNAMISCHE SAMPLE RATE: Verwende AudioContext Sample Rate für Kompatibilität
+    const contextSampleRate = audioContext.sampleRate;
+    console.log(`🎤 Setting up microphone with dynamic sample rate: ${contextSampleRate} Hz`);
+    
     // Mikrofon-Konfiguration für DJ-Anwendung (ALLE Audio-Effekte deaktiviert für beste Verständlichkeit)
     microphoneStream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
@@ -856,8 +873,12 @@ async function setupMicrophone() {
         noiseSuppression: false,          // Noise-Suppress AUS - kann Stimme verzerren
         autoGainControl: false,           // AGC aus für manuelle Lautstärke-Kontrolle
         
-        // Erweiterte Qualitäts-Einstellungen
-        sampleRate: { ideal: 48000 },     // Höhere Sample-Rate für bessere Qualität
+        // DYNAMISCHE Sample Rate - passt sich an AudioContext an
+        sampleRate: { 
+          ideal: contextSampleRate,       // Verwende AudioContext Sample Rate
+          min: 8000,                      // Minimum für Fallback
+          max: 192000                     // Maximum für High-End Mikrofone
+        },
         sampleSize: { ideal: 16 },        // 16-bit Audio
         channelCount: { ideal: 1 },       // Mono für geringere Bandbreite
         
@@ -877,9 +898,26 @@ async function setupMicrophone() {
       } 
     });
     
-    // Mikrofon-Tracks stumm schalten für Browser-Ausgabe (verhindert Echo)
-    microphoneStream.getAudioTracks().forEach(track => {
+    // Mikrofon-Track Sample Rate Analyse
+    microphoneStream.getAudioTracks().forEach((track, index) => {
       track.enabled = true; // Track ist aktiv für Aufnahme
+      
+      const settings = track.getSettings();
+      console.log(`🔍 Microphone Track ${index + 1} Settings:`);
+      console.log(`   - Sample Rate: ${settings.sampleRate || 'unknown'} Hz`);
+      console.log(`   - Channels: ${settings.channelCount || 'unknown'}`);
+      console.log(`   - Sample Size: ${settings.sampleSize || 'unknown'} bit`);
+      console.log(`   - Echo Cancellation: ${settings.echoCancellation ? '✅' : '❌'}`);
+      console.log(`   - Noise Suppression: ${settings.noiseSuppression ? '✅' : '❌'}`);
+      console.log(`   - Auto Gain Control: ${settings.autoGainControl ? '✅' : '❌'}`);
+      
+      // Sample Rate Kompatibilität prüfen
+      if (settings.sampleRate && settings.sampleRate !== contextSampleRate) {
+        console.warn(`⚠️  Sample Rate Mismatch: Microphone=${settings.sampleRate}Hz, AudioContext=${contextSampleRate}Hz`);
+        console.log(`🔄 Browser will automatically resample: ${settings.sampleRate}Hz → ${contextSampleRate}Hz`);
+      } else {
+        console.log(`✅ Perfect Sample Rate Match: ${contextSampleRate}Hz`);
+      }
       
       // Erweiterte Track-Einstellungen - ALLE Audio-Effekte deaktiviert für natürliche Stimme
       if (track.applyConstraints) {
@@ -887,7 +925,7 @@ async function setupMicrophone() {
           echoCancellation: false,      // Echo-Cancel AUS für DJ-Mikrofon
           noiseSuppression: false,      // Noise-Suppress AUS für natürliche Stimme
           autoGainControl: false,       // AGC AUS für manuelle Kontrolle
-          sampleRate: 48000
+          sampleRate: contextSampleRate // Dynamische Sample Rate
         }).catch(e => console.warn('Could not apply advanced mic constraints:', e));
       }
     });
@@ -907,17 +945,19 @@ async function setupMicrophone() {
     micSourceNode.connect(compressor);
     compressor.connect(microphoneGain);
     
-    console.log('🎤 Microphone connected with enhanced audio processing (48kHz, compression, noise reduction)');
+    console.log(`🎤 Microphone connected with enhanced audio processing (${contextSampleRate}Hz, compression, dynamic compatibility)`);
     return true;
   } catch (error) {
     console.error('Failed to setup microphone:', error);
     // Fallback mit einfacheren Einstellungen versuchen
     try {
+      console.log('🔄 Trying microphone fallback with browser defaults...');
       microphoneStream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: false
+          // Keine Sample Rate Constraints → Browser wählt automatisch
         } 
       });
       
