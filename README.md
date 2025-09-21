@@ -1,14 +1,29 @@
-# Navidrome WebDJ for AzuraCast
+# SubCaster - Professional Streaming & Podcasting Software
 
-A browser-based DJ application for streaming to AzuraCast/Liquidsoap Harbor.
+A browser-based streaming application for live broadcasting and podcasting with Navidrome music library integration.
 
-## Features
+## 🎵 Features
 
 - Browse and play music from Navidrome
-- Real-time microphone input
+- Real-time microphone input with dynamic sample rate
 - Live streaming to Liquidsoap Harbor
+- Smart metadata management with priority system
+- Complete deck reset functionality
+- Browser audio compatibility
 - Crossfader and volume controls
-- Web-based interface
+- Professional web-based interface
+
+## 📄 License
+
+**⚠️ NON-COMMERCIAL USE ONLY**
+
+- 🆓 **Free for private/educational use**
+- ❌ **Commercial use strictly prohibited**
+- � **Commercial licensing may be offered in the future**
+
+See [LICENSE](LICENSE) and [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) for details.
+
+**Commercial Use?** Currently not available. Contact: felix@pielok.de
 
 ## Docker Setup (Recommended)
 
@@ -16,8 +31,8 @@ A browser-based DJ application for streaming to AzuraCast/Liquidsoap Harbor.
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/Lokke/azuracast-navidrome-webdj.git
-cd azuracast-navidrome-webdj
+git clone https://github.com/Lokke/subcaster.git
+cd subcaster
 ```
 
 2. Start with Docker Compose:
@@ -30,9 +45,9 @@ docker-compose up -d
 ### Custom Docker Run
 
 ```bash
-docker build -t webdj .
+docker build -t subcaster .
 docker run -d \
-  --name webdj \
+  --name subcaster \
   -p 5173:5173 \
   -p 8082:8082 \
   -e STREAM_USERNAME=your_username \
@@ -40,7 +55,7 @@ docker run -d \
   -e STREAM_SERVER=your.streaming.server \
   -e STREAM_PORT=8015 \
   -e STREAM_MOUNT=/ \
-  webdj
+  subcaster
 ```
 
 ### Environment Variables

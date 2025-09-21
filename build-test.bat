@@ -9,7 +9,7 @@ echo Starting containers...
 docker-compose --env-file .env.docker up -d
 
 echo.
-echo WebDJ URL: http://localhost:5173
+echo SubCaster URL: http://localhost:5173
 echo.
 echo Checking container status...
 docker-compose --env-file .env.docker ps

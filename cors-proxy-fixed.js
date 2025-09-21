@@ -84,9 +84,9 @@ function connectToHarbor(headers) {
                 `Authorization: ${authHeader}`,
                 `Content-Type: ${headers['content-type'] || 'audio/webm'}`,
                 `Ice-Public: ${headers['ice-public'] || '0'}`,
-                `Ice-Name: ${headers['ice-name'] || 'WebDJ Live Stream'}`,
-                `Ice-Description: ${headers['ice-description'] || 'Live broadcast from WebDJ'}`,
-                `User-Agent: ${headers['user-agent'] || 'WebDJ/1.0'}`,
+                `Ice-Name: ${headers['ice-name'] || 'SubCaster Live Stream'}`,
+                `Ice-Description: ${headers['ice-description'] || 'Live broadcast from SubCaster'}`,
+                `User-Agent: ${headers['user-agent'] || 'SubCaster/1.0'}`,
                 '',
                 ''
             ].join('\r\n');
@@ -159,7 +159,7 @@ app.get('/navidrome-stream', async (req, res) => {
         
         // Headers für Request vorbereiten
         const requestHeaders = {
-            'User-Agent': req.headers['user-agent'] || 'Navidrome-WebDJ-Proxy'
+            'User-Agent': req.headers['user-agent'] || 'Navidrome-SubCaster-Proxy'
         };
         
         // Range-Header nur hinzufügen wenn vorhanden
@@ -235,7 +235,7 @@ app.get('/navidrome-cover', async (req, res) => {
         
         // Headers für Request vorbereiten
         const requestHeaders = {
-            'User-Agent': req.headers['user-agent'] || 'Navidrome-WebDJ-Proxy'
+            'User-Agent': req.headers['user-agent'] || 'Navidrome-SubCaster-Proxy'
         };
         
         // Authorization hinzufügen falls vorhanden

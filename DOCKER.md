@@ -1,4 +1,4 @@
-# WebDJ Docker Setup
+# SubCaster Docker Setup
 
 ## Sicherheitskonfiguration
 
@@ -98,7 +98,7 @@ npx http-server dist -p 5173 --cors
 
 ## Ports
 
-- **5173**: Web interface (WebDJ application)
+- **5173**: Web interface (SubCaster application)
 - **8082**: CORS proxy for streaming
 
 ## Usage
@@ -115,7 +115,7 @@ npx http-server dist -p 5173 --cors
 ### Container won't start
 ```bash
 # Check logs
-docker logs webdj
+docker logs SubCaster
 
 # Check if ports are available
 netstat -tulpn | grep :5173

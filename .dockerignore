@@ -1,4 +1,4 @@
-# Docker ignore file for WebDJ
+# Docker ignore file for SubCaster
 node_modules
 npm-debug.log*
 yarn-debug.log*

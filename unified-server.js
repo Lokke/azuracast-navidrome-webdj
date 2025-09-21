@@ -40,7 +40,7 @@ app.get('/api/navidrome-stream', async (req, res) => {
         
         // Headers für Request vorbereiten
         const requestHeaders = {
-            'User-Agent': req.headers['user-agent'] || 'Navidrome-WebDJ-Proxy'
+            'User-Agent': req.headers['user-agent'] || 'Navidrome-SubCaster-Proxy'
         };
         
         // Range-Header nur hinzufügen wenn vorhanden
@@ -116,7 +116,7 @@ app.get('/api/navidrome-cover', async (req, res) => {
         
         // Headers für Request vorbereiten
         const requestHeaders = {
-            'User-Agent': req.headers['user-agent'] || 'Navidrome-WebDJ-Proxy'
+            'User-Agent': req.headers['user-agent'] || 'Navidrome-SubCaster-Proxy'
         };
         
         // Authorization hinzufügen falls vorhanden
@@ -226,7 +226,7 @@ async function connectToHarbor(headers = {}) {
             console.log(`🔐 Using auth header: Basic ${credentials}`);
             console.log(`🔐 Decoded credentials: ${USERNAME}:${PASSWORD}`);
             
-            const sourceRequest = `SOURCE ${mountPoint} HTTP/1.0\r\nAuthorization: Basic ${credentials}\r\nUser-Agent: WebDJ-Harbor-Client\r\nContent-Type: audio/mpeg\r\n\r\n`;
+            const sourceRequest = `SOURCE ${mountPoint} HTTP/1.0\r\nAuthorization: Basic ${credentials}\r\nUser-Agent: SubCaster-Harbor-Client\r\nContent-Type: audio/mpeg\r\n\r\n`;
             
             console.log(`📤 Sending SOURCE request: SOURCE ${mountPoint} HTTP/1.0`);
             harborSocket.write(sourceRequest);
@@ -272,7 +272,7 @@ async function connectToHarbor(headers = {}) {
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'ok', 
-        message: 'Unified WebDJ Server (Web + CORS Proxy)',
+        message: 'Unified SubCaster Server (Web + CORS Proxy)',
         harbor: isConnected ? 'connected' : 'disconnected',
         mountPoint: isConnected ? MOUNT_POINTS[currentMountIndex] : null,
         corsProxy: 'enabled'
@@ -291,7 +291,7 @@ app.use(express.static(path.join(__dirname, 'dist'), {
 }));
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🌐 Unified WebDJ Server läuft auf Port ${PORT}`);
+    console.log(`🌐 Unified SubCaster Server läuft auf Port ${PORT}`);
     console.log(`🎯 Ziel: ${process.env.STREAM_SERVER || 'funkturm.radio-endstation.de'}:${process.env.STREAM_PORT || '8015'}`);
     console.log(`📡 CORS Proxy: /api/navidrome-stream, /api/navidrome-cover`);
     console.log(`🔄 Harbor Stream: /api/stream`);

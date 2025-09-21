@@ -1,4 +1,4 @@
-// Navidrome API Client für DJ Radio Webapp
+// Navidrome API Client für SubCaster
 // Server: https://musik.radio-endstation.de
 // Credentials: a/b
 
@@ -288,7 +288,7 @@ class NavidromeClient {
       s: this.auth.salt,
       f: 'json',
       v: '1.16.1',
-      c: 'DJ-Radio-Webapp'
+      c: 'SubCaster'
     };
 
     const allParams = { ...baseParams, ...params };
@@ -515,7 +515,7 @@ class NavidromeClient {
       t: this.auth.token,
       s: this.auth.salt,
       v: '1.16.1',
-      c: 'DJ-Radio-Webapp',
+      c: 'SubCaster',
       id: songId
     });
 
@@ -540,7 +540,7 @@ class NavidromeClient {
       t: this.auth.token,
       s: this.auth.salt,
       v: '1.16.1',
-      c: 'DJ-Radio-Webapp',
+      c: 'SubCaster',
       id: coverArtId,
       size: size.toString()
     });
@@ -565,7 +565,7 @@ class NavidromeClient {
       t: this.auth.token,
       s: this.auth.salt,
       v: '1.16.1',
-      c: 'DJ-Radio-Webapp',
+      c: 'SubCaster',
       id: songId
     });
 

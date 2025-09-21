@@ -1,4 +1,4 @@
-# Multi-stage build for WebDJ application
+# Multi-stage build for SubCaster application
 FROM node:20-alpine AS builder
 
 # Set working directory
@@ -59,28 +59,28 @@ WORKDIR /app
 
 # Create app user and set ownership BEFORE copying files
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S webdj -u 1001 && \
-    chown -R webdj:nodejs /app
+    adduser -S subcaster -u 1001 && \
+    chown -R subcaster:nodejs /app
 
 # Copy built application from builder stage
-COPY --from=builder --chown=webdj:nodejs /app/dist ./dist
-COPY --from=builder --chown=webdj:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=webdj:nodejs /app/package*.json ./
-COPY --from=builder --chown=webdj:nodejs /app/unified-server.js ./
+COPY --from=builder --chown=subcaster:nodejs /app/dist ./dist
+COPY --from=builder --chown=subcaster:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=subcaster:nodejs /app/package*.json ./
+COPY --from=builder --chown=subcaster:nodejs /app/unified-server.js ./
 
 # Copy environment template and start script
-COPY --chown=webdj:nodejs .env.example .env.example
-COPY --chown=webdj:nodejs start-services.sh ./
+COPY --chown=subcaster:nodejs .env.example .env.example
+COPY --chown=subcaster:nodejs start-services.sh ./
 RUN chmod +x start-services.sh
 
 # Create directory for user config
-RUN mkdir -p /app/config && chown webdj:nodejs /app/config
+RUN mkdir -p /app/config && chown subcaster:nodejs /app/config
 
 # Expose ports
 EXPOSE 5173 8082
 
 # Switch to non-root user
-USER webdj
+USER subcaster
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

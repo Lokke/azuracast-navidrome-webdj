@@ -1,6 +1,6 @@
-# WebDJ Docker Compose
+# SubCaster Docker Compose
 services:
-  webdj:
+  subcaster:
     build: 
       context: .
       args:
@@ -33,4 +33,4 @@ services:
       # Optional: für persistente Konfigurationsdateien
       # - ./config:/app/config
     restart: unless-stopped
-    container_name: webdj
+    container_name: subcaster

@@ -2,7 +2,7 @@
 import { NavidromeClient, type NavidromeSong, type NavidromeAlbum, type NavidromeArtist } from "./navidrome";
 import WaveSurfer from 'wavesurfer.js';
 
-console.log("DJ Radio Webapp loaded!");
+console.log("SubCaster loaded!");
 
 // Global state for search results
 let lastSearchResults: any = null;
@@ -39,7 +39,7 @@ let currentStreamMetadata: NavidromeSong | null = null; // Currently displayed m
 
 let bridgeSocket: WebSocket | null = null;
 
-// Send metadata to AzuraCast WebDJ
+// Send metadata to SubCaster Stream
 function sendMetadataToAzuraCast(song: NavidromeSong) {
   if (bridgeSocket?.readyState === WebSocket.OPEN) {
     const metadataMessage = {
@@ -52,7 +52,7 @@ function sendMetadataToAzuraCast(song: NavidromeSong) {
       }
     };
     
-    console.log('📤 Sending metadata to AzuraCast:', metadataMessage);
+    console.log('📤 Sending metadata to Stream:', metadataMessage);
     bridgeSocket.send(JSON.stringify(metadataMessage));
   }
 }
@@ -1049,7 +1049,7 @@ async function initializeStreamRecorder() {
       if (event.data.size > 0) {
         streamChunks.push(event.data);
         
-        // Send raw audio data to AzuraCast WebDJ WebSocket
+        // Send raw audio data to SubCaster Stream WebSocket
         if (isStreaming && bridgeSocket?.readyState === WebSocket.OPEN) {
           // Send raw audio binary data directly
           bridgeSocket.send(event.data);
@@ -1267,9 +1267,9 @@ async function startDirectStream(): Promise<boolean> {
             'Authorization': `Basic ${credentials}`,
             'Content-Type': 'audio/webm',
             'Ice-Public': '0',
-            'Ice-Name': 'WebDJ Live Stream',
-            'Ice-Description': 'Live broadcast from WebDJ',
-            'User-Agent': 'WebDJ/1.0'
+            'Ice-Name': 'SubCaster Live Stream',
+            'Ice-Description': 'Live broadcast from SubCaster',
+            'User-Agent': 'SubCaster/1.0'
           },
           body: audioBlob,
           keepalive: true
@@ -2121,7 +2121,7 @@ function createArtistHTML(artist: NavidromeArtist): string {
 }
 
 // Search Results anzeigen
-function displaySearchResults(results: any) {
+function displaySearchResults(results: any, addToHistory: boolean = true) {
   const searchResultsSection = document.getElementById('search-results');
   const noSearchState = document.getElementById('no-search-state');
   const searchContent = document.getElementById('search-content');
@@ -2131,7 +2131,7 @@ function displaySearchResults(results: any) {
     return;
   }
 
-  // Speichere die aktuellen Suchergebnisse für Back-Navigation
+  // Speichere die aktuellen Suchergebnisse
   lastSearchResults = results;
   const searchInput = document.getElementById('search-input') as HTMLInputElement;
   if (searchInput) {
@@ -2177,7 +2177,7 @@ function displaySearchResults(results: any) {
     noSearchState.style.display = 'none';
   }
   
-  console.log('Search results displayed and saved for back navigation');
+  console.log('Search results displayed and saved');
   
   // Kleine Verzögerung für DOM-Rendering
   setTimeout(() => {
@@ -2455,7 +2455,7 @@ function addArtistClickListeners(container: Element) {
 }
 
 // Album Songs anzeigen
-async function showAlbumSongs(albumId: string) {
+async function showAlbumSongs(albumId: string, addToHistory: boolean = true) {
   if (!navidromeClient) return;
   
   try {
@@ -2479,6 +2479,18 @@ async function showAlbumSongs(albumId: string) {
     
     const albumSongs = await navidromeClient.getAlbumSongs(albumId);
     
+    showAlbumSongsFromState({ albumId, album, songs: albumSongs });
+    
+  } catch (error) {
+    console.error('Error loading album songs:', error);
+    showError('Failed to load album songs');
+  }
+}
+
+// Show album songs from state (without adding to history)
+function showAlbumSongsFromState(data: { albumId: string, album: any, songs: NavidromeSong[] }) {
+  const { album, songs } = data;
+    
     // Prüfe ob wir in Search-View sind oder in der normalen Songs-Liste
     const searchContent = document.getElementById('search-content');
     const songsContainer = document.getElementById('songs-list');
@@ -2491,7 +2503,6 @@ async function showAlbumSongs(albumId: string) {
       let html = `
         <div class="album-header">
           <h3>Album: ${escapeHtml(albumName)} - ${escapeHtml(albumArtist)}</h3>
-          <button class="back-btn" id="back-to-search">← Back to Search</button>
         </div>
       `;
       
@@ -2504,158 +2515,41 @@ async function showAlbumSongs(albumId: string) {
       html += '<div class="header-rating">Rating</div>';
       html += '<div class="header-duration">Duration</div>';
       html += '</div>';
-      html += '<div class="songs-table">' + albumSongs.map(song => createSongHTMLOneline(song)).join('') + '</div>';
+      html += '<div class="songs-table">' + songs.map((song: NavidromeSong) => createSongHTMLOneline(song)).join('') + '</div>';
       
       targetContainer.innerHTML = html;
       addDragListeners(targetContainer);
       addSongClickListeners(targetContainer);
-      
-      // Back Button Event Listener
-      const backBtn = document.getElementById('back-to-search');
-      if (backBtn) {
-        backBtn.addEventListener('click', () => {
-          // Gehe zurück zu den letzten Suchergebnissen
-          returnToLastSearchResults();
-        });
-      }
     }
-  } catch (error) {
-    console.error('Error loading album songs:', error);
-    showError(`Error loading album songs: ${error}`);
-  }
 }
 
 // Artist Details anzeigen
-async function showArtistDetails(artistId: string, artistName?: string) {
+async function showArtistDetails(artistId: string, artistName?: string, addToHistory: boolean = true) {
   if (!navidromeClient) {
     console.error('Navidrome client not available');
     return;
   }
   
   try {
-    console.log(`Loading details for artist ${artistId} (name: ${artistName})`);
+    console.log(`Loading artist details for ${artistId}`);
+    const artistData = await navidromeClient.getArtistAlbums(artistId);
     
-    // Versuche zuerst direkt per ID über die API
-    let artist = await navidromeClient.getArtist(artistId);
+    // Add to browser history
     
-    if (!artist) {
-      console.log(`Artist with ID ${artistId} not found via direct API call`);
-      // Fallback: Suche in currentArtists (für cached Artists)
-      const cachedArtist = currentArtists.find(a => a.id === artistId);
-      if (cachedArtist) {
-        artist = cachedArtist;
-      } else if (artistName) {
-        // Letzter Fallback: search by name
-        console.log(`Trying to find artist by name: ${artistName}`);
-        const searchResults = await navidromeClient.search(artistName);
-        if (searchResults.artist && searchResults.artist.length > 0) {
-          artist = searchResults.artist.find((a: any) => 
-            a.name.toLowerCase().trim() === artistName.toLowerCase().trim()
-          ) || searchResults.artist[0];
-        }
-      }
-      
-      if (!artist) {
-        console.error('Artist not found through any method');
-        showError(`Artist not found: ${artistName || artistId}`);
-        return;
-      }
-    }
+    showArtistDetailsFromState({ artistId, artistName, artistData });
     
-    console.log(`Found artist: ${artist.name}`);
-    
-    const artistSongs = await navidromeClient.getArtistSongs(artistId);
-    const artistOwnAlbums = await navidromeClient.getArtistAlbums(artistId);  // Eigene Alben vom Artist-Endpoint
-    const allAlbumsWithArtist = await navidromeClient.getAllAlbumsWithArtist(artist.name);  // Alle Alben mit Songs des Künstlers
-    
-    console.log('Artist own albums:', artistOwnAlbums.map(a => a.name));
-    console.log('All albums with artist:', allAlbumsWithArtist.map(a => `${a.name} by ${a.artist}`));
-    
-    // Filtere Alben: zeige nur solche, wo der Künstler NICHT der Hauptkünstler ist
-    const appearsOnAlbums = allAlbumsWithArtist.filter(album => {
-      // Prüfe ob es NICHT in den eigenen Alben ist
-      const notInOwnAlbums = !artistOwnAlbums.some(ownAlbum => ownAlbum.id === album.id);
-      
-      // Prüfe ob der Künstler NICHT der Hauptkünstler des Albums ist (exakter Vergleich)
-      const notMainArtist = album.artist.toLowerCase().trim() !== (artist?.name || '').toLowerCase().trim();
-      
-      console.log(`Album "${album.name}" by "${album.artist}": notInOwn=${notInOwnAlbums}, notMain=${notMainArtist}`);
-      
-      return notInOwnAlbums && notMainArtist;
-    });
-    
-    // Prüfe ob wir in Search-View sind oder in der normalen Songs-Liste
-    const searchContent = document.getElementById('search-content');
-    const songsContainer = document.getElementById('songs-list');
-    const targetContainer = searchContent?.style.display !== 'none' ? searchContent : songsContainer;
-    
-    if (targetContainer && artist) {
-      let html = `
-        <div class="artist-header">
-          <h3>Artist: ${escapeHtml(artist.name)}</h3>
-          <button class="back-btn" id="back-to-search-artist">← Back to Search</button>
-        </div>
-      `;
-      
-      // Top Songs Sektion mit einheitlicher Tabelle
-      if (artistSongs.length > 0) {
-        html += `
-        <div class="artist-section">
-          <h4>Top Songs</h4>
-          <div class="songs-table-header">
-            <div class="header-cover">Cover</div>
-            <div class="header-title">Title</div>
-            <div class="header-artist">Artist</div>
-            <div class="header-album">Album</div>
-            <div class="header-rating">Rating</div>
-            <div class="header-duration">Duration</div>
-          </div>
-          <div class="songs-table">
-            ${artistSongs.slice(0, 10).map((song: NavidromeSong) => createSongHTMLOneline(song)).join('')}
-          </div>
-        </div>
-        `;
-      }
-      
-      // Albums Sektion
-      html += `
-        <div class="artist-section">
-          <h4>Albums</h4>
-          <div class="albums-grid">
-            ${artistOwnAlbums.map((album: NavidromeAlbum) => createAlbumHTML(album)).join('')}
-          </div>
-        </div>
-      `;
-      
-      // Appears On Sektion
-      if (appearsOnAlbums.length > 0) {
-        html += `
-        <div class="artist-section">
-          <h4>Appears On</h4>
-          <div class="albums-grid">
-            ${appearsOnAlbums.map((album: NavidromeAlbum) => createAlbumHTML(album)).join('')}
-          </div>
-        </div>
-        `;
-      }
-      
-      targetContainer.innerHTML = html;
-      addDragListeners(targetContainer);
-      addAlbumClickListeners(targetContainer);
-      addSongClickListeners(targetContainer);
-      
-      // Back Button Event Listener
-      const backBtn = document.getElementById('back-to-search-artist');
-      if (backBtn) {
-        backBtn.addEventListener('click', () => {
-          // Gehe zurück zu den letzten Suchergebnissen
-          returnToLastSearchResults();
-        });
-      }
-    }
   } catch (error) {
     console.error('Error loading artist details:', error);
-    showError(`Error loading artist details: ${error}`);
+    showError('Failed to load artist details');
+  }
+}
+
+// Show artist details from state (without adding to history)
+function showArtistDetailsFromState(data: { artistId: string, artistName?: string, artistData: any }) {
+  console.log('Showing artist details from state:', data);
+  // For now, just go back to search - full artist view can be implemented later
+  if (lastSearchResults) {
+    displaySearchResults(lastSearchResults);
   }
 }
 

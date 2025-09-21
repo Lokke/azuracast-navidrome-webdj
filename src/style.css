@@ -1,3 +1,19 @@
+/* Album Header */
+.album-header {
+  background: linear-gradient(145deg, #2a2a2a, #1e1e1e);
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.album-header h3 {
+  color: #ffffff;
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+/* CSS Reset */
 * {
   box-sizing: border-box;
   margin: 0;

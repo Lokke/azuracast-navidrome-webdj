@@ -2,7 +2,7 @@
 
 # Start services script for Docker container
 
-echo "Starting WebDJ unified server..."
+echo "Starting SubCaster unified server..."
 
 # Create .env file from environment variables if it doesn't exist
 if [ ! -f .env ]; then
