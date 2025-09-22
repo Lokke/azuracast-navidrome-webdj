@@ -5902,9 +5902,9 @@ class LibraryBrowser {
     const content = document.getElementById('library-content')!;
     content.innerHTML = `
       <div class="media-section">
-        <h3 class="section-title">Recent Albums</h3>
+        <h3 class="section-title">Recently Added Albums</h3>
         <div class="horizontal-scroll" id="recent-albums">
-          <div class="loading-placeholder">Loading recent albums...</div>
+          <div class="loading-placeholder">Loading recently added albums...</div>
         </div>
       </div>
 
@@ -5979,6 +5979,9 @@ class LibraryBrowser {
         
         albumsContainer.className = 'horizontal-scroll';
         albumsContainer.innerHTML = albumsHtml;
+        
+        // Add drag scrolling to container
+        this.addDragScrolling(albumsContainer as HTMLElement);
         
         // Add event listeners for album cards
         albumsContainer.querySelectorAll('[data-album-id]').forEach(card => {
@@ -6119,6 +6122,9 @@ class LibraryBrowser {
         artistContainer.className = 'horizontal-scroll';
         artistContainer.innerHTML = artistsHtml;
         
+        // Add drag scrolling to container
+        this.addDragScrolling(artistContainer as HTMLElement);
+        
         // Add event listeners for artist cards
         artistContainer.querySelectorAll('[data-artist-id]').forEach(card => {
           card.addEventListener('click', () => {
@@ -6142,7 +6148,7 @@ class LibraryBrowser {
         
         const albumsHtml = results.album.map(album => `
           <div class="album-item clickable" data-album-id="${album.id}">
-            <div class="album-cover">
+            <div class="library-album-cover">
               <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 fill=%22%23666%22%3E%3Crect width=%22200%22 height=%22200%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%22100%22 y=%22100%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
             </div>
             <div class="album-info">
@@ -6155,6 +6161,9 @@ class LibraryBrowser {
         const albumContainer = document.createElement('div');
         albumContainer.className = 'horizontal-scroll';
         albumContainer.innerHTML = albumsHtml;
+        
+        // Add drag scrolling to container
+        this.addDragScrolling(albumContainer as HTMLElement);
         
         // Add event listeners for album cards
         albumContainer.querySelectorAll('[data-album-id]').forEach(card => {
@@ -6196,22 +6205,22 @@ class LibraryBrowser {
   }
 
   private async loadBrowseData() {
-    // Same as existing loadBrowseData function but integrated
+    // Load content using getAlbumList2 API with proper types
     if (!openSubsonicClient) return;
 
     try {
       const [recentAlbums, randomAlbums, randomArtists] = await Promise.all([
-        openSubsonicClient.getAlbums(20, 0),
-        openSubsonicClient.getAlbums(20, 20), // Use offset to get different albums
+        openSubsonicClient.getNewestAlbums(20), // Uses getAlbumList2 with type=newest
+        openSubsonicClient.getRandomAlbums(20), // Uses getAlbumList2 with type=random
         openSubsonicClient.getRandomArtists(20)
       ]);
 
-      // Recent Albums
+      // Recent Albums (Recently Added)
       const recentContainer = document.getElementById('recent-albums');
       if (recentContainer && recentAlbums.length > 0) {
         const albumsHtml = recentAlbums.map(album => `
           <div class="album-card clickable" data-album-id="${album.id}">
-            <div class="album-cover">
+            <div class="library-album-cover">
               <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
             </div>
             <h4 class="album-title">${escapeHtml(album.name)}</h4>
@@ -6221,6 +6230,9 @@ class LibraryBrowser {
         
         recentContainer.className = 'horizontal-scroll';
         recentContainer.innerHTML = albumsHtml;
+        
+        // Add drag scrolling to container
+        this.addDragScrolling(recentContainer as HTMLElement);
         
         // Add event listeners for recent album cards
         recentContainer.querySelectorAll('[data-album-id]').forEach(card => {
@@ -6239,7 +6251,7 @@ class LibraryBrowser {
       if (randomContainer && randomAlbums.length > 0) {
         const albumsHtml = randomAlbums.map(album => `
           <div class="album-card clickable" data-album-id="${album.id}">
-            <div class="album-cover">
+            <div class="library-album-cover">
               <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
             </div>
             <h4 class="album-title">${escapeHtml(album.name)}</h4>
@@ -6249,6 +6261,9 @@ class LibraryBrowser {
         
         randomContainer.className = 'horizontal-scroll';
         randomContainer.innerHTML = albumsHtml;
+        
+        // Add drag scrolling to container
+        this.addDragScrolling(randomContainer as HTMLElement);
         
         // Add event listeners for random album cards
         randomContainer.querySelectorAll('[data-album-id]').forEach(card => {
@@ -6280,6 +6295,9 @@ class LibraryBrowser {
         artistsContainer.className = 'horizontal-scroll';
         artistsContainer.innerHTML = artistsHtml;
         
+        // Add drag scrolling to container
+        this.addDragScrolling(artistsContainer as HTMLElement);
+        
         // Add event listeners for random artist cards
         artistsContainer.querySelectorAll('[data-artist-id]').forEach(card => {
           card.addEventListener('click', () => {
@@ -6295,11 +6313,81 @@ class LibraryBrowser {
     } catch (error) {
       console.error('Error loading browse content:', error);
     }
+    
+    // Nach dem Laden der Inhalte: Drag-Scroll-Funktionalität zu allen horizontalen Containern hinzufügen
+    this.initializeHorizontalScrollDragging();
+  }
+
+  // Drag-Scroll-Funktionalität für horizontale Container
+  private initializeHorizontalScrollDragging() {
+    const scrollContainers = document.querySelectorAll('.horizontal-scroll');
+    
+    scrollContainers.forEach(container => {
+      this.addDragScrolling(container as HTMLElement);
+    });
+  }
+
+  private addDragScrolling(container: HTMLElement) {
+    // Verwende die globale Funktion
+    addDragScrollingToContainer(container);
   }
 }
 
 // Global instance
 let libraryBrowser: LibraryBrowser;
+
+// Globale Drag-Scroll-Funktionalität für horizontale Container
+function addDragScrollingToContainer(container: HTMLElement) {
+  let isDown = false;
+  let startX = 0;
+  let scrollLeft = 0;
+
+  container.addEventListener('mousedown', (e: MouseEvent) => {
+    isDown = true;
+    container.classList.add('dragging');
+    startX = e.pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+    e.preventDefault(); // Verhindert Textauswahl
+  });
+
+  container.addEventListener('mouseleave', () => {
+    isDown = false;
+    container.classList.remove('dragging');
+  });
+
+  container.addEventListener('mouseup', () => {
+    isDown = false;
+    container.classList.remove('dragging');
+  });
+
+  container.addEventListener('mousemove', (e: MouseEvent) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll-Geschwindigkeit (2x)
+    container.scrollLeft = scrollLeft - walk;
+  });
+
+  // Touch-Support für mobile Geräte
+  container.addEventListener('touchstart', (e: TouchEvent) => {
+    isDown = true;
+    container.classList.add('dragging');
+    startX = e.touches[0].pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+  });
+
+  container.addEventListener('touchend', () => {
+    isDown = false;
+    container.classList.remove('dragging');
+  });
+
+  container.addEventListener('touchmove', (e: TouchEvent) => {
+    if (!isDown) return;
+    const x = e.touches[0].pageX - container.offsetLeft;
+    const walk = (x - startX) * 2;
+    container.scrollLeft = scrollLeft - walk;
+  });
+}
 
 // Replace old showBrowseView with new browser system
 function showBrowseView() {
@@ -6523,8 +6611,8 @@ class MediaContainer {
       element.className = 'album-wrapper';
       element.innerHTML = `
         <div class="album-clickable" data-album-id="${item.id}">
-          ${coverUrl             ? `<img class="album-cover" src="${coverUrl}" alt="${item.name}" loading="lazy">`
-            : '<div class="album-cover album-placeholder"><span class="material-icons">album</span></div>'
+          ${coverUrl             ? `<img class="library-album-cover" src="${coverUrl}" alt="${item.name}" loading="lazy">`
+            : '<div class="library-album-cover album-placeholder"><span class="material-icons">album</span></div>'
           }
           <div class="album-title">${escapeHtml(item.name)}</div>
         </div>
@@ -6536,8 +6624,8 @@ class MediaContainer {
       element.innerHTML = `
         <div class="album-clickable" data-album-id="${item.id}">
           ${coverUrl 
-            ? `<img class="album-cover" src="${coverUrl}" alt="${item.name}" loading="lazy">`
-            : '<div class="album-cover album-placeholder"><span class="material-icons">album</span></div>'
+            ? `<img class="library-album-cover" src="${coverUrl}" alt="${item.name}" loading="lazy">`
+            : '<div class="library-album-cover album-placeholder"><span class="material-icons">album</span></div>'
           }
           <div class="album-title">${escapeHtml(item.name)}</div>
           ${item.year ? `<div class="album-year">${item.year}</div>` : ''}
@@ -6549,7 +6637,7 @@ class MediaContainer {
       element.className += ' album-card';
       element.innerHTML = `
         <div class="album-clickable" data-album-id="${item.id}">
-          <div class="album-cover">
+          <div class="library-album-cover">
             ${coverUrl 
               ? `<img src="${coverUrl}" alt="${item.name}" loading="lazy">`
               : '<span class="material-icons">album</span>'
@@ -6789,7 +6877,7 @@ async function searchAndNavigateToArtist(artistName: string) {
 
 // Legacy functions converted to use MediaContainer
 async function loadRecentAlbums() {
-  console.log('🔍 Loading recent albums...');
+  console.log('🔍 Loading recently added albums using getAlbumList2...');
   if (!openSubsonicClient) {
     console.warn('OpenSubsonic client not available for recent albums');
     return;
@@ -6831,7 +6919,7 @@ async function loadRecentAlbums() {
 }
 
 async function loadRandomAlbums() {
-  console.log('🎲 Loading random albums...');
+  console.log('🎲 Loading random albums using getAlbumList2...');
   if (!openSubsonicClient) {
     console.warn('OpenSubsonic client not available for random albums');
     return;

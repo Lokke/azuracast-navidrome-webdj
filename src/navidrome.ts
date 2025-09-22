@@ -659,17 +659,18 @@ class SubsonicApiClient {
     }
   }
 
-  // Zufällige Alben abrufen
+  // Zufällige Alben abrufen - using getAlbumList2 for consistency
   async getRandomAlbums(size = 20): Promise<OpenSubsonicAlbum[]> {
     try {
-      console.log('🔗 API Call: getAlbumList with type=random, size=' + size);
-      const response = await this.makeRequest('getAlbumList', { 
+      console.log('🔗 API Call: getAlbumList2 with type=random, size=' + size);
+      const response = await this.makeRequest('getAlbumList2', { 
         type: 'random',
-        size: size.toString()
+        size: size.toString(),
+        offset: '0'
       });
       
-      const albums = response.albumList?.album || [];
-      console.log('📦 Random Albums API returned:', albums.length, 'albums');
+      const albums = response.albumList2?.album || [];
+      console.log('📦 Random Albums (getAlbumList2) returned:', albums.length, 'albums');
       if (albums.length > 0) {
         console.log('📝 First album from API:', albums[0]);
         console.log('🎲 Random sample of albums returned:', albums.slice(0, 5).map((a: any) => a.name));
