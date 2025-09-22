@@ -463,95 +463,96 @@ function createPlayerDeckHTML(side: 'left' | 'right'): string {
       <div class="player-label-dot"></div>
       <span class="player-label-text">Player ${playerLetter}</span>
       <audio id="audio-${side}" preload="metadata"></audio>
+      <!-- Hidden track info elements for JavaScript -->
+      <div style="display: none;">
+        <div class="track-title" id="track-title-${side}">No Track Loaded</div>
+        <div class="track-artist" id="track-artist-${side}">-</div>
+      </div>
     </div>
     
+    <!-- Player Main Content (Album + Waveform) -->
     <div class="player-main">
-      <!-- Content Area (Above Waveform) -->
-      <div class="player-content-area">
-        <!-- Top Row: Album Cover + Info + Controls -->
-        <div class="player-top-row">
-          <!-- Album Cover Section (Square) -->
-          <div class="album-section">
-            <div class="album-cover" id="album-cover-${side}">
-              <div class="no-cover">
-                <span class="material-icons">music_note</span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Compact Content Area -->
-          <div class="player-content-compact">
-            <!-- Track Info -->
-            <div class="track-info-compact">
-              <div class="track-title" id="track-title-${side}">No Track Loaded</div>
-              <div class="track-artist" id="track-artist-${side}">-</div>
-            </div>
-            
-            <!-- All Controls in One Line (Breadcrumb Style) -->
-            <div class="controls-line-breadcrumb">
-              <!-- Transport Controls -->
-              <button class="breadcrumb-btn play-pause-btn" id="play-pause-${side}" title="Play/Pause">
-                <span class="material-icons">play_arrow</span>
-              </button>
-              <button class="breadcrumb-btn restart-btn" id="restart-${side}" title="Restart">
-                <span class="material-icons">skip_previous</span>
-              </button>
-              <button class="breadcrumb-btn eject-btn" id="eject-${side}" title="Eject">
-                <span class="material-icons">eject</span>
-              </button>
-              
-              <!-- Time Display -->
-              <div class="breadcrumb-element time-display" id="time-display-${side}">0:00 / 0:00</div>
-              
-              <!-- Rating Stars -->
-              <div class="breadcrumb-element rating-display" id="player-rating-${side}">
-                <span class="rating-star">★</span>
-                <span class="rating-star">★</span>
-                <span class="rating-star">★</span>
-                <span class="rating-star">★</span>
-                <span class="rating-star">★</span>
-              </div>
-              
-              <!-- Volume Control -->
-              <div class="breadcrumb-element volume-control">
-                <span class="volume-label">Vol</span>
-                <input type="range" class="volume-slider-breadcrumb" id="volume-${side}" min="0" max="1" step="0.01" value="0.8">
-              </div>
-              
-              <!-- Spacer to push volume meter to the right -->
-              <div class="controls-spacer"></div>
-              
-              <!-- Volume Meter (Right-aligned) -->
-              <div class="breadcrumb-element volume-meter" id="volume-meter-${side}">
-                <div class="meter-bars">
-                  <div class="meter-bar"></div>
-                  <div class="meter-bar"></div>
-                  <div class="meter-bar"></div>
-                  <div class="meter-bar"></div>
-                  <div class="meter-bar"></div>
-                  <div class="meter-bar"></div>
-                  <div class="meter-bar"></div>
-                  <div class="meter-bar"></div>
-                </div>
-              </div>
+      <!-- Top Section: Album Cover Only -->
+      <div class="player-top-section">
+        <div class="album-section">
+          <div class="album-cover" id="album-cover-${side}">
+            <div class="no-cover">
+              <span class="material-icons">music_note</span>
             </div>
           </div>
         </div>
       </div>
       
-      <!-- Bottom Waveform Bar (Full Width) -->
-      <div class="waveform-bottom-bar">
+      <!-- Waveform Section (Full Width) -->
+      <div class="waveform-container">
         <div class="waveform" id="waveform-${side}"></div>
         <div class="waveform-loading" id="waveform-loading-${side}">Loading...</div>
+        <!-- Glass overlay with gradient -->
+        <div class="waveform-glass-overlay"></div>
         <div class="waveform-track-info" id="waveform-info-${side}">
-          <div class="track-info-left">
+          <!-- Large centered title -->
+          <div class="track-title-large">
             <span class="track-title"></span>
           </div>
-          <div class="track-info-center">
-            <span class="track-artist"></span>
+          <!-- Bottom left: artist and album stacked -->
+          <div class="track-details-bottom-left">
+            <div class="track-artist-line">
+              <span class="track-artist"></span>
+            </div>
+            <div class="track-album-line">
+              <span class="track-album"></span>
+            </div>
           </div>
-          <div class="track-info-right">
-            <span class="track-album"></span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Controls Bar (Outside player-main, spans full width) -->
+    <div class="controls-bar">
+      <div class="controls-line-breadcrumb">
+        <!-- Transport Controls -->
+        <button class="breadcrumb-btn play-pause-btn" id="play-pause-${side}" title="Play/Pause">
+          <span class="material-icons">play_arrow</span>
+        </button>
+        <button class="breadcrumb-btn restart-btn" id="restart-${side}" title="Restart">
+          <span class="material-icons">skip_previous</span>
+        </button>
+        <button class="breadcrumb-btn eject-btn" id="eject-${side}" title="Eject">
+          <span class="material-icons">eject</span>
+        </button>
+        
+        <!-- Time Display -->
+        <div class="breadcrumb-element time-display" id="time-display-${side}">0:00 / 0:00</div>
+        
+        <!-- Rating Stars -->
+        <div class="breadcrumb-element rating-display" id="player-rating-${side}">
+          <span class="rating-star">★</span>
+          <span class="rating-star">★</span>
+          <span class="rating-star">★</span>
+          <span class="rating-star">★</span>
+          <span class="rating-star">★</span>
+        </div>
+        
+        <!-- Volume Control -->
+        <div class="breadcrumb-element volume-control">
+          <span class="volume-label">Vol</span>
+          <input type="range" class="volume-slider-breadcrumb" id="volume-${side}" min="0" max="1" step="0.01" value="0.8">
+        </div>
+        
+        <!-- Spacer to push volume meter to the right -->
+        <div class="controls-spacer"></div>
+        
+        <!-- Volume Meter (Right-aligned) -->
+        <div class="breadcrumb-element volume-meter" id="volume-meter-${side}">
+          <div class="meter-bars">
+            <div class="meter-bar"></div>
+            <div class="meter-bar"></div>
+            <div class="meter-bar"></div>
+            <div class="meter-bar"></div>
+            <div class="meter-bar"></div>
+            <div class="meter-bar"></div>
+            <div class="meter-bar"></div>
+            <div class="meter-bar"></div>
           </div>
         </div>
       </div>
@@ -795,7 +796,7 @@ function initializeWaveSurfer(side: 'left' | 'right', trackDuration?: number): W
     cursorColor: '#ffffff',
     barWidth: barWidth,
     barGap: barGap,
-    height: 50,
+    height: 104, // 80px + 30% = 104px for bottom overflow
     normalize: true,
     backend: 'WebAudio'
   });
@@ -832,6 +833,12 @@ function clearWaveform(side: 'left' | 'right') {
     if (container) {
       container.innerHTML = '';
       container.style.opacity = '1';
+      
+      // Remove any lingering error indicators
+      const errorIndicator = document.getElementById(`waveform-error-${side}`);
+      if (errorIndicator && errorIndicator.parentNode) {
+        errorIndicator.remove();
+      }
     }
     
     console.log(`🗑️ Waveform completely cleared for ${side} player`);
@@ -921,11 +928,12 @@ function loadWaveform(side: 'left' | 'right', audioUrl: string, trackDuration?: 
       loadingElement.remove();
     }
     
-    // Show error state
+    // Show temporary error state (2 seconds)
     const container = document.getElementById(`waveform-${side}`);
     if (container) {
       container.style.opacity = '0.5';
       const errorIndicator = document.createElement('div');
+      errorIndicator.id = `waveform-error-${side}`;
       errorIndicator.style.cssText = `
         position: absolute;
         top: 50%;
@@ -934,9 +942,28 @@ function loadWaveform(side: 'left' | 'right', audioUrl: string, trackDuration?: 
         color: #ff4444;
         font-size: 12px;
         z-index: 10;
+        font-weight: bold;
       `;
-      errorIndicator.textContent = 'Waveform load failed';
+      errorIndicator.textContent = 'Waveform load failed - retrying...';
       container.appendChild(errorIndicator);
+      
+      // Remove error message after 2 seconds and retry
+      setTimeout(() => {
+        if (errorIndicator && errorIndicator.parentNode) {
+          errorIndicator.remove();
+        }
+        container.style.opacity = '1';
+        
+        // Retry loading the waveform
+        console.log(`🔄 Retrying waveform load for ${side} player`);
+        setTimeout(() => {
+          try {
+            wavesurfer.load(audioUrl);
+          } catch (retryError) {
+            console.error(`❌ Retry failed for ${side} waveform:`, retryError);
+          }
+        }, 500); // Small delay before retry
+      }, 2000);
     }
   });
 
@@ -4019,18 +4046,19 @@ function startVolumeMeter(side: 'left' | 'right' | 'mic') {
     volumeMeterIntervals[side] = setInterval(() => {
       analyser.getByteFrequencyData(dataArray);
       
-      // Berechne RMS (Root Mean Square) f�r bessere Level-Anzeige
+      // Berechne RMS (Root Mean Square) für bessere Level-Anzeige
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) {
         sum += dataArray[i] * dataArray[i];
       }
       const rms = Math.sqrt(sum / bufferLength);
       
-      // Konvertiere zu dB und normalisiere (0-10 Balken)
-      const dbValue = 20 * Math.log10(rms / 255);
-      const normalizedLevel = Math.max(0, Math.min(10, Math.floor((dbValue + 60) / 6)));
+      // Verbesserte Empfindlichkeit - direktere Umrechnung
+      // Normalisiere von 0-255 zu 0-8 Balken mit mehr Empfindlichkeit
+      const normalizedLevel = Math.floor((rms / 255) * 12); // Erhöht auf 12 für mehr Empfindlichkeit
+      const clampedLevel = Math.max(0, Math.min(8, normalizedLevel)); // Begrenze auf 8 Balken
       
-      updateVolumeMeter(meterId, normalizedLevel);
+      updateVolumeMeter(meterId, clampedLevel);
     }, 50); // 20 FPS Update-Rate
     
     console.log(`?? Volume meter started for ${side}`);
@@ -4043,13 +4071,15 @@ function updateVolumeMeter(meterId: string, level: number) {
   const meterElement = document.getElementById(meterId);
   if (!meterElement) return;
   
-  // Support f�r beide Meter-Typen: kompakt und regular
+  // Support für beide Meter-Typen: kompakt und regular
   const bars = meterElement.querySelectorAll('.meter-bar-compact, .meter-bar');
   bars.forEach((bar, index) => {
+    // Entferne alle aktiven Klassen
+    bar.classList.remove('active', 'active-1', 'active-2', 'active-3', 'active-4', 'active-5', 'active-6', 'active-7', 'active-8');
+    
     if (index < level) {
-      bar.classList.add('active');
-    } else {
-      bar.classList.remove('active');
+      // Setze die entsprechende aktive Klasse basierend auf dem Index
+      bar.classList.add(`active-${index + 1}`);
     }
   });
 }
