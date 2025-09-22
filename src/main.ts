@@ -119,7 +119,7 @@ function getCurrentLoadedSong(side: 'left' | 'right'): OpenSubsonicSong | null {
 
 // Complete deck reset when track ends or eject is pressed
 function clearPlayerDeck(side: 'left' | 'right') {
-  console.log(`?? Clearing Player ${side.toUpperCase()} deck completely`);
+  console.log(`🔄 Clearing Player ${side.toUpperCase()} deck completely`);
   
   const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
   const titleElement = document.getElementById(`track-title-${side}`);
@@ -127,18 +127,27 @@ function clearPlayerDeck(side: 'left' | 'right') {
   const albumCover = document.getElementById(`album-cover-${side}`) as HTMLImageElement;
   const playerRating = document.getElementById(`player-rating-${side}`);
   const timeDisplay = document.getElementById(`time-display-${side}`);
+  const progressBar = document.getElementById(`progress-bar-${side}`);
+  const volumeMeter = document.getElementById(`volume-meter-${side}`);
+  const playerDeck = document.getElementById(`player-deck-${side}`);
   
   // Clear audio
   if (audio) {
     audio.pause();
     audio.src = '';
     audio.currentTime = 0;
-    delete audio.dataset.songId;
+    audio.removeAttribute('data-song-id');
+    
+    // Note: We don't need to clone the audio element since we want to keep the basic event listeners
+    // The audio element will be properly reinitialized when a new track is loaded
   }
   
   // Clear metadata display
   if (titleElement) titleElement.textContent = 'No Track Loaded';
   if (artistElement) artistElement.textContent = '';
+
+  // Clear waveform info overlay
+  clearWaveformInfo(side);
   
   // Clear album cover
   if (albumCover) {
@@ -146,9 +155,18 @@ function clearPlayerDeck(side: 'left' | 'right') {
     albumCover.alt = 'No Cover';
   }
   
-  // Clear rating
+  // Clear rating but keep placeholder structure
   if (playerRating) {
-    playerRating.innerHTML = '';
+    // Create placeholder stars to reserve space
+    playerRating.innerHTML = `
+      <div class="rating-stars placeholder">
+        <span class="star empty">☆</span>
+        <span class="star empty">☆</span>
+        <span class="star empty">☆</span>
+        <span class="star empty">☆</span>
+        <span class="star empty">☆</span>
+      </div>
+    `;
   }
   
   // Clear time display
@@ -156,13 +174,40 @@ function clearPlayerDeck(side: 'left' | 'right') {
     timeDisplay.textContent = '00:00 / 00:00';
   }
   
-  // Reset waveform
-  resetWaveform(side);
+  // Reset progress bar visual state
+  if (progressBar) {
+    const progressFill = progressBar.querySelector('.progress-fill');
+    if (progressFill) {
+      (progressFill as HTMLElement).style.width = '0%';
+    }
+  }
+  
+  // Clear volume meter
+  if (volumeMeter) {
+    const meterBars = volumeMeter.querySelectorAll('.meter-bar');
+    meterBars.forEach(bar => {
+      (bar as HTMLElement).classList.remove('active');
+    });
+  }
+  
+  // Remove player deck status classes
+  if (playerDeck) {
+    playerDeck.classList.remove('playing', 'loaded', 'has-track');
+  }
+  
+  // Reset waveform completely
+  clearWaveform(side);
   
   // Clear player state
   setPlayerState(side, null, false);
   
-  console.log(`? Player ${side.toUpperCase()} deck cleared completely`);
+  // Reset any loading indicators
+  const loadingIndicator = document.getElementById(`waveform-loading-${side}`);
+  if (loadingIndicator) {
+    loadingIndicator.remove();
+  }
+  
+  console.log(`✅ Player ${side.toUpperCase()} deck cleared completely`);
 }
 
 // Debug function to show current player states and metadata priority
@@ -421,66 +466,93 @@ function createPlayerDeckHTML(side: 'left' | 'right'): string {
     </div>
     
     <div class="player-main">
-      <!-- Album Cover -->
-      <div class="album-cover" id="album-cover-${side}">
-        <div class="no-cover">
-          <span class="material-icons">music_note</span>
-        </div>
-      </div>
-      
-      <!-- Track Info & Controls -->
-      <div class="player-content">
-        <div class="track-info">
-          <div class="track-title" id="track-title-${side}">No Track Loaded</div>
-          <div class="track-artist" id="track-artist-${side}">-</div>
-        </div>
-        
-        <!-- Transport Controls -->
-        <div class="transport-controls">
-          <button class="play-pause-btn" id="play-pause-${side}" title="Play/Pause">
-            <span class="material-icons">play_arrow</span>
-          </button>
-          <button class="restart-btn" id="restart-${side}" title="Restart">
-            <span class="material-icons">skip_previous</span>
-          </button>
-          <button class="eject-btn" id="eject-${side}" title="Eject">
-            <span class="material-icons">eject</span>
-          </button>
-        </div>
-        
-        <!-- Rating Display -->
-        <div class="player-rating" id="player-rating-${side}"></div>
-        
-        <!-- Progress & Time Display -->
-        <div class="progress-section">
-          <div class="time-display" id="time-display-${side}">0:00 / 0:00</div>
-          <div class="progress-bar" id="progress-bar-${side}">
-            <div class="waveform" id="waveform-${side}"></div>
+      <!-- Content Area (Above Waveform) -->
+      <div class="player-content-area">
+        <!-- Top Row: Album Cover + Info + Controls -->
+        <div class="player-top-row">
+          <!-- Album Cover Section (Square) -->
+          <div class="album-section">
+            <div class="album-cover" id="album-cover-${side}">
+              <div class="no-cover">
+                <span class="material-icons">music_note</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Compact Content Area -->
+          <div class="player-content-compact">
+            <!-- Track Info -->
+            <div class="track-info-compact">
+              <div class="track-title" id="track-title-${side}">No Track Loaded</div>
+              <div class="track-artist" id="track-artist-${side}">-</div>
+            </div>
+            
+            <!-- All Controls in One Line (Breadcrumb Style) -->
+            <div class="controls-line-breadcrumb">
+              <!-- Transport Controls -->
+              <button class="breadcrumb-btn play-pause-btn" id="play-pause-${side}" title="Play/Pause">
+                <span class="material-icons">play_arrow</span>
+              </button>
+              <button class="breadcrumb-btn restart-btn" id="restart-${side}" title="Restart">
+                <span class="material-icons">skip_previous</span>
+              </button>
+              <button class="breadcrumb-btn eject-btn" id="eject-${side}" title="Eject">
+                <span class="material-icons">eject</span>
+              </button>
+              
+              <!-- Time Display -->
+              <div class="breadcrumb-element time-display" id="time-display-${side}">0:00 / 0:00</div>
+              
+              <!-- Rating Stars -->
+              <div class="breadcrumb-element rating-display" id="player-rating-${side}">
+                <span class="rating-star">★</span>
+                <span class="rating-star">★</span>
+                <span class="rating-star">★</span>
+                <span class="rating-star">★</span>
+                <span class="rating-star">★</span>
+              </div>
+              
+              <!-- Volume Control -->
+              <div class="breadcrumb-element volume-control">
+                <span class="volume-label">Vol</span>
+                <input type="range" class="volume-slider-breadcrumb" id="volume-${side}" min="0" max="1" step="0.01" value="0.8">
+              </div>
+              
+              <!-- Spacer to push volume meter to the right -->
+              <div class="controls-spacer"></div>
+              
+              <!-- Volume Meter (Right-aligned) -->
+              <div class="breadcrumb-element volume-meter" id="volume-meter-${side}">
+                <div class="meter-bars">
+                  <div class="meter-bar"></div>
+                  <div class="meter-bar"></div>
+                  <div class="meter-bar"></div>
+                  <div class="meter-bar"></div>
+                  <div class="meter-bar"></div>
+                  <div class="meter-bar"></div>
+                  <div class="meter-bar"></div>
+                  <div class="meter-bar"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
       
-      <!-- Volume Control (Portrait: Right Side) -->
-      <div class="volume-section">
-        <div class="volume-control">
-          <input type="range" min="0" max="100" value="80" id="volume-${side}" orient="vertical">
-          <div class="volume-label">VOL</div>
-        </div>
-        <!-- Volume Meter -->
-        <div class="volume-meter" id="volume-meter-${side}">
-          <div class="meter-bars">
-            <div class="meter-bar" style="--level: 0"></div>
-            <div class="meter-bar" style="--level: 1"></div>
-            <div class="meter-bar" style="--level: 2"></div>
-            <div class="meter-bar" style="--level: 3"></div>
-            <div class="meter-bar" style="--level: 4"></div>
-            <div class="meter-bar" style="--level: 5"></div>
-            <div class="meter-bar" style="--level: 6"></div>
-            <div class="meter-bar" style="--level: 7"></div>
-            <div class="meter-bar orange" style="--level: 8"></div>
-            <div class="meter-bar red" style="--level: 9"></div>
+      <!-- Bottom Waveform Bar (Full Width) -->
+      <div class="waveform-bottom-bar">
+        <div class="waveform" id="waveform-${side}"></div>
+        <div class="waveform-loading" id="waveform-loading-${side}">Loading...</div>
+        <div class="waveform-track-info" id="waveform-info-${side}">
+          <div class="track-info-left">
+            <span class="track-title"></span>
           </div>
-          <div class="meter-label">dB</div>
+          <div class="track-info-center">
+            <span class="track-artist"></span>
+          </div>
+          <div class="track-info-right">
+            <span class="track-album"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -500,7 +572,109 @@ function initializePlayerDecks() {
     playerRight.innerHTML = createPlayerDeckHTML('right');
   }
   
+  // Setup volume controls after HTML is created
+  setupVolumeControls();
+  
   console.log('Player decks initialized with professional layout');
+}
+
+// Setup Volume Controls and Meters
+function setupVolumeControls() {
+  ['left', 'right'].forEach(side => {
+    const volumeSlider = document.getElementById(`volume-${side}`) as HTMLInputElement;
+    const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+    
+    if (volumeSlider && audio) {
+      // Volume slider event
+      volumeSlider.addEventListener('input', (e) => {
+        const target = e.target as HTMLInputElement;
+        const volume = parseFloat(target.value);
+        audio.volume = volume;
+        // Use existing updateVolumeMeter function with correct meter ID
+        updateVolumeMeter(`volume-meter-${side}`, volume);
+      });
+      
+      // Audio level monitoring for volume meter
+      if (audio) {
+        audio.addEventListener('play', () => {
+          startVolumeMeterAnimation(side);
+        });
+        
+        audio.addEventListener('pause', () => {
+          stopVolumeMeterAnimation(side);
+        });
+        
+        audio.addEventListener('ended', () => {
+          stopVolumeMeterAnimation(side);
+        });
+      }
+    }
+  });
+}
+
+// Animate Volume Meter Based on Audio
+function startVolumeMeterAnimation(side: string) {
+  const meterId = `volume-meter-${side}`;
+  if (volumeMeterIntervals[meterId]) {
+    clearInterval(volumeMeterIntervals[meterId]);
+  }
+  
+  const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+  if (!audio) return;
+  
+  volumeMeterIntervals[meterId] = setInterval(() => {
+    if (audio.paused) {
+      stopVolumeMeterAnimation(side);
+      return;
+    }
+    
+    // Simulate audio level animation
+    const baseLevel = audio.volume;
+    const randomVariation = Math.random() * 0.3;
+    const currentLevel = Math.min(1, baseLevel + randomVariation);
+    
+    updateVolumeMeter(meterId, currentLevel);
+  }, 100);
+}
+
+function stopVolumeMeterAnimation(side: string) {
+  const meterId = `volume-meter-${side}`;
+  if (volumeMeterIntervals[meterId]) {
+    clearInterval(volumeMeterIntervals[meterId]);
+    delete volumeMeterIntervals[meterId];
+  }
+  
+  // Reset meter to show only volume level
+  const volumeSlider = document.getElementById(`volume-${side}`) as HTMLInputElement;
+  if (volumeSlider) {
+    updateVolumeMeter(meterId, parseFloat(volumeSlider.value));
+  }
+}
+
+// Consolidated Player System Initialization
+function initializePlayerSystem() {
+  // 1. Initialize deck HTML first
+  initializePlayerDecks();
+  
+  // 2. Setup audio elements
+  const audioLeft = document.getElementById('audio-left') as HTMLAudioElement;
+  const audioRight = document.getElementById('audio-right') as HTMLAudioElement;
+  
+  if (audioLeft) {
+    setupAudioPlayer('left', audioLeft);
+  }
+  
+  if (audioRight) {
+    setupAudioPlayer('right', audioRight);
+  }
+  
+  // 3. Initialize crossfader functionality
+  initializeCrossfader();
+  
+  // 4. Setup drop zones for drag & drop
+  initializePlayerDropZones();
+  
+  console.log('Complete player system initialized');
 }
 
 // Update Album Cover Function
@@ -586,8 +760,8 @@ function formatTime(seconds: number): string {
 // WaveSurfer instances for both players
 const waveSurfers: { [key in 'left' | 'right']?: WaveSurfer } = {};
 
-// Initialize WaveSurfer for a player
-function initializeWaveSurfer(side: 'left' | 'right'): WaveSurfer {
+// Initialize WaveSurfer for a player with adaptive settings
+function initializeWaveSurfer(side: 'left' | 'right', trackDuration?: number): WaveSurfer {
   const container = document.getElementById(`waveform-${side}`);
   if (!container) {
     throw new Error(`Waveform container not found for ${side} player`);
@@ -598,14 +772,29 @@ function initializeWaveSurfer(side: 'left' | 'right'): WaveSurfer {
     waveSurfers[side]!.destroy();
   }
 
-  // Create new WaveSurfer instance
+  // Adaptive settings based on track duration
+  let barWidth = 2;
+  let barGap = 1;
+  
+  // For very long tracks (>10 minutes), reduce detail for better performance
+  if (trackDuration && trackDuration > 600) {
+    barWidth = 1;
+    barGap = 0;
+    console.log(`🎵 Long track detected (${Math.round(trackDuration/60)}min), using optimized waveform settings`);
+  }
+
+  // Deck-specific colors
+  const waveColor = side === 'left' ? '#ff4757' : '#5352ed'; // Red for left, blue for right
+  const progressColor = side === 'left' ? '#ff3838' : '#4834d4'; // Darker shade for progress
+
+  // Create new WaveSurfer instance with performance optimizations
   const wavesurfer = WaveSurfer.create({
     container: container,
-    waveColor: '#666',
-    progressColor: '#00ff88',
+    waveColor: waveColor,
+    progressColor: progressColor,
     cursorColor: '#ffffff',
-    barWidth: 2,
-    barGap: 1,
+    barWidth: barWidth,
+    barGap: barGap,
     height: 50,
     normalize: true,
     backend: 'WebAudio'
@@ -630,33 +819,129 @@ function resetWaveform(side: 'left' | 'right') {
   }
 }
 
+// Completely clear WaveSurfer (for eject)
+function clearWaveform(side: 'left' | 'right') {
+  const wavesurfer = waveSurfers[side];
+  if (wavesurfer) {
+    // Destroy the waveform completely
+    wavesurfer.destroy();
+    delete waveSurfers[side];
+    
+    // Clear the container visually
+    const container = document.getElementById(`waveform-${side}`);
+    if (container) {
+      container.innerHTML = '';
+      container.style.opacity = '1';
+    }
+    
+    console.log(`🗑️ Waveform completely cleared for ${side} player`);
+  }
+}
+
 // Load audio file into WaveSurfer for a player
-function loadWaveform(side: 'left' | 'right', audioUrl: string) {
+function loadWaveform(side: 'left' | 'right', audioUrl: string, trackDuration?: number) {
   console.log(`Loading new waveform for ${side} player from: ${audioUrl}`);
   
   // Reset existing waveform first
   resetWaveform(side);
   
-  // Initialize WaveSurfer if not exists
+  // Initialize WaveSurfer if not exists (with adaptive settings)
   if (!waveSurfers[side]) {
-    initializeWaveSurfer(side);
+    initializeWaveSurfer(side, trackDuration);
   }
-  
+
   const wavesurfer = waveSurfers[side]!;
+  const container = document.getElementById(`waveform-${side}`);
   
-  // Load the new audio file (this will reset the waveform)
-  wavesurfer.load(audioUrl);
+  // Add loading indicator
+  if (container) {
+    container.style.position = 'relative';
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.id = `waveform-loading-${side}`;
+    loadingIndicator.style.cssText = `
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #00ff88;
+      font-size: 12px;
+      z-index: 10;
+      pointer-events: none;
+    `;
+    loadingIndicator.textContent = 'Loading waveform...';
+    container.appendChild(loadingIndicator);
+  }
+
+  // Progressive loading events
+  let loadingProgress = 0;
   
-  // Optional: Add event listeners
+  wavesurfer.on('loading', (percent: number) => {
+    loadingProgress = percent;
+    console.log(`🌊 Waveform loading for ${side}: ${percent}%`);
+    
+    const loadingElement = document.getElementById(`waveform-loading-${side}`);
+    if (loadingElement) {
+      loadingElement.textContent = `Loading waveform... ${Math.round(percent)}%`;
+    }
+    
+    // Show partial waveform as it loads (visual feedback)
+    if (percent > 10) {
+      const container = document.getElementById(`waveform-${side}`);
+      if (container) {
+        container.style.opacity = `${Math.min(percent / 100 + 0.3, 1)}`;
+      }
+    }
+  });
+
   wavesurfer.on('ready', () => {
-    console.log(`New waveform ready for ${side} player - progress reset to 0`);
+    console.log(`✅ Waveform ready for ${side} player - progress reset to 0`);
+    
+    // Remove loading indicator
+    const loadingElement = document.getElementById(`waveform-loading-${side}`);
+    if (loadingElement) {
+      loadingElement.remove();
+    }
+    
+    // Ensure full opacity
+    const container = document.getElementById(`waveform-${side}`);
+    if (container) {
+      container.style.opacity = '1';
+    }
+    
     // Ensure we're at the beginning
     wavesurfer.seekTo(0);
   });
-  
+
   wavesurfer.on('error', (error) => {
-    console.error(`Waveform error for ${side} player:`, error);
+    console.error(`❌ Waveform error for ${side} player:`, error);
+    
+    // Remove loading indicator on error
+    const loadingElement = document.getElementById(`waveform-loading-${side}`);
+    if (loadingElement) {
+      loadingElement.remove();
+    }
+    
+    // Show error state
+    const container = document.getElementById(`waveform-${side}`);
+    if (container) {
+      container.style.opacity = '0.5';
+      const errorIndicator = document.createElement('div');
+      errorIndicator.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #ff4444;
+        font-size: 12px;
+        z-index: 10;
+      `;
+      errorIndicator.textContent = 'Waveform load failed';
+      container.appendChild(errorIndicator);
+    }
   });
+
+  // Load the new audio file - this will trigger the loading events
+  wavesurfer.load(audioUrl);
 }
 
 // Sync WaveSurfer with HTML audio element
@@ -1782,8 +2067,8 @@ function updateMountPointVisibility() {
   // Queue Drag & Drop (permanent initialisieren)
   initializeQueuePermanent();
   
-  // Audio Player initialisieren
-  initializeAudioPlayers();
+  // Complete Player System initialisieren
+  initializePlayerSystem();
   
   // Rating-Event-Listeners initialisieren
   initializeRatingListeners();
@@ -2034,7 +2319,7 @@ function createArtistLinks(song: OpenSubsonicSong): string {
 // Einheitliche Song-Darstellung für alle Bereiche (Search, Album-Details, Queue)
 function createUnifiedSongElement(song: OpenSubsonicSong, context: 'search' | 'album' | 'queue' = 'search'): HTMLElement {
   const trackItem = document.createElement('div');
-  trackItem.className = 'spotify-card spotify-song-row';
+  trackItem.className = 'music-card song-row';
   trackItem.dataset.songId = song.id;
   trackItem.dataset.coverArt = song.coverArt || '';
   trackItem.dataset.type = 'song';
@@ -2042,29 +2327,32 @@ function createUnifiedSongElement(song: OpenSubsonicSong, context: 'search' | 'a
   const duration = formatDuration(song.duration);
   const coverUrl = song.coverArt && openSubsonicClient ? openSubsonicClient.getCoverArtUrl(song.coverArt, 40) : '';
   
-  // Spotify-style row layout für Song-Listen
+  // Modern row layout für Song-Listen
   trackItem.innerHTML = `
-    <div class="spotify-track-cover">
-      ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="spotify-no-cover"><span class="material-icons">music_note</span></div>'}
+    <div class="track-cover">
+      ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="no-cover"><span class="material-icons">music_note</span></div>'}
     </div>
-    <div class="spotify-track-title">${escapeHtml(song.title)}</div>
-    <div class="spotify-track-artist">${createArtistLinks(song)}</div>
-    <div class="spotify-track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
-    <div class="spotify-track-rating" data-song-id="${song.id}">
+    <div class="track-title">${escapeHtml(song.title)}</div>
+    <div class="track-artist">${createArtistLinks(song)}</div>
+    <div class="track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
+    <div class="track-rating" data-song-id="${song.id}">
       ${generateStarRating(getStoredTrackRating(song.id))}
     </div>
-    <div class="spotify-track-duration">${duration}</div>
+    <div class="track-duration">${duration}</div>
   `;
   
   // Drag and Drop aktivieren
   trackItem.draggable = true;
   trackItem.addEventListener('dragstart', (e) => {
     if (e.dataTransfer) {
+      // Set JSON data (preferred)
       e.dataTransfer.setData('application/json', JSON.stringify({
         type: 'song',
         song: song,
         sourceUrl: openSubsonicClient?.getStreamUrl(song.id)
       }));
+      // Set song ID as text/plain for fallback compatibility
+      e.dataTransfer.setData('text/plain', song.id);
       e.dataTransfer.effectAllowed = 'copy';
     }
   });
@@ -2075,7 +2363,7 @@ function createUnifiedSongElement(song: OpenSubsonicSong, context: 'search' | 'a
 // Container function for song lists
 function createUnifiedSongsContainer(songs: OpenSubsonicSong[], context: 'search' | 'album' | 'queue' = 'album'): HTMLElement {
   const container = document.createElement('div');
-  container.className = 'spotify-songs-container';
+  container.className = 'songs-container';
   
   songs.forEach(song => {
     const songElement = createUnifiedSongElement(song, context);
@@ -2090,17 +2378,17 @@ function createSongHTMLOneline(song: OpenSubsonicSong): string {
   const coverUrl = song.coverArt && openSubsonicClient ? openSubsonicClient.getCoverArtUrl(song.coverArt, 60) : '';
   
   return `
-    <div class="spotify-card spotify-song-row" draggable="true" data-song-id="${song.id}" data-cover-art="${song.coverArt || ''}" data-type="song">
-      <div class="spotify-track-cover">
-        ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="spotify-no-cover"><span class="material-icons">music_note</span></div>'}
+    <div class="music-card song-row" draggable="true" data-song-id="${song.id}" data-cover-art="${song.coverArt || ''}" data-type="song">
+      <div class="track-cover">
+        ${coverUrl ? `<img src="${coverUrl}" alt="Cover" />` : '<div class="no-cover"><span class="material-icons">music_note</span></div>'}
       </div>
-      <div class="spotify-track-title">${escapeHtml(song.title)}</div>
-      <div class="spotify-track-artist">${createArtistLinks(song)}</div>
-      <div class="spotify-track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
-      <div class="spotify-track-rating" data-song-id="${song.id}">
+      <div class="track-title">${escapeHtml(song.title)}</div>
+      <div class="track-artist">${createArtistLinks(song)}</div>
+      <div class="track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
+      <div class="track-rating" data-song-id="${song.id}">
         ${createStarRating(song.userRating || 0, song.id)}
       </div>
-      <div class="spotify-track-duration">${duration}</div>
+      <div class="track-duration">${duration}</div>
     </div>
   `;
 }
@@ -2110,7 +2398,7 @@ function createStarRating(currentRating: number, songId: string): string {
   let starsHTML = '';
   for (let i = 1; i <= 5; i++) {
     const filled = i <= currentRating ? 'filled' : '';
-    starsHTML += `<span class="star ${filled}" data-rating="${i}" data-song-id="${songId}">?</span>`;
+    starsHTML += `<span class="star ${filled}" data-rating="${i}" data-song-id="${songId}">★</span>`;
   }
   return starsHTML;
 }
@@ -2365,7 +2653,7 @@ function returnToLastSearchResults() {
 
 // Drag & Drop Listeners hinzuf�gen
 function addDragListeners(container: Element) {
-  const trackItems = container.querySelectorAll('.track-item, .track-item-oneline, .spotify-song-row, .unified-song-item');
+  const trackItems = container.querySelectorAll('.track-item, .track-item-oneline, .song-row, .unified-song-item');
   const albumItems = container.querySelectorAll('.album-item-modern[draggable="true"]');
   
   console.log(`Adding drag listeners to ${trackItems.length} track items and ${albumItems.length} album items`);
@@ -2378,8 +2666,18 @@ function addDragListeners(container: Element) {
       console.log(`Drag started for track item ${index}, song ID: ${target.dataset.songId}`);
       
       if (dragEvent.dataTransfer) {
+        // Set song ID as both text/plain and as JSON data for compatibility
         dragEvent.dataTransfer.setData('text/plain', target.dataset.songId || '');
         dragEvent.dataTransfer.effectAllowed = 'copy';
+        
+        // Also set JSON data if we have the song info
+        const songId = target.dataset.songId;
+        if (songId) {
+          dragEvent.dataTransfer.setData('application/json', JSON.stringify({
+            type: 'song',
+            songId: songId
+          }));
+        }
       }
     });
     
@@ -2860,7 +3158,7 @@ async function addToQueue(songId: string) {
   
   if (!song) {
     // Wenn nicht gefunden, versuche �ber Search Results zu finden
-    const searchResults = document.querySelectorAll('.track-item, .spotify-song-row, .unified-song-item');
+    const searchResults = document.querySelectorAll('.track-item, .song-row, .unified-song-item');
     for (const item of searchResults) {
       const element = item as HTMLElement;
       if (element.dataset.songId === songId) {
@@ -3051,26 +3349,6 @@ function initializeOpenSubsonicLogin() {
       performLoginFromForm();
     }
   });
-}
-
-// Audio Players initialisieren
-function initializeAudioPlayers() {
-  const audioLeft = document.getElementById('audio-left') as HTMLAudioElement;
-  const audioRight = document.getElementById('audio-right') as HTMLAudioElement;
-  
-  if (audioLeft) {
-    setupAudioPlayer('left', audioLeft);
-  }
-  
-  if (audioRight) {
-    setupAudioPlayer('right', audioRight);
-  }
-  
-  // Crossfader Funktionalit�t
-  initializeCrossfader();
-  
-  // Drop Zones f�r Player
-  initializePlayerDropZones();
 }
 
 // Audio Player Setup
@@ -3280,6 +3558,34 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
 }
 
 // Track in Player laden
+// Update waveform info overlay with track information
+function updateWaveformInfo(side: 'left' | 'right', song: OpenSubsonicSong) {
+  const waveformInfo = document.getElementById(`waveform-info-${side}`);
+  if (!waveformInfo) return;
+
+  const titleElement = waveformInfo.querySelector('.track-title') as HTMLElement;
+  const artistElement = waveformInfo.querySelector('.track-artist') as HTMLElement;
+  const albumElement = waveformInfo.querySelector('.track-album') as HTMLElement;
+
+  if (titleElement) titleElement.textContent = song.title;
+  if (artistElement) artistElement.textContent = song.artist;
+  if (albumElement) albumElement.textContent = song.album;
+}
+
+// Clear waveform info overlay
+function clearWaveformInfo(side: 'left' | 'right') {
+  const waveformInfo = document.getElementById(`waveform-info-${side}`);
+  if (!waveformInfo) return;
+
+  const titleElement = waveformInfo.querySelector('.track-title') as HTMLElement;
+  const artistElement = waveformInfo.querySelector('.track-artist') as HTMLElement;
+  const albumElement = waveformInfo.querySelector('.track-album') as HTMLElement;
+
+  if (titleElement) titleElement.textContent = '';
+  if (artistElement) artistElement.textContent = '';
+  if (albumElement) albumElement.textContent = '';
+}
+
 function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoPlay: boolean = false) {
   if (!openSubsonicClient) {
     console.error('OpenSubsonic client not initialized');
@@ -3317,6 +3623,9 @@ function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoP
   if (artistElement) {
     artistElement.textContent = `${song.artist} - ${song.album}`;
   }
+
+  // Waveform Info Overlay aktualisieren
+  updateWaveformInfo(side, song);
   
   // Album Cover aktualisieren
   updateAlbumCover(side, song);
@@ -3326,8 +3635,8 @@ function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoP
   const icon = playPauseBtn?.querySelector('.material-icons');
   if (icon) icon.textContent = 'play_arrow';
   
-  // Load new waveform using WaveSurfer (l�dt automatisch neue Waveform)
-  loadWaveform(side, audio.src);
+  // Load new waveform using WaveSurfer (lädt automatisch neue Waveform)
+  loadWaveform(side, audio.src, song.duration);
   
   // Audio-Event-Listener werden nach allen Funktionsdefinitionen hinzugef�gt
   setupAudioEventListeners(audio, side);
@@ -3479,22 +3788,47 @@ function initializePlayerDropZone(side: 'left' | 'right') {
     playerDeck.classList.remove('drag-over');
     
     const dragEvent = e as DragEvent;
-    const songId = dragEvent.dataTransfer?.getData('text/plain');
     
-    if (songId) {
-      console.log(`?? Dropping song ${songId} on Player ${side.toUpperCase()}`);
-      
-      // Finde Song in verschiedenen Listen
-      let song = findSongById(songId);
-      
-      if (song) {
-        // Lade Track OHNE Auto-Play
-        loadTrackToPlayer(side, song, false);
-        console.log(`? Track "${song.title}" loaded on Player ${side.toUpperCase()} (ready to play)`);
-      } else {
-        console.error(`? Song with ID ${songId} not found`);
-        showError(`Track not found. Please try searching or reloading the library.`);
+    // Try to get JSON data first (preferred format)
+    let songData: any = null;
+    let songId: string | null = null;
+    let song: OpenSubsonicSong | null = null;
+    
+    try {
+      const jsonData = dragEvent.dataTransfer?.getData('application/json');
+      if (jsonData) {
+        songData = JSON.parse(jsonData);
+        console.log('Parsed drag data:', songData);
+        
+        if (songData.type === 'song' && songData.song) {
+          song = songData.song;
+          songId = song?.id || null;
+        } else if (songData.type === 'track' && songData.track) {
+          song = songData.track;
+          songId = song?.id || null;
+        }
       }
+    } catch (e) {
+      console.warn('Failed to parse JSON drag data');
+    }
+    
+    // Fallback to text/plain and search for the song
+    if (!song && !songId) {
+      songId = dragEvent.dataTransfer?.getData('text/plain') || null;
+      if (songId) {
+        song = findSongById(songId);
+      }
+    }
+    
+    if (song && songId) {
+      console.log(`⬇️ Dropping song ${songId} on Player ${side.toUpperCase()}`);
+      
+      // Load track WITHOUT auto-play
+      loadTrackToPlayer(side, song, false);
+      console.log(`✅ Track "${song.title}" loaded on Player ${side.toUpperCase()} (ready to play)`);
+    } else {
+      console.error(`❌ Song with ID ${songId || 'unknown'} not found`);
+      showError(`Track not found. Please try searching or reloading the library.`);
     }
   });
 }
@@ -3506,7 +3840,7 @@ function findSongById(songId: string): OpenSubsonicSong | null {
   if (song) return song;
   
   // Suche in Search Results (DOM) - sowohl alte als auch neue Track-Items
-  const searchResults = document.querySelectorAll('.track-item, .track-item-oneline, .spotify-song-row, .unified-song-item');
+  const searchResults = document.querySelectorAll('.track-item, .track-item-oneline, .song-row, .unified-song-item');
   for (const item of searchResults) {
     const element = item as HTMLElement;
     if (element.dataset.songId === songId) {
@@ -3879,75 +4213,57 @@ async function loadBrowseContent() {
   }
 }
 
-// Create album card element
+// Legacy function wrappers - delegate to MediaContainer for consistency
 function createAlbumCard(album: OpenSubsonicAlbum): HTMLElement {
-  const cardContainer = document.createElement('div');
-  cardContainer.className = 'album-card-container';
-
-  const card = document.createElement('div');
-  card.className = 'album-card';
-  card.dataset.albumId = album.id;
-
-  const coverUrl = album.coverArt 
-    ? openSubsonicClient.getCoverArtUrl(album.coverArt, 300)
-    : '';
-
-  // Card contains only the cover and play overlay
-  card.innerHTML = `
-    <div class="album-cover">
-      ${coverUrl 
-        ? `<img src="${coverUrl}" alt="${album.name}" loading="lazy">`
-        : '<span class="material-icons">album</span>'
-      }
-      <div class="play-overlay">
-        <span class="material-icons">play_arrow</span>
-      </div>
-    </div>
-  `;
-
-  // Info goes below the card
-  const info = document.createElement('div');
-  info.className = 'album-info-external';
-  info.innerHTML = `
-    <div class="album-title" title="${album.name}">${album.name}</div>
-    <div class="album-artist" title="${album.artist}">${album.artist}</div>
-    ${album.year ? `<div class="album-year">${album.year}</div>` : ''}
-  `;
-
-  cardContainer.appendChild(card);
-  cardContainer.appendChild(info);
-
-  // Add click handler to the entire container
-  cardContainer.addEventListener('click', () => loadAlbumTracks(album));
-
-  return cardContainer;
+  // Create temporary container for legacy compatibility
+  const tempContainer = document.createElement('div');
+  tempContainer.id = 'temp-album-container-' + Date.now();
+  document.body.appendChild(tempContainer);
+  
+  const mediaContainer = new MediaContainer({
+    containerId: tempContainer.id,
+    items: [{
+      id: album.id,
+      name: album.name,
+      type: 'album' as const,
+      coverArt: album.coverArt,
+      artist: album.artist,
+      year: album.year
+    }],
+    displayMode: 'grid',
+    itemType: 'album',
+    onItemClick: () => loadAlbumTracks(album)
+  });
+  
+  mediaContainer.render();
+  const element = tempContainer.firstElementChild as HTMLElement;
+  document.body.removeChild(tempContainer);
+  return element || document.createElement('div');
 }
 
-// Create artist card element
 function createArtistCard(artist: OpenSubsonicArtist): HTMLElement {
-  const card = document.createElement('div');
-  card.className = 'artist-card';
-  card.dataset.artistId = artist.id;
-
-  const avatarDiv = document.createElement('div');
-  avatarDiv.className = 'artist-avatar';
-
-  // Verwende artistImageUrl falls verfügbar, sonst coverArt, sonst Fallback Icon
-  // Always show fallback icon - no image loading
-  avatarDiv.innerHTML = '<span class="material-icons">artist</span>';
-
-  const nameDiv = document.createElement('div');
-  nameDiv.className = 'artist-name';
-  nameDiv.title = artist.name;
-  nameDiv.textContent = artist.name;
-
-  card.appendChild(avatarDiv);
-  card.appendChild(nameDiv);
-
-  // Add click handler to load artist albums
-  card.addEventListener('click', () => loadArtistAlbums(artist));
-
-  return card;
+  // Create temporary container for legacy compatibility  
+  const tempContainer = document.createElement('div');
+  tempContainer.id = 'temp-artist-container-' + Date.now();
+  document.body.appendChild(tempContainer);
+  
+  const mediaContainer = new MediaContainer({
+    containerId: tempContainer.id,
+    items: [{
+      id: artist.id,
+      name: artist.name,
+      type: 'artist' as const,
+      coverArt: artist.coverArt
+    }],
+    displayMode: 'grid', 
+    itemType: 'artist',
+    onItemClick: () => loadArtistAlbums(artist)
+  });
+  
+  mediaContainer.render();
+  const element = tempContainer.firstElementChild as HTMLElement;
+  document.body.removeChild(tempContainer);
+  return element || document.createElement('div');
 }
 
 // Load tracks from an album and display results
@@ -4100,11 +4416,14 @@ function showAlbumDetailView(album: OpenSubsonicAlbum, tracks: OpenSubsonicSong[
     trackElement.addEventListener('dragstart', (e) => {
       trackElement.classList.add('dragging');
       if (track && e.dataTransfer) {
+        // Set JSON data (preferred)
         e.dataTransfer.setData('application/json', JSON.stringify({
           type: 'track',
           track: track,
           sourceUrl: openSubsonicClient?.getStreamUrl(track.id)
         }));
+        // Set track ID as text/plain for fallback compatibility
+        e.dataTransfer.setData('text/plain', track.id);
         e.dataTransfer.effectAllowed = 'copy';
       }
     });
@@ -4381,21 +4700,21 @@ class LibraryBrowser {
     const content = document.getElementById('library-content')!;
     content.innerHTML = `
       <div class="media-section">
-        <h3 class="spotify-section-title">Recent Albums</h3>
+        <h3 class="section-title">Recent Albums</h3>
         <div class="horizontal-scroll" id="recent-albums">
           <div class="loading-placeholder">Loading recent albums...</div>
         </div>
       </div>
 
       <div class="media-section">
-        <h3 class="spotify-section-title">Random Albums</h3>
+        <h3 class="section-title">Random Albums</h3>
         <div class="horizontal-scroll" id="random-albums">
           <div class="loading-placeholder">Loading random albums...</div>
         </div>
       </div>
 
       <div class="media-section">
-        <h3 class="spotify-section-title">Random Artists</h3>
+        <h3 class="section-title">Random Artists</h3>
         <div class="horizontal-scroll" id="random-artists">
           <div class="loading-placeholder">Loading random artists...</div>
         </div>
@@ -4422,15 +4741,15 @@ class LibraryBrowser {
       </div>
 
       <div class="media-section">
-        <h3 class="spotify-section-title">Albums</h3>
+        <h3 class="section-title">Albums</h3>
         <div class="horizontal-scroll" id="artist-albums">
           <div class="loading-placeholder">Loading albums...</div>
         </div>
       </div>
 
       <div class="media-section">
-        <h3 class="spotify-section-title">Top Songs</h3>
-        <div class="spotify-songs-container" id="artist-songs">
+        <h3 class="section-title">Top Songs</h3>
+        <div class="songs-container" id="artist-songs">
           <div class="loading-placeholder">Loading songs...</div>
         </div>
       </div>
@@ -4447,19 +4766,16 @@ class LibraryBrowser {
       const albumsContainer = document.getElementById('artist-albums')!;
       if (albums.length > 0) {
         const albumsHtml = albums.map(album => `
-          <div class="spotify-card spotify-album-card clickable" data-album-id="${album.id}">
-            <div class="spotify-album-image">
+          <div class="album-card clickable" data-album-id="${album.id}">
+            <div class="album-image">
               <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
-              <div class="spotify-play-overlay">
-                <span class="material-icons">play_arrow</span>
-              </div>
             </div>
-            <h4 class="spotify-album-title">${escapeHtml(album.name)}</h4>
-            <p class="spotify-album-artist">${album.year || 'Unknown Year'}</p>
+            <h4 class="album-title">${escapeHtml(album.name)}</h4>
+            <p class="album-year">${album.year || 'Unknown Year'}</p>
           </div>
         `).join('');
         
-        albumsContainer.className = 'spotify-horizontal-scroll';
+        albumsContainer.className = 'horizontal-scroll';
         albumsContainer.innerHTML = albumsHtml;
         
         // Add event listeners for album cards
@@ -4481,7 +4797,7 @@ class LibraryBrowser {
       if (songs.length > 0) {
         const songsListContainer = createUnifiedSongsContainer(songs, 'album');
         songsContainer.innerHTML = '';
-        songsContainer.className = 'spotify-songs-container';
+        songsContainer.className = 'songs-container';
         songsContainer.appendChild(songsListContainer);
         
         // Add click listeners for artist and album links in songs
@@ -4512,8 +4828,8 @@ class LibraryBrowser {
       </div>
 
       <div class="media-section">
-        <h3 class="spotify-section-title">Tracks</h3>
-        <div class="spotify-songs-container" id="album-songs">
+        <h3 class="section-title">Tracks</h3>
+        <div class="songs-container" id="album-songs">
           <div class="loading-placeholder">Loading tracks...</div>
         </div>
       </div>
@@ -4527,7 +4843,7 @@ class LibraryBrowser {
       if (songs.length > 0) {
         const songsListContainer = createUnifiedSongsContainer(songs, 'album');
         songsContainer.innerHTML = '';
-        songsContainer.className = 'spotify-songs-container';
+        songsContainer.className = 'songs-container';
         songsContainer.appendChild(songsListContainer);
         
         // Add click listeners for artist and album links in songs
@@ -4692,19 +5008,16 @@ class LibraryBrowser {
       const recentContainer = document.getElementById('recent-albums');
       if (recentContainer && recentAlbums.length > 0) {
         const albumsHtml = recentAlbums.map(album => `
-          <div class="spotify-card spotify-album-card clickable" data-album-id="${album.id}">
-            <div class="spotify-album-cover">
+          <div class="album-card clickable" data-album-id="${album.id}">
+            <div class="album-cover">
               <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
-              <div class="spotify-play-overlay">
-                <span class="material-icons">play_arrow</span>
-              </div>
             </div>
-            <h4 class="spotify-album-title">${escapeHtml(album.name)}</h4>
-            <p class="spotify-album-artist">${escapeHtml(album.artist)}</p>
+            <h4 class="album-title">${escapeHtml(album.name)}</h4>
+            <p class="album-artist">${escapeHtml(album.artist)}</p>
           </div>
         `).join('');
         
-        recentContainer.className = 'spotify-horizontal-scroll';
+        recentContainer.className = 'horizontal-scroll';
         recentContainer.innerHTML = albumsHtml;
         
         // Add event listeners for recent album cards
@@ -4723,19 +5036,16 @@ class LibraryBrowser {
       const randomContainer = document.getElementById('random-albums');
       if (randomContainer && randomAlbums.length > 0) {
         const albumsHtml = randomAlbums.map(album => `
-          <div class="spotify-card spotify-album-card clickable" data-album-id="${album.id}">
-            <div class="spotify-album-cover">
+          <div class="album-card clickable" data-album-id="${album.id}">
+            <div class="album-cover">
               <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
-              <div class="spotify-play-overlay">
-                <span class="material-icons">play_arrow</span>
-              </div>
             </div>
-            <h4 class="spotify-album-title">${escapeHtml(album.name)}</h4>
-            <p class="spotify-album-artist">${escapeHtml(album.artist)}</p>
+            <h4 class="album-title">${escapeHtml(album.name)}</h4>
+            <p class="album-artist">${escapeHtml(album.artist)}</p>
           </div>
         `).join('');
         
-        randomContainer.className = 'spotify-horizontal-scroll';
+        randomContainer.className = 'horizontal-scroll';
         randomContainer.innerHTML = albumsHtml;
         
         // Add event listeners for random album cards
@@ -4754,21 +5064,18 @@ class LibraryBrowser {
       const artistsContainer = document.getElementById('random-artists');
       if (artistsContainer && randomArtists.length > 0) {
         const artistsHtml = randomArtists.map(artist => `
-          <div class="spotify-card spotify-artist-card clickable" data-artist-id="${artist.id}">
-            <div class="spotify-artist-image">
+          <div class="artist-card clickable" data-artist-id="${artist.id}">
+            <div class="artist-image">
               <img src="${artist.coverArt ? openSubsonicClient.getCoverArtUrl(artist.coverArt, 300) : 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Ccircle cx=%2290%22 cy=%2290%22 r=%2280%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2295%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'}" 
                    alt="${escapeHtml(artist.name)}" 
                    onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Ccircle cx=%2290%22 cy=%2290%22 r=%2280%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2295%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
-              <div class="spotify-play-overlay">
-                <span class="material-icons">play_arrow</span>
-              </div>
             </div>
-            <h4 class="spotify-artist-name">${escapeHtml(artist.name)}</h4>
-            <p class="spotify-artist-type">Artist</p>
+            <h4 class="artist-name">${escapeHtml(artist.name)}</h4>
+            <p class="artist-type">Artist</p>
           </div>
         `).join('');
         
-        artistsContainer.className = 'spotify-horizontal-scroll';
+        artistsContainer.className = 'horizontal-scroll';
         artistsContainer.innerHTML = artistsHtml;
         
         // Add event listeners for random artist cards
@@ -4862,6 +5169,9 @@ class MediaContainer {
     
     // Add rating handlers for songs
     this.setupSongRatingHandlers();
+    
+    // Add click handlers for albums and artists
+    this.setupAlbumAndArtistClickHandlers();
   }
   
   private setupSongRatingHandlers() {
@@ -4985,23 +5295,76 @@ class MediaContainer {
     return wrapper;
   }
 
+  private parseArtists(artistString: string): string[] {
+    // Parse multiple artists separated by common delimiters
+    if (!artistString) return ['Unknown Artist'];
+    
+    // Split by common separators: comma, semicolon, ampersand, "feat.", "ft.", "featuring"
+    const separators = /[,;]|\s+&\s+|\s+feat\.?\s+|\s+ft\.?\s+|\s+featuring\s+/i;
+    return artistString
+      .split(separators)
+      .map(artist => artist.trim())
+      .filter(artist => artist.length > 0);
+  }
+
+  private createArtistLinks(artists: string[]): string {
+    return artists
+      .map(artist => `<span class="artist-link" data-artist-name="${escapeHtml(artist)}">${escapeHtml(artist)}</span>`)
+      .join(', ');
+  }
+
   private createAlbumElement(element: HTMLElement, item: MediaItem) {
     const coverUrl = item.coverArt && openSubsonicClient 
       ? openSubsonicClient.getCoverArtUrl(item.coverArt, 300)
       : '';
 
-    element.className += ' album-card';
-    element.innerHTML = `
-      <div class="album-cover">
-        ${coverUrl 
-          ? `<img src="${coverUrl}" alt="${item.name}" loading="lazy">`
-          : '<span class="material-icons">album</span>'
-        }
-        <div class="play-overlay">
-          <span class="material-icons">play_arrow</span>
+    const artists = this.parseArtists(item.artist || '');
+    const artistLinks = this.createArtistLinks(artists);
+
+    // Check if this is for search results
+    if (element.closest('#search-content') || document.getElementById('search-content')) {
+      element.className = 'album-wrapper';
+      element.innerHTML = `
+        <div class="album-clickable" data-album-id="${item.id}">
+          ${coverUrl 
+            ? `<img class="album-cover" src="${coverUrl}" alt="${item.name}" loading="lazy">`
+            : '<div class="album-cover album-placeholder"><span class="material-icons">album</span></div>'
+          }
+          <div class="album-title">${escapeHtml(item.name)}</div>
         </div>
-      </div>
-    `;
+        <div class="album-artists">${artistLinks}</div>
+      `;
+    } else if (element.closest('.album-grid') || element.closest('#artist-albums')) {
+      // For artist detail view - minimal design with title and year
+      element.className = 'album-wrapper';
+      element.innerHTML = `
+        <div class="album-clickable" data-album-id="${item.id}">
+          ${coverUrl 
+            ? `<img class="album-cover" src="${coverUrl}" alt="${item.name}" loading="lazy">`
+            : '<div class="album-cover album-placeholder"><span class="material-icons">album</span></div>'
+          }
+          <div class="album-title">${escapeHtml(item.name)}</div>
+          ${item.year ? `<div class="album-year">${item.year}</div>` : ''}
+        </div>
+        <div class="album-artists">${artistLinks}</div>
+      `;
+    } else {
+      // For browse content, use card layout with separate clickable areas
+      element.className += ' album-card';
+      element.innerHTML = `
+        <div class="album-clickable" data-album-id="${item.id}">
+          <div class="album-cover">
+            ${coverUrl 
+              ? `<img src="${coverUrl}" alt="${item.name}" loading="lazy">`
+              : '<span class="material-icons">album</span>'
+            }
+          </div>
+          <div class="album-title">${escapeHtml(item.name)}</div>
+          ${item.year ? `<div class="album-year">${item.year}</div>` : ''}
+        </div>
+        <div class="album-artists">${artistLinks}</div>
+      `;
+    }
   }
 
   private createArtistElement(element: HTMLElement, item: MediaItem) {
@@ -5059,11 +5422,14 @@ class MediaContainer {
     // Copy event listeners
     const dragHandler = (e: DragEvent) => {
       if (e.dataTransfer) {
+        // Set JSON data (preferred)
         e.dataTransfer.setData('application/json', JSON.stringify({
           type: 'song',
           song: song,
           sourceUrl: openSubsonicClient?.getStreamUrl(item.id)
         }));
+        // Set song ID as text/plain for fallback compatibility
+        e.dataTransfer.setData('text/plain', item.id);
         e.dataTransfer.effectAllowed = 'copy';
       }
     };
@@ -5114,12 +5480,6 @@ class MediaContainer {
     return info;
   }
 
-  private formatDuration(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
   private enableSmartDragScrolling() {
     if (!this.container) return;
 
@@ -5159,6 +5519,76 @@ class MediaContainer {
       this.container.scrollLeft = scrollLeft - walk;
     });
   }
+
+  private setupAlbumAndArtistClickHandlers() {
+    if (!this.container) return;
+
+    // Album click handlers
+    const albumClickables = this.container.querySelectorAll('.album-clickable');
+    albumClickables.forEach(clickable => {
+      clickable.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const albumId = clickable.getAttribute('data-album-id');
+        if (albumId) {
+          // Find the album from config or search for it
+          const albumItem = this.config.items.find(item => item.id === albumId);
+          if (albumItem && this.config.onItemClick) {
+            this.config.onItemClick(albumItem);
+          } else {
+            // Fallback: navigate to album page
+            loadAlbumById(albumId);
+          }
+        }
+      });
+    });
+
+    // Artist link click handlers
+    const artistLinks = this.container.querySelectorAll('.artist-link');
+    artistLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const artistName = link.getAttribute('data-artist-name');
+        if (artistName && openSubsonicClient) {
+          // Search for artist and navigate to first result
+          searchAndNavigateToArtist(artistName);
+        }
+      });
+    });
+  }
+}
+
+// Helper functions for album and artist navigation
+async function loadAlbumById(albumId: string) {
+  if (!openSubsonicClient) return;
+  
+  try {
+    // Search for the album by ID through the albums list
+    const albums = await openSubsonicClient.getAlbums(500);
+    const album = albums.find((a: OpenSubsonicAlbum) => a.id === albumId);
+    if (album) {
+      loadAlbumTracks(album);
+    }
+  } catch (error) {
+    console.error('Failed to load album:', error);
+  }
+}
+
+async function searchAndNavigateToArtist(artistName: string) {
+  if (!openSubsonicClient) return;
+  
+  try {
+    const searchResults = await openSubsonicClient.search(artistName);
+    
+    const artist = searchResults.artist?.find((a: OpenSubsonicArtist) => 
+      a.name.toLowerCase() === artistName.toLowerCase()
+    ) || searchResults.artist?.[0];
+    
+    if (artist && libraryBrowser) {
+      libraryBrowser.showArtist(artist);
+    }
+  } catch (error) {
+    console.error('Failed to search for artist:', error);
+  }
 }
 
 // Legacy functions converted to use MediaContainer
@@ -5170,44 +5600,8 @@ async function loadRecentAlbums() {
   }
 
   try {
-    console.log('📡 Calling getNewestAlbums API...');
     const albums = await openSubsonicClient.getNewestAlbums(20);
-    console.log('✅ Recent albums API response:', albums.slice(0, 3)); // Show first 3 for debugging
-    console.log(`📊 Total albums returned: ${albums.length}`);
-    
-    // Check if albums have creation/modification dates
-    if (albums.length > 0) {
-      console.log('🗓️ First album details:', {
-        name: albums[0].name,
-        artist: albums[0].artist,
-        year: albums[0].year,
-        id: albums[0].id,
-        songCount: albums[0].songCount,
-        duration: albums[0].duration,
-        created: albums[0].created || 'no created field'
-      });
-      
-      // Test: Sortierung analysieren
-      console.log('🔍 Recent Albums Sortierung Test:');
-      if (albums.length > 1) {
-        const sortedByName = [...albums].sort((a, b) => a.name.localeCompare(b.name));
-        const isAlphabetical = albums.every((album, index) => album.name === sortedByName[index]?.name);
-        console.log('❌ Alphabetical sorting detected:', isAlphabetical);
-        
-        console.log('📝 First 5 album names in order received:');
-        albums.slice(0, 5).forEach((album, index) => {
-          console.log(`  ${index + 1}. ${album.name} (Year: ${album.year || 'unknown'})`);
-        });
-        
-        // Datum-basierte Analyse falls verfügbar
-        if (albums[0].created) {
-          console.log('📅 First 3 albums with creation dates:');
-          albums.slice(0, 3).forEach(album => {
-            console.log(`  - ${album.name} (${album.created})`);
-          });
-        }
-      }
-    }
+    console.log(`� Recent albums loaded: ${albums.length} albums`);
     
     const mediaItems: MediaItem[] = albums.map((album: OpenSubsonicAlbum) => ({
       id: album.id,
@@ -5248,32 +5642,9 @@ async function loadRandomAlbums() {
   }
 
   try {
-    console.log('📡 Calling getRandomAlbums API...');
     const albums = await openSubsonicClient.getRandomAlbums(20);
-    console.log('✅ Random albums API response:', albums.slice(0, 3)); // Show first 3 for debugging
-    console.log(`📊 Total albums returned: ${albums.length}`);
+    console.log(`📦 Random albums loaded: ${albums.length} albums`);
     
-    // Check if truly random by looking at first few names
-    if (albums.length > 0) {
-      console.log('🎲 Random album sample:', albums.slice(0, 5).map(a => `${a.artist} - ${a.name}`));
-      
-      // Test: Randomness-Test
-      console.log('🔍 Random Albums Randomness Test:');
-      if (albums.length > 1) {
-        const sortedByName = [...albums].sort((a, b) => a.name.localeCompare(b.name));
-        const isAlphabetical = albums.every((album, index) => album.name === sortedByName[index]?.name);
-        console.log('❌ Alphabetical sorting detected (should be false for random):', isAlphabetical);
-        
-        const sortedByArtist = [...albums].sort((a, b) => a.artist.localeCompare(b.artist));
-        const isArtistSorted = albums.every((album, index) => album.artist === sortedByArtist[index]?.artist);
-        console.log('❌ Artist sorting detected (should be false for random):', isArtistSorted);
-        
-        console.log('📝 First 5 albums in order received:');
-        albums.slice(0, 5).forEach((album, index) => {
-          console.log(`  ${index + 1}. ${album.artist} - ${album.name}`);
-        });
-      }
-    }
     const mediaItems: MediaItem[] = albums.map((album: OpenSubsonicAlbum) => ({
       id: album.id,
       name: album.name,

@@ -60,7 +60,477 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   position: relative;
   height: fit-content;
-  min-height: 160px; /* Reduced from 180px */
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Main Container */
+.player-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Content Area (Above Waveform) */
+.player-content-area {
+  flex: 1;
+  margin-bottom: 0.5rem; /* Reduced from 1rem to 0.5rem */
+}
+
+/* Album Section Simplified */
+.player-top-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.album-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 80px; /* Fixed width for album section */
+  flex-shrink: 0;
+}
+
+.album-cover {
+  width: 80px;
+  height: 80px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1/1; /* Force square aspect ratio */
+}
+
+/* Override global album cover height for player decks */
+.player-deck .album-cover {
+  height: auto; /* Remove fixed height, use aspect-ratio instead */
+}
+
+.album-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.album-placeholder {
+  color: #666;
+  font-size: 12px;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+/* Player Content Compact */
+.player-content-compact {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem; /* Reduced from 0.75rem to 0.5rem */
+  min-width: 0; /* Allow content to shrink */
+  position: relative;
+  z-index: 15; /* Higher than waveform overlay */
+}
+
+.track-info-compact {
+  min-height: 2.5rem; /* Reserve space to prevent height changes */
+}
+
+.track-info-compact .track-title {
+  font-weight: bold;
+  font-size: 14px;
+  color: #fff;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-info-compact .track-artist {
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* All Controls in One Line - Breadcrumb Style */
+.controls-line-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0.5rem 0;
+  flex-wrap: nowrap;
+  position: relative;
+  z-index: 20; /* Higher than waveform overlay */
+}
+
+.breadcrumb-btn,
+.breadcrumb-element {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #444;
+  color: #ccc;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  height: 32px; /* Unified height for all elements */
+  box-sizing: border-box;
+}
+
+.breadcrumb-btn {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  min-width: 50px; /* Unified minimum width */
+}
+
+.controls-spacer {
+  flex: 1; /* Takes up remaining space to push volume meter right */
+}
+
+/* Generic button states */
+.breadcrumb-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #666;
+  color: #fff;
+}
+
+.breadcrumb-btn:active {
+  transform: translateY(1px);
+}
+
+/* Play button styling for Player A (left) */
+#player-left .play-pause-btn {
+  border-color: #ff6666;
+  color: #ff6666;
+  background: rgba(255, 102, 102, 0.1);
+}
+
+#player-left .play-pause-btn:hover {
+  background: rgba(255, 102, 102, 0.2);
+  border-color: #ff6666;
+  color: #ff6666;
+}
+
+#player-left .play-pause-btn.playing {
+  background: #ff6666;
+  border-color: #ff6666;
+  color: #fff;
+}
+
+/* Play button styling for Player B (right) */
+#player-right .play-pause-btn {
+  border-color: #66b3ff;
+  color: #66b3ff;
+  background: rgba(102, 179, 255, 0.1);
+}
+
+#player-right .play-pause-btn:hover {
+  background: rgba(102, 179, 255, 0.2);
+  border-color: #66b3ff;
+  color: #66b3ff;
+}
+
+#player-right .play-pause-btn.playing {
+  background: #66b3ff;
+  border-color: #66b3ff;
+  color: #fff;
+}
+
+/* Other buttons only colored on active/click */
+.restart-btn:active,
+.eject-btn:active {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: #fff;
+  color: #fff;
+}
+
+/* Specific Breadcrumb Element Styles */
+.breadcrumb-element.time-display {
+  font-family: 'Courier New', monospace;
+  width: 90px; /* Fixed width for consistency */
+}
+
+.breadcrumb-element.rating-display {
+  gap: 3px;
+  width: 80px; /* Fixed width for consistency */
+}
+
+.breadcrumb-element.rating-display .rating-star {
+  color: #333;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  font-size: 12px;
+}
+
+.breadcrumb-element.rating-display .rating-star.filled {
+  color: #ffd700;
+}
+
+.breadcrumb-element.rating-display .rating-star:hover {
+  color: #ffed4e;
+}
+
+.breadcrumb-element.volume-control {
+  gap: 6px;
+  width: 120px;
+  align-items: center;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.volume-label {
+  font-size: 10px;
+  color: #ccc;
+  font-weight: 600;
+  width: 20px;
+  text-align: center;
+}
+
+/* Horizontal Volume Slider - Custom Design */
+.volume-slider-breadcrumb {
+  flex: 1;
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+}
+
+.volume-slider-breadcrumb::-webkit-slider-track {
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+}
+
+.volume-slider-breadcrumb::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ccc;
+  cursor: pointer;
+  border: 1px solid #444;
+  margin-top: -4px; /* Center the thumb */
+}
+
+.volume-slider-breadcrumb::-moz-range-track {
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  border: none;
+}
+
+.volume-slider-breadcrumb::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ccc;
+  cursor: pointer;
+  border: 1px solid #444;
+  margin-top: 0;
+}
+
+.volume-slider-breadcrumb::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ccc;
+  cursor: pointer;
+  border: 1px solid #444;
+  transition: background 0.2s ease;
+}
+
+.volume-slider-breadcrumb::-webkit-slider-thumb:hover {
+  background: #fff;
+}
+
+.volume-slider-breadcrumb::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ccc;
+  cursor: pointer;
+  border: 1px solid #444;
+  appearance: none;
+}
+
+/* Volume Meter - Completely Horizontal Design for Player */
+.breadcrumb-element.volume-meter {
+  width: 100px;
+  padding: 6px 8px;
+  justify-content: center;
+}
+
+/* Specific horizontal layout for breadcrumb volume meters */
+.breadcrumb-element.volume-meter .meter-bars {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+  height: 4px;
+  width: 80px;
+  flex-direction: row; /* Force horizontal for player meters */
+}
+
+.breadcrumb-element.volume-meter .meter-bar {
+  flex: 1;
+  background: #333;
+  height: 4px;
+  border-radius: 0.5px;
+  transition: background-color 0.1s ease;
+  min-width: 1px;
+}
+
+/* Horizontal volume meter - intensity through color only */
+.meter-bar.active-1 { background: #4CAF50; }
+.meter-bar.active-2 { background: #8BC34A; }
+.meter-bar.active-3 { background: #CDDC39; }
+.meter-bar.active-4 { background: #FFEB3B; }
+.meter-bar.active-5 { background: #FFC107; }
+.meter-bar.active-6 { background: #FF9800; }
+.meter-bar.active-7 { background: #FF5722; }
+.meter-bar.active-8 { background: #F44336; }
+
+/* Waveform in Compact Layout */
+.waveform-section-compact {
+  margin: 0.75rem 0;
+  height: 40px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.waveform-section-compact .waveform {
+  height: 100%;
+  background: transparent;
+}
+
+.waveform-section-compact .waveform canvas {
+  border-radius: 4px !important;
+}
+
+/* Waveform Loading Indicator */
+.waveform-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #64FFDA;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: none;
+}
+
+.waveform-loading.visible {
+  display: block;
+}
+
+/* Full Width Waveform Section */
+.waveform-section-full {
+  margin-top: 1rem;
+  height: 50px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+.waveform-section-full .waveform {
+  height: 100%;
+  background: transparent;
+}
+
+.waveform-section-full .waveform canvas {
+  border-radius: 4px !important;
+}
+
+/* Bottom Waveform Bar (Spans Full Width) - Match Album Art Size */
+.waveform-bottom-bar {
+  position: relative;
+  margin-top: 0.5rem; /* Reduced from 1rem to 0.5rem */
+  margin-bottom: 0.5rem; /* Reduced from 1rem to 0.5rem */
+  height: 80px; /* Match album art height */
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Waveform Track Info Overlay */
+.waveform-track-info {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  pointer-events: none; /* Allow waveform interaction underneath */
+  z-index: 5; /* Lower than controls */
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.track-info-left,
+.track-info-center,
+.track-info-right {
+  flex: 1;
+  user-select: none; /* Prevent text selection */
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7); /* Better text visibility */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-info-left {
+  text-align: left;
+}
+
+.track-info-center {
+  text-align: center;
+}
+
+.track-info-right {
+  text-align: right;
+}
+
+/* Player-specific colors for waveform text */
+.player-deck-left .waveform-track-info {
+  color: var(--player-left-color); /* Red neon */
+}
+
+.player-deck-right .waveform-track-info {
+  color: var(--player-right-color); /* Blue neon */
+}
+
+.waveform-bottom-bar .waveform {
+  height: 100%;
+  background: transparent;
+}
+
+.waveform-bottom-bar .waveform canvas {
+  border-radius: 4px !important;
 }
 
 /* Player Label - styled like Live Button */
@@ -139,39 +609,55 @@ body {
   padding-top: 0.5rem; /* Small top padding to account for label */
 }
 
-/* Album Cover - Angular Design */
+/* UNIFIED ALBUM COVER STYLES - All album covers should be consistent */
+
+/* Base album cover - used everywhere unless specifically overridden */
 .album-cover {
-  width: 90px;
-  height: 90px;
+  width: 100%;
+  aspect-ratio: 1;
   border-radius: 4px;
   overflow: hidden;
-  background: linear-gradient(145deg, #333, #444);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid #555;
-  box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  flex-shrink: 0; /* Verhindert Verformung */
-  min-width: 90px; /* Mindestbreite */
-  min-height: 90px; /* Mindesthöhe */
-  max-width: 90px; /* Maximale Breite */
-  max-height: 90px; /* Maximale Höhe */
-  position: relative; /* Für Debugging */
-  z-index: 1; /* Sicherstellen, dass es sichtbar ist */
-  aspect-ratio: 1; /* Erzwingt perfekt quadratisches Verhältnis */
+  display: block;
+  position: relative;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .album-cover img {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* Behält Aspect Ratio und füllt Container */
+  object-fit: cover;
   object-position: center;
+  display: block;
 }
 
 .album-cover .no-cover {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #666;
+  font-size: 2rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Player-specific album cover - smaller fixed size */
+.player .album-cover {
+  width: 90px;
+  height: 90px;
+  min-width: 90px;
+  min-height: 90px;
+  max-width: 90px;
+  max-height: 90px;
+  flex-shrink: 0;
+  border: 2px solid #555;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: linear-gradient(145deg, #333, #444);
+}
+
+.player .album-cover .no-cover {
   font-size: 2rem;
 }
 
@@ -181,6 +667,165 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   min-width: 0;
+}
+
+/* Modern Card System - Album and Artist Cards */
+.album-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  width: 140px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  padding: 0;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.album-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.album-clickable {
+  cursor: pointer;
+  padding: 8px 8px 6px 8px;
+  transition: background 0.2s ease;
+}
+
+.album-clickable:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.album-image,
+.album-cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  background: rgba(255, 255, 255, 0.05);
+  margin-bottom: 6px;
+}
+
+.album-image img,
+.album-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.album-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.album-artist,
+.album-year {
+  font-size: 12px;
+  color: #b3b3b3;
+  margin: 2px 0 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.album-artists {
+  padding: 6px 8px 8px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.artist-link {
+  color: #b3b3b3;
+  cursor: pointer;
+  font-size: 12px;
+  transition: color 0.2s ease;
+  text-decoration: none;
+}
+
+.artist-link:hover {
+  color: #1DB954;
+  text-decoration: underline;
+}
+
+/* Ensure proper spacing in album cards */
+.album-card .album-year {
+  margin-top: 2px;
+  margin-bottom: 4px;
+}
+
+.artist-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  width: 140px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 12px;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.artist-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.artist-image {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  background: rgba(255, 255, 255, 0.05);
+  margin-bottom: 8px;
+}
+
+.artist-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.artist-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.artist-type {
+  font-size: 12px;
+  color: #b3b3b3;
+  margin: 2px 0 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Songs Container */
+.songs-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 16px;
 }
 
 .track-info {
@@ -213,12 +858,12 @@ body {
 }
 
 .transport-controls button {
-  background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
-  border: none;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #444;
+  color: #ccc;
   border-radius: 0;
   width: 36px;
   height: 32px;
-  color: #000;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -240,12 +885,7 @@ body {
 }
 
 .transport-controls button:hover {
-  background: linear-gradient(135deg, #00cc66 0%, #00aa55 100%);
   transform: translateY(-1px);
-}
-
-.play-pause-btn {
-  background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%) !important;
 }
 
 /* Progress Section */
@@ -297,42 +937,7 @@ body {
 /* Progress is now handled by WaveSurfer internally */
 
 /* Volume Section - Vertical for Portrait */
-.volume-section {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-  height: 90px;
-}
-
-.volume-control {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
-}
-
-.volume-control input[type="range"] {
-  writing-mode: bt-lr; /* IE */
-  -webkit-appearance: slider-vertical; /* WebKit */
-  appearance: slider-vertical; /* Standard */
-  width: 6px;
-  height: 60px;
-  background: #444;
-  outline: none;
-  border-radius: 3px;
-}
-
-.volume-control input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #00ff88;
-  cursor: pointer;
-  box-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
-}
+/* Legacy volume control styles removed - now using breadcrumb design */
 
 .volume-control input[type="range"]::-moz-range-thumb {
   width: 14px;
@@ -344,13 +949,7 @@ body {
   box-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
 }
 
-.volume-label {
-  font-size: 0.7em;
-  color: #888;
-  margin-top: 0.25rem;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-}
+/* Legacy volume label styles removed - now using breadcrumb design */
 
 /* Volume Meter - Professional Design */
 .volume-meter {
@@ -431,10 +1030,6 @@ body {
   .volume-control input[type="range"] {
     height: 50px;
   }
-}
-
-.eject-btn {
-  background: linear-gradient(135deg, #ff8800 0%, #cc6600 100%);
 }
 
 /* Center Controls - Player-aligned */
@@ -714,11 +1309,6 @@ body {
   transition: all 0.2s ease;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
 /* Professional Microphone Button - Centered */
 .mic-btn-pro {
   display: flex;
@@ -856,8 +1446,10 @@ body {
   border-color: #ff0044;
 }
 
-/* Professional Sliders - Angular */
-.vertical-slider {
+/* Legacy vertical slider styles removed - now using breadcrumb design */
+
+/* Mixer Vertical Sliders - Keep vertical for mixer controls */
+.mixer-vertical-slider {
   writing-mode: bt-lr;
   -webkit-appearance: slider-vertical;
   appearance: slider-vertical;
@@ -873,7 +1465,7 @@ body {
     0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-.vertical-slider::-webkit-slider-thumb {
+.mixer-vertical-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -887,7 +1479,7 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
-.vertical-slider::-moz-range-thumb {
+.mixer-vertical-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
   background: linear-gradient(145deg, #ff6666, #ff4444);
@@ -1023,18 +1615,9 @@ body {
   height: 28px !important;
 }
 
-.vertical-slider,
 .crossfader-pro {
   width: var(--slider-width) !important;
   height: var(--slider-height) !important;
-}
-
-.vertical-slider {
-  --slider-width: 6px;
-  --slider-height: 60px;
-}
-
-.crossfader-pro {
   --slider-width: 120px;
   --slider-height: 8px;
 }
@@ -1055,15 +1638,15 @@ body {
 }
 
 .broadcast-btn {
-  background: linear-gradient(135deg, #ff8800 0%, #cc6600 100%);
-  border: none;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #444;
+  color: #ccc;
   border-radius: 8px;
   padding: 0.8rem 1.5rem;
-  color: white;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(255, 136, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   font-size: 0.9rem;
   display: flex;
   align-items: center;
@@ -1091,9 +1674,11 @@ body {
 }
 
 .stream-config-btn:hover {
-  background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #666;
+  color: #fff;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
 }
 
 .stream-config-btn .material-icons {
@@ -1490,111 +2075,162 @@ body {
   min-height: 100%;
 }
 
-/* Search Results Styling */
+/* Search Results Styling - Minimalist Artists */
 #search-content .media-container.artist-type {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
-  gap: 7px;
-  padding: 7px 0;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 4px;
 }
 
-/* Artist items in search - single element with all styling */
+/* Artist items in search - minimal design */
 #search-content .artist-wrapper {
   display: flex;
-  align-items: stretch;
-  background: linear-gradient(145deg, #1e1e1e, #2a2a2a);
-  border: 2px solid #444;
+  align-items: center;
+  background: transparent;
+  border: none;
   border-radius: 4px;
   padding: 0;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   cursor: pointer;
   width: 100%;
-  height: 75px;
+  height: 56px;
   overflow: hidden;
-  box-shadow: 
-    0 4px 12px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 #search-content .artist-wrapper:hover {
-  background: linear-gradient(145deg, #2a2a2a, #363636);
-  border-color: #00ff88;
-  transform: translateY(-1px);
-  box-shadow: 
-    0 6px 16px rgba(0, 255, 136, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 #search-content .artist-wrapper .artist-image {
-  width: 75px;
-  height: 75px;
-  border-radius: 4px 0 0 4px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   object-fit: cover;
+  object-position: center;
   flex-shrink: 0;
-  border-right: 2px solid #444;
+  margin-right: 12px;
+  overflow: hidden;
 }
 
 #search-content .artist-wrapper .artist-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 75px;
-  height: 75px;
-  background: rgba(255, 255, 255, 0.1);
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.08);
   color: #666;
-  font-size: 28px;
-  border-right: 2px solid #444;
-  border-radius: 4px 0 0 4px;
+  font-size: 20px;
+  border-radius: 50%;
+  margin-right: 12px;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 #search-content .artist-wrapper .artist-content {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0.75rem 1rem;
   flex-grow: 1;
   overflow: hidden;
+  min-width: 0;
 }
 
 #search-content .artist-wrapper .artist-name {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: #fff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.2;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  line-height: 1.1;
+  margin-bottom: 2px;
 }
 
 #search-content .artist-wrapper .artist-album-count {
-  font-size: 0.8rem;
-  color: #aaa;
-  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: #b3b3b3;
   line-height: 1;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #search-content .media-container.artist-type .artist-info {
   display: none;
 }
 
-/* Album Search Results - Remove borders */
+/* Album Search Results - Minimal design */
+#search-content .media-container.album-type {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  padding: 4px;
+}
+
 #search-content .media-container.album-type .album-wrapper {
   border: none;
   background: transparent;
-  padding: 0.25rem;
+  padding: 0;
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 #search-content .media-container.album-type .album-wrapper:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border: none;
+  background: rgba(255, 255, 255, 0.1);
 }
 
-/* Song Search Results - Style like album track lists */
+/* Search results album covers */
+#search-content .media-container.album-type .album-cover {
+  margin-bottom: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Album placeholder when no cover available */
+#search-content .media-container.album-type .album-placeholder {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  color: #666;
+  font-size: 2.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+/* Album info - minimal text */
+#search-content .media-container.album-type .album-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.1;
+  margin: 0 0 2px 0;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#search-content .media-container.album-type .album-artist {
+  font-size: 0.75rem;
+  color: #b3b3b3;
+  line-height: 1.1;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Song Search Results - Compact list design */
 #search-content .media-container.song-type {
   display: flex;
   flex-direction: column;
@@ -1603,13 +2239,13 @@ body {
 
 #search-content .media-container.song-type .song-wrapper {
   display: grid;
-  grid-template-columns: 50px 40px 1fr auto 60px 35px;
-  gap: 1rem;
+  grid-template-columns: 40px 36px 1fr auto 50px 30px;
+  gap: 0.75rem;
   align-items: center;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
   background: transparent;
   border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   transition: background-color 0.2s ease;
   cursor: pointer;
   width: 100%;
@@ -1618,7 +2254,7 @@ body {
 }
 
 #search-content .media-container.song-type .song-wrapper:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 #search-content .media-container.song-type .song-wrapper:last-child {
@@ -2122,16 +2758,6 @@ body {
   background: #404040;
   border-color: #00ff88;
   transform: translateY(-2px);
-}
-
-.album-cover {
-  width: 100%;
-  height: 140px;
-  background: #444;
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
-  background-size: cover;
-  background-position: center;
 }
 
 .album-title {
@@ -2722,22 +3348,6 @@ body {
   background: #00ff88;
 }
 
-/* Live Streaming Animations */
-@keyframes pulse {
-  0% {
-    box-shadow: 0 4px 15px rgba(255, 51, 51, 0.3);
-    transform: scale(1);
-  }
-  50% {
-    box-shadow: 0 6px 25px rgba(255, 51, 51, 0.6);
-    transform: scale(1.02);
-  }
-  100% {
-    box-shadow: 0 4px 15px rgba(255, 51, 51, 0.3);
-    transform: scale(1);
-  }
-}
-
 /* Streaming Status Overlay */
 #streaming-status {
   backdrop-filter: blur(10px);
@@ -2993,22 +3603,13 @@ body {
   background: linear-gradient(145deg, #2e2e2e, #1c1c1c);
 }
 
-/* Album Card Container - Override any previous album-cover limitations */
+/* Album cards - inherit base album cover styles */
 .album-card .album-cover {
-  width: 100% !important;
-  height: 100% !important; /* Cover fills entire card */
-  min-width: unset !important;
-  min-height: unset !important;
-  max-width: unset !important;
-  max-height: unset !important;
-  background: linear-gradient(145deg, #404040, #2a2a2a);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-  border: none;
+  width: 100%;
+  height: 100%;
   border-radius: 0; /* Card itself has border-radius */
+  background: linear-gradient(145deg, #404040, #2a2a2a);
+  position: relative;
 }
 
 .album-card .album-cover::before {
@@ -3190,32 +3791,6 @@ body {
   color: #666;
   font-style: italic;
   text-align: center;
-}
-
-/* Play Button Overlay for Albums */
-.album-card .play-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(0, 255, 136, 0.9);
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.album-card-container:hover .album-card .play-overlay {
-  opacity: 1;
-}
-
-.play-overlay .material-icons {
-  color: #000;
-  font-size: 1.5rem;
 }
 
 /* MediaContainer Styles - Reusable component for all media types */
@@ -3405,34 +3980,6 @@ body {
   text-align: center;
   color: #666;
   font-style: italic;
-}
-
-/* Play Overlay für Media Items */
-.media-item-wrapper .play-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(0, 255, 136, 0.95);
-  border-radius: 50%;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  z-index: 5;
-  backdrop-filter: blur(2px);
-}
-
-.media-item-wrapper:hover .play-overlay {
-  opacity: 1;
-}
-
-.media-item-wrapper .play-overlay .material-icons {
-  color: #000;
-  font-size: 1.25rem;
 }
 
 /* Responsive Anpassungen */
@@ -3643,11 +4190,73 @@ body {
   text-align: right;
 }
 
-/* Album Grid in Artist Detail */
+/* Album Grid in Artist Detail - Minimalistic Cards */
 .album-grid .albums {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 180px);
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+  padding: 8px 0;
+}
+
+/* Album cards in artist detail view */
+.album-grid .albums .album-wrapper {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.album-grid .albums .album-wrapper:hover {
+  transform: scale(1.05);
+}
+
+/* Artist detail view album covers */
+.album-grid .albums .album-cover {
+  margin-bottom: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.album-grid .albums .album-placeholder {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  color: #666;
+  font-size: 3rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+/* Album text info - only title and year */
+.album-grid .albums .album-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.2;
+  margin: 0 0 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-grid .albums .album-year {
+  font-size: 0.75rem;
+  color: #b3b3b3;
+  line-height: 1;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hide artist name in artist detail view */
+.album-grid .albums .album-artist {
+  display: none;
 }
 
 /* Song List Layout for Search Results */
@@ -3921,9 +4530,10 @@ body {
 .compact-nav-container {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0; /* No gap - seamless connection */
   height: 48px; /* Erhöht von 40px auf 48px */
   position: relative;
+  width: 100%;
 }
 
 /* Tilted Breadcrumbs - Player Button Style */
@@ -3931,8 +4541,8 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1;
-  max-width: 60%;
+  flex-shrink: 0; /* Don't shrink, keep natural width */
+  min-width: 0; /* Allow text truncation if needed */
 }
 
 .tilted-breadcrumb-item {
@@ -3976,21 +4586,24 @@ body {
 .tilted-search-container {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+  gap: 0; /* No gap between input and button */
+  flex: 1; /* Take all remaining space */
+  margin-left: 0; /* No margin - seamless connection */
 }
 
 #search-input {
   background: rgba(0, 0, 0, 0.8);
   border: 1px solid #444;
-  clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
-  padding: 8px 14px; /* Erhöht von 6px 12px */
+  border-left: none; /* Remove left border for seamless connection */
+  clip-path: polygon(0% 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%); /* Remove left angle */
+  padding: 8px 14px;
   color: white;
-  font-size: 13px; /* Erhöht von 11px */
-  width: 180px; /* Erhöht von 160px */
-  height: 30px; /* Erhöht von 24px */
+  font-size: 13px;
+  flex: 1; /* Take all available space */
+  height: 30px;
   transition: all 0.2s ease;
   outline: none;
+  min-width: 100px; /* Minimum for usability */
 }
 
 #search-input:focus {
@@ -4007,16 +4620,18 @@ body {
 #search-btn {
   background: rgba(0, 0, 0, 0.8);
   border: 1px solid #64FFDA;
-  clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
-  padding: 6px 10px; /* Erhöht von 5px 8px */
+  border-left: none; /* Remove left border for seamless connection */
+  clip-path: polygon(0% 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%); /* Remove left angle */
+  padding: 6px 10px;
   color: #64FFDA;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 30px; /* Erhöht von 24px */
-  width: 36px; /* Erhöht von 32px */
+  height: 30px;
+  width: 36px;
+  flex-shrink: 0; /* Don't shrink */
 }
 
 #search-btn:hover {
@@ -4134,13 +4749,13 @@ body {
   100% { opacity: 0.5; }
 }
 
-/* ===== SPOTIFY-STYLE CARDS SYSTEM ===== */
+/* ===== MODERN CARDS SYSTEM ===== */
 
 /* Universal Card Container */
-.spotify-card {
+.music-card {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
-  padding: 16px;
+  padding: 0;
   transition: all 0.2s ease;
   cursor: pointer;
   border: 1px solid transparent;
@@ -4148,19 +4763,19 @@ body {
   overflow: hidden;
 }
 
-.spotify-card:hover {
+.music-card:hover {
   background: rgba(255, 255, 255, 0.08);
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 /* Album Cards */
-.spotify-album-card {
+.album-card {
   width: 180px;
   min-width: 180px;
 }
 
-.spotify-album-cover {
+.album-cover {
   width: 100%;
   height: 180px;
   border-radius: 4px;
@@ -4170,18 +4785,19 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.spotify-album-cover img {
+.album-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   transition: transform 0.2s ease;
 }
 
-.spotify-card:hover .spotify-album-cover img {
+.music-card:hover .album-cover img {
   transform: scale(1.05);
 }
 
-.spotify-album-title {
+.album-title {
   font-size: 14px;
   font-weight: 600;
   color: white;
@@ -4192,7 +4808,7 @@ body {
   white-space: nowrap;
 }
 
-.spotify-album-artist {
+.album-artist {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.7);
   margin: 0;
@@ -4202,12 +4818,12 @@ body {
 }
 
 /* Artist Cards */
-.spotify-artist-card {
+.artist-card {
   width: 180px;
   min-width: 180px;
 }
 
-.spotify-artist-image {
+.artist-image {
   width: 100%;
   height: 180px;
   border-radius: 50%;
@@ -4217,18 +4833,19 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.spotify-artist-image img {
+.artist-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   transition: transform 0.2s ease;
 }
 
-.spotify-card:hover .spotify-artist-image img {
+.music-card:hover .artist-image img {
   transform: scale(1.05);
 }
 
-.spotify-artist-name {
+.artist-name {
   font-size: 14px;
   font-weight: 600;
   color: white;
@@ -4239,7 +4856,7 @@ body {
   white-space: nowrap;
 }
 
-.spotify-artist-type {
+.artist-type {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.7);
   margin: 0;
@@ -4247,10 +4864,10 @@ body {
 }
 
 /* Song Cards - List Style */
-.spotify-song-card {
+.song-card {
   background: transparent;
   border-radius: 4px;
-  padding: 8px 12px;
+  padding: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -4259,14 +4876,14 @@ body {
   margin-bottom: 2px;
 }
 
-.spotify-song-card:hover {
+.song-card:hover {
   background: rgba(255, 255, 255, 0.08);
   transform: none;
   box-shadow: none;
 }
 
 /* Song Row - Grid Layout for detailed song lists */
-.spotify-song-row {
+.song-row {
   background: transparent;
   border-radius: 4px;
   padding: 8px 16px;
@@ -4280,13 +4897,13 @@ body {
   transition: background-color 0.2s ease;
 }
 
-.spotify-song-row:hover {
+.song-row:hover {
   background: rgba(255, 255, 255, 0.08);
   transform: none;
   box-shadow: none;
 }
 
-.spotify-track-cover {
+.track-cover {
   width: 40px;
   height: 40px;
   border-radius: 4px;
@@ -4295,13 +4912,14 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.spotify-track-cover img {
+.track-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
 }
 
-.spotify-no-cover {
+.no-cover {
   width: 100%;
   height: 100%;
   background: rgba(255, 255, 255, 0.1);
@@ -4312,7 +4930,7 @@ body {
   font-size: 18px;
 }
 
-.spotify-track-title {
+.track-title {
   font-size: 14px;
   font-weight: 400;
   color: white;
@@ -4321,7 +4939,7 @@ body {
   white-space: nowrap;
 }
 
-.spotify-track-artist {
+.track-artist {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.7);
   overflow: hidden;
@@ -4329,7 +4947,7 @@ body {
   white-space: nowrap;
 }
 
-.spotify-track-album {
+.track-album {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.7);
   overflow: hidden;
@@ -4339,25 +4957,25 @@ body {
   transition: color 0.2s ease;
 }
 
-.spotify-track-album:hover {
+.track-album:hover {
   color: white;
   text-decoration: underline;
 }
 
-.spotify-track-rating {
+.track-rating {
   display: flex;
   gap: 2px;
   justify-content: center;
 }
 
-.spotify-track-duration {
+.track-duration {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.5);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.spotify-song-cover {
+.song-cover {
   width: 40px;
   height: 40px;
   border-radius: 4px;
@@ -4366,13 +4984,14 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.spotify-song-cover img {
+.song-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
 }
 
-.spotify-song-info {
+.song-info {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -4380,7 +4999,7 @@ body {
   gap: 2px;
 }
 
-.spotify-song-title {
+.song-title {
   font-size: 14px;
   font-weight: 500;
   color: white;
@@ -4390,7 +5009,7 @@ body {
   white-space: nowrap;
 }
 
-.spotify-song-artist {
+.song-artist {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.7);
   margin: 0;
@@ -4399,7 +5018,7 @@ body {
   white-space: nowrap;
 }
 
-.spotify-song-duration {
+.song-duration {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.5);
   font-variant-numeric: tabular-nums;
@@ -4408,7 +5027,7 @@ body {
 }
 
 /* Songs Container */
-.spotify-songs-container {
+.songs-container {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -4418,7 +5037,7 @@ body {
 }
 
 /* Horizontal Scroll Containers */
-.spotify-horizontal-scroll {
+.horizontal-scroll {
   display: flex;
   gap: 16px;
   overflow-x: auto;
@@ -4427,26 +5046,26 @@ body {
   scroll-behavior: smooth;
 }
 
-.spotify-horizontal-scroll::-webkit-scrollbar {
+.horizontal-scroll::-webkit-scrollbar {
   height: 8px;
 }
 
-.spotify-horizontal-scroll::-webkit-scrollbar-track {
+.horizontal-scroll::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
 }
 
-.spotify-horizontal-scroll::-webkit-scrollbar-thumb {
+.horizontal-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 4px;
 }
 
-.spotify-horizontal-scroll::-webkit-scrollbar-thumb:hover {
+.horizontal-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 
 /* Vertical Song List Container */
-.spotify-song-list {
+.song-list {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -4455,37 +5074,8 @@ body {
   padding: 8px;
 }
 
-/* Play Button Overlay */
-.spotify-play-overlay {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  width: 40px;
-  height: 40px;
-  background: #1DB954;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transform: translateY(8px);
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  color: black;
-  font-size: 16px;
-}
-
-.spotify-card:hover .spotify-play-overlay {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.spotify-play-overlay:hover {
-  transform: scale(1.05);
-}
-
 /* Section Titles */
-.spotify-section-title {
+.section-title {
   font-size: 24px;
   font-weight: 700;
   color: white;
@@ -4493,27 +5083,27 @@ body {
   line-height: 1.2;
 }
 
-.spotify-section-title:first-child {
+.section-title:first-child {
   margin-top: 0;
 }
 
 /* Responsive Grid for larger screens */
 @media (min-width: 1200px) {
-  .spotify-horizontal-scroll {
+  .horizontal-scroll {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 24px;
     overflow: visible;
   }
   
-  .spotify-album-card,
-  .spotify-artist-card {
+  .album-card,
+  .artist-card {
     width: auto;
     min-width: auto;
   }
 }
 
-/* ===== END SPOTIFY-STYLE CARDS ===== */
+/* ===== END MODERN CARDS ===== */
 
 /* Clickable item effects */
 .clickable {

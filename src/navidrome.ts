@@ -619,21 +619,19 @@ class SubsonicApiClient {
     }
   }
 
-  // Neueste Alben abrufen
+  // Get newest albums - using Feishin's approach with getAlbumList2
   async getNewestAlbums(size = 20): Promise<OpenSubsonicAlbum[]> {
     try {
-      console.log('🔗 API Call: getAlbumList with type=newest, size=' + size);
-      const response = await this.makeRequest('getAlbumList', { 
+      console.log('🔗 API Call: getAlbumList2 with type=newest, size=' + size);
+      
+      const response = await this.makeRequest('getAlbumList2', { 
         type: 'newest',
-        size: size.toString()
+        size: size.toString(),
+        offset: '0'
       });
       
-      const albums = response.albumList?.album || [];
-      console.log('📦 Newest Albums API returned:', albums.length, 'albums');
-      if (albums.length > 0) {
-        console.log('📝 First album from API:', albums[0]);
-        console.log('📅 Album dates:', albums.slice(0, 3).map((a: any) => ({ name: a.name, created: a.created })));
-      }
+      const albums = response.albumList2?.album || [];
+      console.log('📦 Newest Albums (getAlbumList2) returned:', albums.length, 'albums');
       
       return albums;
     } catch (error) {
