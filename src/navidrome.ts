@@ -360,6 +360,25 @@ class SubsonicApiClient {
     return response.albumList?.album || [];
   }
 
+  // Album-Listen nach Typ (getAlbumList2)
+  async getAlbumList2(type: 'random' | 'newest' | 'highest' | 'frequent' | 'recent' | 'alphabeticalByName' | 'alphabeticalByArtist' | 'starred', size = 50, offset = 0): Promise<OpenSubsonicAlbum[]> {
+    const response = await this.makeRequest('getAlbumList2', { 
+      type, 
+      size, 
+      offset 
+    });
+    return response.albumList2?.album || [];
+  }
+
+  // Ähnliche Songs basierend auf Artist ID
+  async getSimilarSongs2(songId: string, count = 50): Promise<OpenSubsonicSong[]> {
+    const response = await this.makeRequest('getSimilarSongs2', { 
+      id: songId, 
+      count 
+    });
+    return response.similarSongs2?.song || [];
+  }
+
   // Alle Künstler abrufen
   async getArtists(): Promise<OpenSubsonicArtist[]> {
     const response = await this.makeRequest('getArtists');

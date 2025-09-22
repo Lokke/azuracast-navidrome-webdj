@@ -8,15 +8,30 @@ console.log("SubCaster loaded!");
 let lastSearchResults: any = null;
 let lastSearchQuery: string = '';
 
+// Track storage for each deck to enable drag & drop between decks
+const deckSongs: {
+  a: OpenSubsonicSong | null;
+  b: OpenSubsonicSong | null;
+  c: OpenSubsonicSong | null;
+  d: OpenSubsonicSong | null;
+} = {
+  a: null,
+  b: null,
+  c: null,
+  d: null
+};
+
 // Audio Mixing und Streaming Infrastruktur
 let audioContext: AudioContext | null = null;
 let masterGainNode: GainNode | null = null;
-let streamGainNode: GainNode | null = null; // Separate Ausgabe f�r Stream
-let leftPlayerGain: GainNode | null = null;
-let rightPlayerGain: GainNode | null = null;
+let streamGainNode: GainNode | null = null; // Separate Ausgabe für Stream
+let aPlayerGain: GainNode | null = null;
+let bPlayerGain: GainNode | null = null;
+let cPlayerGain: GainNode | null = null;
+let dPlayerGain: GainNode | null = null;
 let microphoneGain: GainNode | null = null;
-let crossfaderGain: { left: GainNode; right: GainNode } | null = null;
-let streamCrossfaderGain: { left: GainNode; right: GainNode } | null = null; // Separate Crossfader f�r Stream
+let crossfaderGain: { a: GainNode; b: GainNode; c: GainNode; d: GainNode } | null = null;
+let streamCrossfaderGain: { a: GainNode; b: GainNode; c: GainNode; d: GainNode } | null = null; // Separate Crossfader für Stream
 let microphoneStream: MediaStream | null = null;
 let mediaRecorder: MediaRecorder | null = null;
 let isStreaming: boolean = false;
@@ -27,12 +42,14 @@ interface PlayerState {
   song: OpenSubsonicSong | null;
   isPlaying: boolean;
   startTime: number; // Timestamp when track started playing
-  side: 'left' | 'right';
+  side: 'a' | 'b' | 'c' | 'd';
 }
 
-let playerStates: Record<'left' | 'right', PlayerState> = {
-  left: { song: null, isPlaying: false, startTime: 0, side: 'left' },
-  right: { song: null, isPlaying: false, startTime: 0, side: 'right' }
+let playerStates: Record<'a' | 'b' | 'c' | 'd', PlayerState> = {
+  a: { song: null, isPlaying: false, startTime: 0, side: 'a' },
+  b: { song: null, isPlaying: false, startTime: 0, side: 'b' },
+  c: { song: null, isPlaying: false, startTime: 0, side: 'c' },
+  d: { song: null, isPlaying: false, startTime: 0, side: 'd' }
 };
 
 let currentStreamMetadata: OpenSubsonicSong | null = null; // Currently displayed metadata in stream
@@ -87,7 +104,7 @@ function updateStreamMetadata() {
 }
 
 // Track player state changes
-function setPlayerState(side: 'left' | 'right', song: OpenSubsonicSong | null, isPlaying: boolean) {
+function setPlayerState(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong | null, isPlaying: boolean) {
   const state = playerStates[side];
   const wasPlaying = state.isPlaying;
   
@@ -107,7 +124,7 @@ function setPlayerState(side: 'left' | 'right', song: OpenSubsonicSong | null, i
 }
 
 // Get currently loaded song from player
-function getCurrentLoadedSong(side: 'left' | 'right'): OpenSubsonicSong | null {
+function getCurrentLoadedSong(side: 'a' | 'b' | 'c' | 'd'): OpenSubsonicSong | null {
   const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
   if (!audio || !audio.dataset.songId) return null;
   
@@ -118,13 +135,13 @@ function getCurrentLoadedSong(side: 'left' | 'right'): OpenSubsonicSong | null {
 }
 
 // Complete deck reset when track ends or eject is pressed
-function clearPlayerDeck(side: 'left' | 'right') {
+function clearPlayerDeck(side: 'a' | 'b' | 'c' | 'd') {
   console.log(`🔄 Clearing Player ${side.toUpperCase()} deck completely`);
   
   const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
   const titleElement = document.getElementById(`track-title-${side}`);
   const artistElement = document.getElementById(`track-artist-${side}`);
-  const albumCover = document.getElementById(`album-cover-${side}`) as HTMLImageElement;
+  const albumCover = document.getElementById(`album-cover-${side}`) as HTMLElement;
   const playerRating = document.getElementById(`player-rating-${side}`);
   const timeDisplay = document.getElementById(`time-display-${side}`);
   const progressBar = document.getElementById(`progress-bar-${side}`);
@@ -142,6 +159,9 @@ function clearPlayerDeck(side: 'left' | 'right') {
     // The audio element will be properly reinitialized when a new track is loaded
   }
   
+  // Clear stored song data for drag & drop
+  deckSongs[side] = null;
+  
   // Clear metadata display
   if (titleElement) titleElement.textContent = 'No Track Loaded';
   if (artistElement) artistElement.textContent = '';
@@ -151,8 +171,11 @@ function clearPlayerDeck(side: 'left' | 'right') {
   
   // Clear album cover
   if (albumCover) {
-    albumCover.src = '/placeholder-cover.png';
-    albumCover.alt = 'No Cover';
+    albumCover.innerHTML = `
+      <div class="no-cover">
+        <span class="material-icons">music_note</span>
+      </div>
+    `;
   }
   
   // Clear rating but keep placeholder structure
@@ -198,6 +221,9 @@ function clearPlayerDeck(side: 'left' | 'right') {
   // Reset waveform completely
   clearWaveform(side);
   
+  // Clear waveform blinking effects
+  clearWaveformBlinking(side);
+  
   // Clear player state
   setPlayerState(side, null, false);
   
@@ -213,8 +239,8 @@ function clearPlayerDeck(side: 'left' | 'right') {
 // Debug function to show current player states and metadata priority
 function debugPlayerStates() {
   console.log('?? CURRENT PLAYER STATES DEBUG:');
-  console.log('Left Player:', playerStates.left);
-  console.log('Right Player:', playerStates.right);
+  console.log('Player A:', playerStates.a);
+  console.log('Player B:', playerStates.b);
   console.log('Current Stream Metadata:', currentStreamMetadata?.title || 'None');
   console.log('Is Streaming:', isStreaming);
   
@@ -307,69 +333,106 @@ async function initializeAudioMixing() {
       console.log('?? Audio Context supports advanced features - using isolated mode');
     }
     
-    // Master Gain Node f�r Monitor-Ausgabe (Kopfh�rer/Lautsprecher)
+    // Master Gain Node f�r Monitor-Ausgabe (Kopfh�rer/Lautsprecher) - NUR PLAYER DECKS
     masterGainNode = audioContext.createGain();
-    masterGainNode.gain.value = 0.99; // 99% Master-Volume
+    masterGainNode.gain.value = 0.99; // 99% Monitor-Volume
     masterGainNode.connect(audioContext.destination);
     
-    // Stream Gain Node f�r Live-Stream (separate Ausgabe)
+    // Stream Gain Node f�r Live-Stream (separate Ausgabe) - PLAYER DECKS + MIKROFON
     streamGainNode = audioContext.createGain();
     streamGainNode.gain.value = 0.99; // 99% Stream-Volume
     
-    // Separate Gain Nodes f�r jeden Player
-    leftPlayerGain = audioContext.createGain();
-    leftPlayerGain.gain.value = 1.0; // 100% Initial volume
-    rightPlayerGain = audioContext.createGain();
-    rightPlayerGain.gain.value = 1.0; // 100% Initial volume
+    // Separate Gain Nodes für alle 4 Player
+    aPlayerGain = audioContext.createGain();
+    aPlayerGain.gain.value = 1.0; // 100% Initial volume
+    bPlayerGain = audioContext.createGain();
+    bPlayerGain.gain.value = 1.0; // 100% Initial volume
+    cPlayerGain = audioContext.createGain();
+    cPlayerGain.gain.value = 1.0; // 100% Initial volume
+    dPlayerGain = audioContext.createGain();
+    dPlayerGain.gain.value = 1.0; // 100% Initial volume
     
-    // Crossfader Gain Nodes f�r Monitor-Ausgabe
+    // Crossfader Gain Nodes für Monitor-Ausgabe (Kopfhörer) - alle 4 Player
     crossfaderGain = {
-      left: audioContext.createGain(),
-      right: audioContext.createGain()
+      a: audioContext.createGain(),
+      b: audioContext.createGain(),
+      c: audioContext.createGain(),
+      d: audioContext.createGain()
     };
     
-    // Crossfader Gain Nodes f�r Stream-Ausgabe (separate Kontrolle)
+    // Crossfader Gain Nodes für Stream-Ausgabe (separate Kontrolle) - alle 4 Player
     streamCrossfaderGain = {
-      left: audioContext.createGain(),
-      right: audioContext.createGain()
+      a: audioContext.createGain(),
+      b: audioContext.createGain(),
+      c: audioContext.createGain(),
+      d: audioContext.createGain()
     };
     
-    // Initial Crossfader in der Mitte (beide Kan�le gleichlaut)
-    const initialGain = Math.cos(0.5 * Math.PI / 2); // ~0.707 f�r 50% Position
-    crossfaderGain.left.gain.value = initialGain;
-    crossfaderGain.right.gain.value = initialGain;
-    streamCrossfaderGain.left.gain.value = initialGain;
-    streamCrossfaderGain.right.gain.value = initialGain;
+    // Initial Crossfader in der Mitte (alle Kanäle gleichlaut)
+    const initialGain = Math.cos(0.5 * Math.PI / 2); // ~0.707 für 50% Position
+    if (crossfaderGain && streamCrossfaderGain) {
+      crossfaderGain.a.gain.value = initialGain;
+      crossfaderGain.b.gain.value = initialGain;
+      crossfaderGain.c.gain.value = initialGain;
+      crossfaderGain.d.gain.value = initialGain;
+      streamCrossfaderGain.a.gain.value = initialGain;
+      streamCrossfaderGain.b.gain.value = initialGain;
+      streamCrossfaderGain.c.gain.value = initialGain;
+      streamCrossfaderGain.d.gain.value = initialGain;
+    }
     
-    // Mikrofon Gain Node
+    // Mikrofon Gain Nodes
     microphoneGain = audioContext.createGain();
     microphoneGain.gain.value = 0; // Standardm��ig stumm (wird �ber Button aktiviert)
     
-    // Monitor-Routing: Crossfader Gains mit Master verbinden
-    crossfaderGain.left.connect(masterGainNode);
-    crossfaderGain.right.connect(masterGainNode);
+    // Mikrofon Monitor Gain (separater Schalter f�r Selbstabh�rung)
+    const microphoneMonitorGain = audioContext.createGain();
+    microphoneMonitorGain.gain.value = 0; // Standardm��ig aus (kein Selbsth�ren)
     
-    // Stream-Routing: Stream Crossfader Gains mit Stream verbinden
-    streamCrossfaderGain.left.connect(streamGainNode);
-    streamCrossfaderGain.right.connect(streamGainNode);
+    // MONITOR-ROUTING (Kopfhörer): Alle 4 Player Decks, KEIN Mikrofon standardmäßig
+    if (crossfaderGain && masterGainNode) {
+      crossfaderGain.a.connect(masterGainNode);
+      crossfaderGain.b.connect(masterGainNode);
+      crossfaderGain.c.connect(masterGainNode);
+      crossfaderGain.d.connect(masterGainNode);
+    }
     
-    // Player Gains mit beiden Crossfadern verbinden
-    leftPlayerGain.connect(crossfaderGain.left);
-    leftPlayerGain.connect(streamCrossfaderGain.left);
-    rightPlayerGain.connect(crossfaderGain.right);
-    rightPlayerGain.connect(streamCrossfaderGain.right);
+    // STREAM-ROUTING: Alle 4 Player Decks + Mikrofon (wenn Button an)
+    if (streamCrossfaderGain && streamGainNode) {
+      streamCrossfaderGain.a.connect(streamGainNode);
+      streamCrossfaderGain.b.connect(streamGainNode);
+      streamCrossfaderGain.c.connect(streamGainNode);
+      streamCrossfaderGain.d.connect(streamGainNode);
+      microphoneGain.connect(streamGainNode); // Mikrofon nur zum Stream
+    }
     
-    // Mikrofon zu beiden Ausg�ngen verbinden
-    microphoneGain.connect(masterGainNode);
-    microphoneGain.connect(streamGainNode);
+    // Alle 4 Player Gains mit beiden Crossfadern verbinden
+    if (crossfaderGain && streamCrossfaderGain) {
+      aPlayerGain.connect(crossfaderGain.a);
+      aPlayerGain.connect(streamCrossfaderGain.a);
+      bPlayerGain.connect(crossfaderGain.b);
+      bPlayerGain.connect(streamCrossfaderGain.b);
+      cPlayerGain.connect(crossfaderGain.c);
+      cPlayerGain.connect(streamCrossfaderGain.c);
+      dPlayerGain.connect(crossfaderGain.d);
+      dPlayerGain.connect(streamCrossfaderGain.d);
+    }
     
-    console.log('??? Audio mixing system initialized with separate monitor and stream outputs');
+    // Mikrofon Monitor (separater Schalter f�r Selbstabh�rung)
+    // Wird sp�ter mit separatem Button gesteuert
+    
+    console.log('??? Audio mixing system initialized with separated monitor and stream routing');
+    console.log('?? MONITOR (Kopfh�rer): Nur Player Decks');
+    console.log('?? STREAM (AzuraCast): Player Decks + Mikrofon (wenn Button an)');
+    
+    // Speichere microphoneMonitorGain global f�r sp�tere Kontrolle
+    (window as any).microphoneMonitorGain = microphoneMonitorGain;
     
     // Volume Meter sofort nach Audio-Initialisierung starten
     setTimeout(() => {
       console.log('?? Starting volume meters...');
-      startVolumeMeter('left');
-      startVolumeMeter('right');
+      startVolumeMeter('a');
+      startVolumeMeter('b');
       startVolumeMeter('mic');
     }, 500); // Kurze Verz�gerung f�r Audio-Kontext Stabilit�t
     
@@ -381,7 +444,7 @@ async function initializeAudioMixing() {
 }
 
 // Audio-Quellen zu Mixing-System hinzuf�gen
-function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'right') {
+function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'a' | 'b' | 'c' | 'd') {
   if (!audioContext) {
     console.error(`? AudioContext not initialized for ${side} player`);
     return false;
@@ -398,44 +461,50 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'rig
       }
     }
     
+    // ENTSCHEIDENDE L�SUNG: Nur Web Audio API verwenden wenn wirklich gestreamt wird
+    // Ansonsten l�uft das Audio ganz normal �ber Browser-Audio
+    
+    if (!isStreaming) {
+      console.log(`??? ${side} player: NO STREAMING - Audio plays normally through browser (headphones work)`);
+      // Audio Element l�uft ganz normal - kein Web Audio API Hijacking
+      return true;
+    }
+    
+    console.log(`??? ${side} player: STREAMING ACTIVE - connecting to Web Audio API`);
+    
+    // NUR BEIM STREAMING: Web Audio API verwenden
     // WICHTIG: Audio Element Eigenschaften f�r bessere Browser-Kompatibilit�t setzen
     audioElement.crossOrigin = 'anonymous';
     audioElement.preservesPitch = false; // Weniger CPU-intensiv
     
-    // MediaElementAudioSourceNode erstellen (mit Browser-Audio-Koexistenz)
+    // MediaElementAudioSourceNode erstellen
     const sourceNode = audioContext.createMediaElementSource(audioElement);
-    (audioElement as any)._audioSourceNode = sourceNode; // Speichere Referenz f�r sp�teres Cleanup
-    
-    // BROWSER AUDIO KOMPATIBILIT�T: Duplex Output f�r normale Browser-Audio
-    try {
-      // Versuche normale Audio-Pipeline beizubehalten (falls Browser es unterst�tzt)
-      if ('setSinkId' in audioElement) {
-        console.log(`?? ${side} player: Browser supports setSinkId - maintaining dual audio pipeline`);
-      }
-    } catch (e) {
-      console.log(`??  ${side} player: Browser audio pipeline fully captured by Web Audio API`);
-    }
+    (audioElement as any)._audioSourceNode = sourceNode;
     
     // Mit entsprechendem Player Gain verbinden
-    if (side === 'left' && leftPlayerGain) {
-      sourceNode.connect(leftPlayerGain);
-      console.log(`?? Connected ${side} player to leftPlayerGain (Web Audio API)`);
+    if (side === 'a' && aPlayerGain) {
+      sourceNode.connect(aPlayerGain);
+      console.log(`🎵 ${side} player connected to aPlayerGain for streaming`);
       
-    } else if (side === 'right' && rightPlayerGain) {
-      sourceNode.connect(rightPlayerGain);
-      console.log(`?? Connected ${side} player to rightPlayerGain (Web Audio API)`);
+    } else if (side === 'b' && bPlayerGain) {
+      sourceNode.connect(bPlayerGain);
+      console.log(`🎵 ${side} player connected to bPlayerGain for streaming`);
+      
+    } else if (side === 'c' && cPlayerGain) {
+      sourceNode.connect(cPlayerGain);
+      console.log(`🎵 ${side} player connected to cPlayerGain for streaming`);
+      
+    } else if (side === 'd' && dPlayerGain) {
+      sourceNode.connect(dPlayerGain);
+      console.log(`🎵 ${side} player connected to dPlayerGain for streaming`);
       
     } else {
-      console.error(`? Failed to connect ${side} player: gain node not available`);
+      console.error(`❌ Failed to connect ${side} player: gain node not available`);
       return false;
     }
     
-    // WICHTIG: Nach createMediaElementSource wird das Audio-Element stumm!
-    // Es muss �ber die Web Audio API Pipeline laufen
-    console.log(`??  ${side} audio now routed through Web Audio API ? Stream`);
-    
-    // Debugging: Aktueller Audio-Flow anzeigen
-    console.log(`?? Audio Flow: ${side} Player ? ${side}PlayerGain ? StreamGainNode ? MediaRecorder ? Shoutcast`);
+    console.log(`??? Audio Flow when STREAMING: ${side} Player ? Web Audio API ? [Monitor + Stream]`);
+    console.log(`??? Audio Flow when NOT streaming: ${side} Player ? Browser Audio ? Headphones`);
     
     return true;
   } catch (error) {
@@ -454,9 +523,9 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'left' | 'rig
 }
 
 // Player Deck Fragment Template
-function createPlayerDeckHTML(side: 'left' | 'right'): string {
-  const playerLetter = side === 'left' ? 'A' : 'B';
-  const labelClass = side === 'left' ? 'left' : 'right';
+function createPlayerDeckHTML(side: 'a' | 'b' | 'c' | 'd'): string {
+  const playerLetter = side.toUpperCase();
+  const labelClass = side;
   
   return `
     <div class="player-label ${labelClass}">
@@ -536,7 +605,7 @@ function createPlayerDeckHTML(side: 'left' | 'right'): string {
         <!-- Volume Control -->
         <div class="breadcrumb-element volume-control">
           <span class="volume-label">Vol</span>
-          <input type="range" class="volume-slider-breadcrumb" id="volume-${side}" min="0" max="1" step="0.01" value="0.8">
+          <input type="range" class="volume-slider-breadcrumb" id="volume-${side}" min="0" max="100" step="1" value="80">
         </div>
         
         <!-- Spacer to push volume meter to the right -->
@@ -555,6 +624,13 @@ function createPlayerDeckHTML(side: 'left' | 'right'): string {
             <div class="meter-bar"></div>
           </div>
         </div>
+        
+        <!-- Wizard Button -->
+        <div class="breadcrumb-element wizard-control" id="wizard-control-${side}" title="Ähnliche Songs finden">
+          <i class="material-icons wizard-icon">casino</i>
+          <i class="material-icons wizard-dice-animation" style="display: none;">casino</i>
+          <i class="material-icons wizard-loading" style="display: none;">hourglass_empty</i>
+        </div>
       </div>
     </div>
   `;
@@ -562,26 +638,226 @@ function createPlayerDeckHTML(side: 'left' | 'right'): string {
 
 // Initialize Player Decks
 function initializePlayerDecks() {
-  const playerLeft = document.getElementById('player-left');
-  const playerRight = document.getElementById('player-right');
+  // Initialize all 4 player decks
+  const playerA = document.getElementById('player-a');
+  const playerB = document.getElementById('player-b');
+  const playerC = document.getElementById('player-c');
+  const playerD = document.getElementById('player-d');
   
-  if (playerLeft) {
-    playerLeft.innerHTML = createPlayerDeckHTML('left');
+  if (playerA) {
+    playerA.innerHTML = createPlayerDeckHTML('a');
   }
   
-  if (playerRight) {
-    playerRight.innerHTML = createPlayerDeckHTML('right');
+  if (playerB) {
+    playerB.innerHTML = createPlayerDeckHTML('b');
+  }
+  
+  if (playerC) {
+    playerC.innerHTML = createPlayerDeckHTML('c');
+  }
+  
+  if (playerD) {
+    playerD.innerHTML = createPlayerDeckHTML('d');
   }
   
   // Setup volume controls after HTML is created
   setupVolumeControls();
   
-  console.log('Player decks initialized with professional layout');
+  // Setup Wizard labels for similar songs
+  setupWizardLabels();
+  
+  console.log('All 4 player decks initialized with professional layout');
+}
+
+// Setup Wizard controls for similar songs
+function setupWizardLabels() {
+  const players = ['a', 'b', 'c', 'd'];
+  
+  players.forEach(playerLetter => {
+    const wizardControl = document.getElementById(`wizard-control-${playerLetter}`);
+    console.log(`Looking for wizard-control-${playerLetter}:`, !!wizardControl);
+    if (wizardControl) {
+      wizardControl.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log(`🧙‍♂️ Wizard clicked for player ${playerLetter.toUpperCase()}`);
+        await handleWizardClick(playerLetter);
+      });
+      console.log(`✅ Wizard control for player ${playerLetter.toUpperCase()} connected`);
+    } else {
+      console.error(`❌ Wizard control for player ${playerLetter.toUpperCase()} NOT FOUND`);
+    }
+  });
+}
+
+// Display similar songs directly in browse content (replacing current content)
+function displaySimilarSongsInBrowser(songs: OpenSubsonicSong[], songTitle: string, artist: string) {
+  // Get browse content container
+  const browseContent = document.getElementById('browse-content');
+  if (!browseContent) {
+    console.error('Browse content container not found');
+    return;
+  }
+  
+  // Switch to browse tab to show the results
+  const searchTabBtn = document.querySelector('.tab-btn[data-tab="search"]') as HTMLElement;
+  const browseTabBtn = document.querySelector('.tab-btn[data-tab="browse"]') as HTMLElement;
+  const searchContent = document.getElementById('search-content');
+  
+  if (searchTabBtn && browseTabBtn && searchContent) {
+    // Switch to browse tab
+    searchTabBtn.classList.remove('active');
+    browseTabBtn.classList.add('active');
+    searchContent.classList.remove('active');
+    browseContent.classList.add('active');
+  }
+  
+  // Use the LibraryBrowser system to show wizard results with proper breadcrumbs
+  if (libraryBrowser) {
+    libraryBrowser.showWizardResults(songs, songTitle, artist);
+  } else {
+    console.error('LibraryBrowser not available');
+  }
+  
+  console.log(`✅ Displayed ${songs.length} similar songs using LibraryBrowser system`);
+}
+
+// Handle Wizard label click to get similar songs
+async function handleWizardClick(playerLetter: string) {
+  try {
+    // Get the currently loaded song from player state
+    const currentSong = getCurrentLoadedSong(playerLetter as 'a' | 'b' | 'c' | 'd');
+    if (!currentSong) {
+      console.log(`No song loaded in player ${playerLetter.toUpperCase()}`);
+      return;
+    }
+    
+    const artist = currentSong.artist;
+    if (!artist) {
+      console.log(`No artist found for loaded song in player ${playerLetter.toUpperCase()}`);
+      return;
+    }
+    
+    const songId = currentSong.id;
+    if (!songId) {
+      console.log(`No song ID found for loaded song in player ${playerLetter.toUpperCase()}`);
+      return;
+    }
+    
+    console.log(`Wizard! Getting similar songs for song: "${currentSong.title}" (ID: ${songId}) by ${artist} in player ${playerLetter.toUpperCase()}`);
+    
+    // Add loading state to control
+    const wizardControl = document.getElementById(`wizard-control-${playerLetter}`);
+    if (wizardControl) {
+      wizardControl.classList.add('loading');
+      const wizardIcon = wizardControl.querySelector('.wizard-icon') as HTMLElement;
+      const diceAnimation = wizardControl.querySelector('.wizard-dice-animation') as HTMLElement;
+      const loadingIcon = wizardControl.querySelector('.wizard-loading') as HTMLElement;
+      
+      if (wizardIcon && diceAnimation && loadingIcon) {
+        // Start with dice animation
+        wizardIcon.style.display = 'none';
+        diceAnimation.style.display = 'block';
+        
+        // After dice animation (600ms), switch to loading spinner
+        setTimeout(() => {
+          diceAnimation.style.display = 'none';
+          loadingIcon.style.display = 'block';
+        }, 600);
+      }
+    }
+    
+    // Get similar songs from API using song ID
+    const similarSongs = await openSubsonicClient.getSimilarSongs2(songId, 20);
+    
+    if (similarSongs && similarSongs.length > 0) {
+      console.log(`Found ${similarSongs.length} similar songs for ${currentSong.title}`);
+      
+      // Display similar songs directly in browse content (replacing current content)
+      displaySimilarSongsInBrowser(similarSongs, currentSong.title, artist);
+      
+    } else {
+      console.log(`No similar songs found for song: ${currentSong.title}`);
+    }
+    
+  } catch (error) {
+    console.error('Error getting similar songs:', error);
+  } finally {
+    // Remove loading state from control
+    const wizardControl = document.getElementById(`wizard-control-${playerLetter}`);
+    if (wizardControl) {
+      wizardControl.classList.remove('loading');
+      const wizardIcon = wizardControl.querySelector('.wizard-icon') as HTMLElement;
+      const diceAnimation = wizardControl.querySelector('.wizard-dice-animation') as HTMLElement;
+      const loadingIcon = wizardControl.querySelector('.wizard-loading') as HTMLElement;
+      
+      if (wizardIcon && diceAnimation && loadingIcon) {
+        wizardIcon.style.display = 'block';
+        diceAnimation.style.display = 'none';
+        loadingIcon.style.display = 'none';
+      }
+    }
+  }
+}
+
+// Display similar songs in the universal container
+function displaySimilarSongs(songs: OpenSubsonicSong[], songTitle: string, artist: string) {
+  const universalContainer = document.getElementById('universal-container');
+  if (!universalContainer) return;
+  
+  // Clear existing content
+  universalContainer.innerHTML = '';
+  
+  // Add header
+  const header = document.createElement('div');
+  header.className = 'similar-songs-header';
+  header.innerHTML = `
+    <h3>🎵 Ähnliche Songs wie "${songTitle}"</h3>
+    <p>Von ${artist} • Gefunden: ${songs.length} Tracks</p>
+  `;
+  universalContainer.appendChild(header);
+  
+  // Add songs
+  songs.forEach(song => {
+    const songElement = document.createElement('div');
+    songElement.className = 'song';
+    songElement.innerHTML = `
+      <div class="song-title">${song.title}</div>
+      <div class="song-artist">${song.artist}</div>
+      <div class="song-album">${song.album || 'Unknown Album'}</div>
+      <div class="song-duration">${formatTime(song.duration || 0)}</div>
+    `;
+    
+    // Add double-click handler for loading into players
+    songElement.addEventListener('dblclick', () => {
+      // Find first available player (not playing)
+      let targetPlayer: 'a' | 'b' | 'c' | 'd' | null = null;
+      for (const side of ['a', 'b', 'c', 'd'] as const) {
+        if (!playerStates[side].isPlaying) {
+          targetPlayer = side;
+          break;
+        }
+      }
+      
+      // If all players are playing, use player A
+      if (!targetPlayer) {
+        targetPlayer = 'a';
+        console.log('All players busy, loading to player A');
+      }
+      
+      console.log(`Loading similar song "${song.title}" to player ${targetPlayer.toUpperCase()}`);
+      loadTrackToPlayer(targetPlayer, song, false);
+    });
+    
+    universalContainer.appendChild(songElement);
+  });
+  
+  console.log(`Displayed ${songs.length} similar songs for ${artist} in universal container`);
 }
 
 // Setup Volume Controls and Meters
 function setupVolumeControls() {
-  ['left', 'right'].forEach(side => {
+  ['a', 'b', 'c', 'd'].forEach(side => {
     const volumeSlider = document.getElementById(`volume-${side}`) as HTMLInputElement;
     const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
     
@@ -657,16 +933,26 @@ function initializePlayerSystem() {
   // 1. Initialize deck HTML first
   initializePlayerDecks();
   
-  // 2. Setup audio elements
-  const audioLeft = document.getElementById('audio-left') as HTMLAudioElement;
-  const audioRight = document.getElementById('audio-right') as HTMLAudioElement;
+  // 2. Setup audio elements for all 4 players
+  const audioA = document.getElementById('audio-a') as HTMLAudioElement;
+  const audioB = document.getElementById('audio-b') as HTMLAudioElement;
+  const audioC = document.getElementById('audio-c') as HTMLAudioElement;
+  const audioD = document.getElementById('audio-d') as HTMLAudioElement;
   
-  if (audioLeft) {
-    setupAudioPlayer('left', audioLeft);
+  if (audioA) {
+    setupAudioPlayer('a', audioA);
   }
   
-  if (audioRight) {
-    setupAudioPlayer('right', audioRight);
+  if (audioB) {
+    setupAudioPlayer('b', audioB);
+  }
+  
+  if (audioC) {
+    setupAudioPlayer('c', audioC);
+  }
+  
+  if (audioD) {
+    setupAudioPlayer('d', audioD);
   }
   
   // 3. Initialize crossfader functionality
@@ -675,11 +961,20 @@ function initializePlayerSystem() {
   // 4. Setup drop zones for drag & drop
   initializePlayerDropZones();
   
+  // 5. Setup album cover drag & drop
+  setupAlbumCoverDragDrop();
+  
+  // 6. Setup queue drop zone
+  setupQueueDropZone();
+  
+  // 7. Setup auto-queue controls
+  setupAutoQueueControls();
+  
   console.log('Complete player system initialized');
 }
 
 // Update Album Cover Function
-function updateAlbumCover(side: 'left' | 'right', song: OpenSubsonicSong) {
+function updateAlbumCover(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong) {
   const albumCoverElement = document.getElementById(`album-cover-${side}`);
   console.log(`?? Updating album cover for ${side} player:`, {
     element: albumCoverElement,
@@ -741,8 +1036,154 @@ function updateAlbumCover(side: 'left' | 'right', song: OpenSubsonicSong) {
   }
 }
 
+// Drag & Drop functionality for album covers
+function setupAlbumCoverDragDrop() {
+  const sides: ('a' | 'b' | 'c' | 'd')[] = ['a', 'b', 'c', 'd'];
+  
+  sides.forEach(side => {
+    const albumCover = document.getElementById(`album-cover-${side}`);
+    if (!albumCover) return;
+    
+    // Make album cover draggable when it has content
+    function updateDragability() {
+      const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+      const hasTrack = audio && audio.src && !audio.paused;
+      const hasLoadedTrack = audio && audio.src && audio.readyState >= 1;
+      
+      if (!albumCover) return;
+      
+      if (hasLoadedTrack) {
+        albumCover.draggable = true;
+        albumCover.style.cursor = hasTrack ? 'not-allowed' : 'grab';
+      } else {
+        albumCover.draggable = false;
+        albumCover.style.cursor = 'default';
+      }
+    }
+    
+    // Update dragability when track state changes
+    const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+    if (audio) {
+      audio.addEventListener('loadstart', updateDragability);
+      audio.addEventListener('play', updateDragability);
+      audio.addEventListener('pause', updateDragability);
+      audio.addEventListener('ended', updateDragability);
+    }
+    
+    albumCover.addEventListener('dragstart', (e) => {
+      const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+      
+      // Prevent drag if track is playing
+      if (audio && !audio.paused) {
+        e.preventDefault();
+        albumCover.style.cursor = 'not-allowed';
+        return;
+      }
+      
+      // Check if there's actually a track loaded
+      if (!audio || !audio.src || audio.readyState < 1) {
+        e.preventDefault();
+        return;
+      }
+      
+      albumCover.style.cursor = 'grabbing';
+      if (e.dataTransfer) {
+        // Get the song data for this deck
+        const song = deckSongs[side];
+        console.log(`🎵 Drag start from deck ${side.toUpperCase()}, song data:`, song);
+        if (song) {
+          // Set JSON data with song object
+          const dragData = {
+            type: 'deck-song',
+            song: song,
+            sourceDeck: side
+          };
+          e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+          console.log(`🎵 Dragging track from deck ${side.toUpperCase()}: "${song.title}"`);
+        } else {
+          console.warn(`❌ No song data found for deck ${side.toUpperCase()}`);
+        }
+        
+        // Fallback text data for backwards compatibility
+        e.dataTransfer.setData('text/plain', side);
+        e.dataTransfer.effectAllowed = 'move';
+      }
+      
+      // Add visual feedback
+      albumCover.style.opacity = '0.5';
+    });
+    
+    albumCover.addEventListener('dragend', () => {
+      albumCover.style.opacity = '1';
+      updateDragability();
+    });
+    
+    // Set up drop zones
+    albumCover.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+      albumCover.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+    });
+    
+    albumCover.addEventListener('dragleave', () => {
+      albumCover.style.backgroundColor = '';
+    });
+    
+    albumCover.addEventListener('drop', (e) => {
+      e.preventDefault();
+      albumCover.style.backgroundColor = '';
+      
+      if (!e.dataTransfer) return;
+      
+      const sourceSide = e.dataTransfer.getData('text/plain') as 'a' | 'b' | 'c' | 'd';
+      const targetSide = side;
+      
+      if (sourceSide === targetSide) return; // Same deck
+      
+      // Check if source track is playing
+      const sourceAudio = document.getElementById(`audio-${sourceSide}`) as HTMLAudioElement;
+      if (sourceAudio && !sourceAudio.paused) {
+        console.log('Cannot move playing track');
+        return;
+      }
+      
+      // Check if target has a playing track
+      const targetAudio = document.getElementById(`audio-${targetSide}`) as HTMLAudioElement;
+      if (targetAudio && !targetAudio.paused) {
+        console.log('Cannot drop on deck with playing track');
+        return;
+      }
+      
+      console.log(`🔄 Moving track from deck ${sourceSide.toUpperCase()} to deck ${targetSide.toUpperCase()}`);
+      
+      // Get source track data from stored songs
+      const song = deckSongs[sourceSide];
+      if (!song) {
+        console.error('No song data found on source deck');
+        return;
+      }
+      
+      console.log(`📀 Found song: "${song.title}" by ${song.artist}`);
+      
+      // Load track on target deck using the same method as drag from search
+      loadTrackToPlayer(targetSide, song, false);
+      console.log(`✅ Track "${song.title}" moved from deck ${sourceSide.toUpperCase()} to deck ${targetSide.toUpperCase()}`);
+      
+      // Clear source deck
+      setTimeout(() => {
+        clearPlayerDeck(sourceSide);
+      }, 100);
+    });
+    
+    // Initial dragability check
+    updateDragability();
+  });
+}
+
 // Update Time Display Function
-function updateTimeDisplay(side: 'left' | 'right', currentTime: number, duration: number) {
+function updateTimeDisplay(side: 'a' | 'b' | 'c' | 'd', currentTime: number, duration: number) {
   const timeDisplay = document.getElementById(`time-display-${side}`);
   if (!timeDisplay) return;
   
@@ -759,10 +1200,10 @@ function formatTime(seconds: number): string {
 }
 
 // WaveSurfer instances for both players
-const waveSurfers: { [key in 'left' | 'right']?: WaveSurfer } = {};
+const waveSurfers: { [key in 'a' | 'b' | 'c' | 'd']?: WaveSurfer } = {};
 
 // Initialize WaveSurfer for a player with adaptive settings
-function initializeWaveSurfer(side: 'left' | 'right', trackDuration?: number): WaveSurfer {
+function initializeWaveSurfer(side: 'a' | 'b' | 'c' | 'd', trackDuration?: number): WaveSurfer {
   const container = document.getElementById(`waveform-${side}`);
   if (!container) {
     throw new Error(`Waveform container not found for ${side} player`);
@@ -784,9 +1225,19 @@ function initializeWaveSurfer(side: 'left' | 'right', trackDuration?: number): W
     console.log(`🎵 Long track detected (${Math.round(trackDuration/60)}min), using optimized waveform settings`);
   }
 
-  // Deck-specific colors
-  const waveColor = side === 'left' ? '#ff4757' : '#5352ed'; // Red for left, blue for right
-  const progressColor = side === 'left' ? '#ff3838' : '#4834d4'; // Darker shade for progress
+  // Deck-specific colors using CSS variables
+  const getPlayerColor = (playerSide: string, variant: 'main' | 'dark' = 'main'): string => {
+    const colorMap = {
+      'a': variant === 'main' ? '#ff4444' : '#cc0000',
+      'b': variant === 'main' ? '#4488ff' : '#2266dd', 
+      'c': variant === 'main' ? '#ffdd44' : '#ddbb00',
+      'd': variant === 'main' ? '#44ff88' : '#22dd66'
+    };
+    return colorMap[playerSide as keyof typeof colorMap] || '#666666';
+  };
+  
+  const waveColor = getPlayerColor(side);
+  const progressColor = getPlayerColor(side, 'dark');
 
   // Create new WaveSurfer instance with performance optimizations
   const wavesurfer = WaveSurfer.create({
@@ -810,7 +1261,7 @@ function initializeWaveSurfer(side: 'left' | 'right', trackDuration?: number): W
 }
 
 // Reset WaveSurfer for a new track
-function resetWaveform(side: 'left' | 'right') {
+function resetWaveform(side: 'a' | 'b' | 'c' | 'd') {
   const wavesurfer = waveSurfers[side];
   if (wavesurfer) {
     // Stop playback and reset to beginning
@@ -821,7 +1272,7 @@ function resetWaveform(side: 'left' | 'right') {
 }
 
 // Completely clear WaveSurfer (for eject)
-function clearWaveform(side: 'left' | 'right') {
+function clearWaveform(side: 'a' | 'b' | 'c' | 'd') {
   const wavesurfer = waveSurfers[side];
   if (wavesurfer) {
     // Destroy the waveform completely
@@ -846,7 +1297,7 @@ function clearWaveform(side: 'left' | 'right') {
 }
 
 // Load audio file into WaveSurfer for a player
-function loadWaveform(side: 'left' | 'right', audioUrl: string, trackDuration?: number) {
+function loadWaveform(side: 'a' | 'b' | 'c' | 'd', audioUrl: string, trackDuration?: number) {
   console.log(`Loading new waveform for ${side} player from: ${audioUrl}`);
   
   // Reset existing waveform first
@@ -973,7 +1424,7 @@ function loadWaveform(side: 'left' | 'right', audioUrl: string, trackDuration?: 
 
 // Sync WaveSurfer with HTML audio element
 // WaveSurfer Synchronisation (currently unused, but kept for future enhancement)
-function syncWaveSurferWithAudio(side: 'left' | 'right', audio: HTMLAudioElement) {
+function syncWaveSurferWithAudio(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) {
   const wavesurfer = waveSurfers[side];
   if (!wavesurfer) return;
   
@@ -1030,7 +1481,7 @@ function syncWaveSurferWithAudio(side: 'left' | 'right', audio: HTMLAudioElement
 }
 
 // Clean up WaveSurfer sync for a player
-function cleanupWaveSurferSync(side: 'left' | 'right') {
+function cleanupWaveSurferSync(side: 'a' | 'b' | 'c' | 'd') {
   const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
   if (audio && (audio as any)._wavesurferHandlers) {
     const handlers = (audio as any)._wavesurferHandlers;
@@ -1049,8 +1500,25 @@ let openSubsonicClient: SubsonicApiClient;
 let currentSongs: OpenSubsonicSong[] = [];
 let currentAlbums: OpenSubsonicAlbum[] = [];
 let currentArtists: OpenSubsonicArtist[] = [];
-let queue: OpenSubsonicSong[] = [];
-let autoQueueEnabled = true; // Auto-Queue standardm��ig aktiviert
+
+// Enhanced Queue System with Deck Tracking
+interface QueueItem {
+  song: OpenSubsonicSong;
+  assignedToDeck?: 'a' | 'b' | 'c' | 'd' | null; // null = available, deck = loaded to that deck
+  loadedAt?: Date; // When it was loaded to a deck
+}
+
+let queue: QueueItem[] = [];
+let autoQueueEnabled = true; // Auto-Queue standardmäßig aktiviert
+
+// Auto-Queue System State
+let autoQueueConfig = {
+  deckPairAB: true,    // A+B Deck-Pair aktiv
+  deckPairCD: false,   // C+D Deck-Pair aktiv
+  lastPlayedDeck: null as 'a' | 'b' | 'c' | 'd' | null,  // Letztes gespieltes Deck für Rotation
+  playbackOrder: ['a', 'b', 'c', 'd'] as ('a' | 'b' | 'c' | 'd')[],  // Playback-Reihenfolge
+  isAutoPlaying: false  // Verhindert mehrfache Auto-Plays
+};
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("DOM fully loaded and parsed");
@@ -1302,13 +1770,13 @@ function setCrossfaderPosition(position: number) {
   // Rechts: minimum bei 0, maximum bei 1
   const rightGain = Math.sin(position * Math.PI / 2);
   
-  // Monitor-Crossfader (f�r Speaker/Kopfh�rer)
-  crossfaderGain.left.gain.value = leftGain;
-  crossfaderGain.right.gain.value = rightGain;
+  // Monitor-Crossfader (für Speaker/Kopfhörer)
+  crossfaderGain.a.gain.value = leftGain;
+  crossfaderGain.b.gain.value = rightGain;
   
-  // Stream-Crossfader (f�r Live-Stream) - gleiche Werte
-  streamCrossfaderGain.left.gain.value = leftGain;
-  streamCrossfaderGain.right.gain.value = rightGain;
+  // Stream-Crossfader (für Live-Stream) - gleiche Werte
+  streamCrossfaderGain.a.gain.value = leftGain;
+  streamCrossfaderGain.b.gain.value = rightGain;
   
   console.log(`??? Crossfader position: ${position}, Left: ${leftGain.toFixed(2)}, Right: ${rightGain.toFixed(2)} (Monitor + Stream)`);
 }
@@ -2063,28 +2531,6 @@ function updateMountPointVisibility() {
   }
 }
 
-  // Auto-Queue Toggle Funktionalit�t f�r alle Buttons
-  const autoQueueButtons = document.querySelectorAll(".auto-queue-btn") as NodeListOf<HTMLButtonElement>;
-  
-  autoQueueButtons.forEach(autoQueueBtn => {
-    autoQueueBtn?.addEventListener("click", () => {
-      autoQueueEnabled = !autoQueueEnabled;
-      
-      // Alle Auto-Queue Buttons synchron aktualisieren
-      autoQueueButtons.forEach(btn => {
-        if (autoQueueEnabled) {
-          btn.textContent = "?? AUTO-QUEUE";
-          btn.classList.remove("inactive");
-        } else {
-          btn.textContent = "? AUTO-QUEUE";
-          btn.classList.add("inactive");
-        }
-      });
-      
-      console.log(autoQueueEnabled ? "Auto-Queue aktiviert" : "Auto-Queue deaktiviert");
-    });
-  });
-  
   // Tab Navigation
   initializeTabs();
   
@@ -2334,7 +2780,7 @@ function createArtistLinks(song: OpenSubsonicSong): string {
       // Multiple Artists - jeder einzeln klickbar
       const artistLinks = song.artists.map(artist => 
         `<span class="clickable-artist" draggable="false" data-artist-id="${artist.id}" data-artist-name="${escapeHtml(artist.name)}" title="View artist details">${escapeHtml(artist.name)}</span>`
-      ).join('<span class="artist-separator"> � </span>');
+      ).join('<span class="artist-separator"> • </span>');
       
       return `<span class="multi-artist">${artistLinks}</span>`;
     }
@@ -2363,7 +2809,7 @@ function createUnifiedSongElement(song: OpenSubsonicSong, context: 'search' | 'a
     <div class="track-artist">${createArtistLinks(song)}</div>
     <div class="track-album clickable-album" draggable="false" data-album-id="${song.albumId || ''}" data-album-name="${escapeHtml(song.album)}" title="View album details">${escapeHtml(song.album)}</div>
     <div class="track-rating" data-song-id="${song.id}">
-      ${generateStarRating(getStoredTrackRating(song.id))}
+      ${createStarRating(song.userRating || 0, song.id)}
     </div>
     <div class="track-duration">${duration}</div>
   `;
@@ -2450,8 +2896,8 @@ function updateRatingDisplay(songId: string, rating: number) {
   });
   
   // Update player rating if this song is currently playing
-  updatePlayerRating('left', songId, rating);
-  updatePlayerRating('right', songId, rating);
+  updatePlayerRating('a', songId, rating);
+  updatePlayerRating('b', songId, rating);
 }
 
 // Player Rating aktualisieren
@@ -2848,9 +3294,81 @@ function addSongClickListeners(container: Element) {
       }
     });
     
-    // Debug-Event f�r Mousedown
+    // Debug-Event für Mousedown
     element.addEventListener('mousedown', () => {
       console.log(`Album mousedown: ${albumName}`);
+    });
+  });
+  
+  // Direct Song Click Listeners (double-click to load to player)
+  const songElements = container.querySelectorAll('.track-item, .track-item-oneline, .song-row, .unified-song-item');
+  console.log(`Found ${songElements.length} clickable songs`);
+  
+  songElements.forEach((element, index) => {
+    const songId = (element as HTMLElement).dataset.songId;
+    const songTitle = (element as HTMLElement).dataset.songTitle || 
+                     (element as HTMLElement).querySelector('.track-title')?.textContent || 
+                     'Unknown Song';
+    
+    console.log(`Setting up song click ${index}: ${songTitle} (ID: ${songId})`);
+    
+    // Double-click to load song to available player
+    element.addEventListener('dblclick', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (!songId) {
+        console.error('No song ID found for clicked song');
+        return;
+      }
+      
+      console.log(`Song double-clicked: ${songTitle} (ID: ${songId})`);
+      
+      try {
+        // Find song in current songs list
+        const song = findSongById(songId);
+        if (!song) {
+          console.error('Could not find song in current songs');
+          return;
+        }
+        
+        // Find first available player (not playing)
+        let targetPlayer: 'a' | 'b' | 'c' | 'd' | null = null;
+        for (const side of ['a', 'b', 'c', 'd'] as const) {
+          if (!playerStates[side].isPlaying) {
+            targetPlayer = side;
+            break;
+          }
+        }
+        
+        // If all players are playing, use player A
+        if (!targetPlayer) {
+          targetPlayer = 'a';
+          console.log('All players busy, loading to player A');
+        }
+        
+        console.log(`Loading song to player ${targetPlayer.toUpperCase()}`);
+        loadTrackToPlayer(targetPlayer, song, false);
+        
+      } catch (error) {
+        console.error('Error loading song to player:', error);
+      }
+    });
+    
+    // Single click for selection feedback
+    element.addEventListener('click', (e) => {
+      // Only handle if not clicking on artist/album links
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('clickable-artist') || target.classList.contains('clickable-album')) {
+        return; // Let artist/album clicks handle normally
+      }
+      
+      // Visual feedback for song selection
+      const allSongs = container.querySelectorAll('.track-item, .track-item-oneline, .song-row, .unified-song-item');
+      allSongs.forEach(song => song.classList.remove('selected'));
+      element.classList.add('selected');
+      
+      console.log(`Song selected: ${songTitle} (Double-click to load to player)`);
     });
   });
 }
@@ -3177,30 +3695,55 @@ function initializeQueuePermanent() {
 }
 
 // Song zur Queue hinzuf�gen
-async function addToQueue(songId: string) {
-  console.log('Adding song to queue:', songId);
+async function addToQueue(songId: string): Promise<void>;
+async function addToQueue(song: OpenSubsonicSong): Promise<void>;
+async function addToQueue(songOrId: string | OpenSubsonicSong): Promise<void> {
+  let song: OpenSubsonicSong | undefined;
   
-  // Finde Song in aktuellen Listen
-  let song = currentSongs.find(s => s.id === songId);
-  
-  if (!song) {
-    // Wenn nicht gefunden, versuche �ber Search Results zu finden
-    const searchResults = document.querySelectorAll('.track-item, .song-row, .unified-song-item');
-    for (const item of searchResults) {
-      const element = item as HTMLElement;
-      if (element.dataset.songId === songId) {
-        // Hier m�sste der Song aus der API abgerufen werden
-        // F�r jetzt nehmen wir den ersten verf�gbaren Song
-        song = currentSongs[0];
-        break;
+  if (typeof songOrId === 'string') {
+    const songId = songOrId;
+    console.log('Adding song to queue:', songId);
+    
+    // Finde Song in aktuellen Listen
+    song = currentSongs.find(s => s.id === songId);
+    
+    if (!song) {
+      // Wenn nicht gefunden, versuche �ber Search Results zu finden
+      const searchResults = document.querySelectorAll('.track-item, .song-row, .unified-song-item');
+      for (const item of searchResults) {
+        const element = item as HTMLElement;
+        if (element.dataset.songId === songId) {
+          // Hier m�sste der Song aus der API abgerufen werden
+          // F�r jetzt nehmen wir den ersten verf�gbaren Song
+          song = currentSongs[0];
+          break;
+        }
       }
     }
+  } else {
+    song = songOrId;
+    console.log(`Adding song object to queue: "${song.title}"`);
   }
   
   if (song) {
-    queue.push(song);
+    // Check if song already exists in queue
+    const existingIndex = queue.findIndex(item => item.song.id === song.id);
+    if (existingIndex !== -1) {
+      console.log(`🔄 Song "${song.title}" already in queue, moving to end`);
+      // Remove existing and add to end
+      queue.splice(existingIndex, 1);
+    }
+    
+    // Create new queue item (not assigned to any deck yet)
+    const queueItem: QueueItem = {
+      song: song,
+      assignedToDeck: null,
+      loadedAt: undefined
+    };
+    
+    queue.push(queueItem);
     updateQueueDisplay();
-    console.log(`Song "${song.title}" added to queue. Queue length: ${queue.length}`);
+    console.log(`➕ Song "${song.title}" added to queue. Queue length: ${queue.length}`);
   }
 }
 
@@ -3211,29 +3754,513 @@ function updateQueueDisplay() {
   
   queueContainers.forEach(queueContainer => {
     if (queue.length === 0) {
-      queueContainer.innerHTML = '<div class="queue-empty">Drag tracks here to queue</div>';
+      queueContainer.innerHTML = `
+        <div class="queue-empty">
+          <span class="material-icons">queue_music</span>
+          <p>Drop songs here to queue them</p>
+        </div>
+      `;
       return;
     }
     
-    queueContainer.innerHTML = queue.map((song, index) => `
-      <div class="queue-item" data-queue-index="${index}">
-        <div class="queue-number">${index + 1}</div>
-        <div class="queue-info">
-          <div class="queue-title">${escapeHtml(song.title)}</div>
-          <div class="queue-artist">${escapeHtml(song.artist)}</div>
-        </div>
-        <button class="queue-remove" onclick="removeFromQueue(${index})">�</button>
-      </div>
-    `).join('');
+    // Clear container and add unified song elements
+    queueContainer.innerHTML = '';
+    
+    queue.forEach((queueItem, index) => {
+      // Create unified song element from the song within the queue item
+      const songElement = createUnifiedSongElement(queueItem.song, 'queue');
+      
+      // Add queue-specific wrapper
+      const queueWrapper = document.createElement('div');
+      queueWrapper.className = 'queue-item-wrapper';
+      queueWrapper.dataset.queueIndex = index.toString();
+      
+      // Add deck indicator if assigned
+      if (queueItem.assignedToDeck) {
+        queueWrapper.classList.add('assigned-to-deck');
+        queueWrapper.dataset.assignedDeck = queueItem.assignedToDeck;
+      }
+      
+      // Add queue number
+      const queueNumber = document.createElement('div');
+      queueNumber.className = 'queue-number';
+      queueNumber.textContent = (index + 1).toString();
+      
+      // Add remove button
+      const removeButton = document.createElement('button');
+      removeButton.className = 'queue-remove';
+      removeButton.innerHTML = '<span class="material-icons">close</span>';
+      removeButton.title = 'Remove from queue';
+      removeButton.onclick = () => removeFromQueue(index);
+      
+      // Assemble wrapper
+      queueWrapper.appendChild(queueNumber);
+      queueWrapper.appendChild(songElement);
+      queueWrapper.appendChild(removeButton);
+      
+      // Setup drag for queue item
+      setupQueueItemDrag(queueWrapper, index);
+      
+      queueContainer.appendChild(queueWrapper);
+    });
+  });
+  
+  // Auto-prepare decks when queue gets new songs
+  checkAndPrepareDecksAfterQueueUpdate();
+}
+
+// Check and prepare decks automatically when queue is updated
+function checkAndPrepareDecksAfterQueueUpdate() {
+  // Only proceed if queue has songs
+  if (queue.length === 0) {
+    return;
+  }
+  
+  // Check all decks for opportunities to prepare
+  const allDecks: ('a' | 'b' | 'c' | 'd')[] = ['a', 'b', 'c', 'd'];
+  
+  for (const deck of allDecks) {
+    // Skip if auto-queue is not active for this deck
+    if (!isAutoQueueActiveForDeck(deck)) {
+      continue;
+    }
+    
+    // Note: Preparation now happens automatically in handleAutoQueue
+    // No need for manual preparation here
+  }
+}
+
+function setupQueueItemDrag(wrapper: HTMLElement, index: number) {
+  // Make the wrapper draggable
+  wrapper.draggable = true;
+  
+  wrapper.addEventListener('dragstart', (e) => {
+    const song = queue[index];
+    if (!song) return;
+    
+    wrapper.style.opacity = '0.5';
+    if (e.dataTransfer) {
+      // Store both song data and queue index for removal after successful drop
+      e.dataTransfer.setData('application/json', JSON.stringify({
+        type: 'queue-song',
+        song: song,
+        queueIndex: index
+      }));
+      e.dataTransfer.effectAllowed = 'move';
+    }
+  });
+  
+  wrapper.addEventListener('dragend', () => {
+    wrapper.style.opacity = '1';
   });
 }
 
-// Song aus Queue entfernen
+// Setup Queue as Drop Zone
+function setupQueueDropZone() {
+  const queuePanel = document.querySelector('.queue-panel');
+  const queueList = document.getElementById('queue-list');
+  
+  if (!queuePanel || !queueList) {
+    console.warn('Queue panel or list not found');
+    return;
+  }
+  
+  // Make queue panel a drop zone
+  queuePanel.addEventListener('dragover', (e) => {
+    const dragEvent = e as DragEvent;
+    dragEvent.preventDefault();
+    queuePanel.classList.add('drag-over');
+    if (dragEvent.dataTransfer) {
+      dragEvent.dataTransfer.dropEffect = 'copy';
+    }
+  });
+  
+  queuePanel.addEventListener('dragleave', (e) => {
+    const dragEvent = e as DragEvent;
+    // Only remove highlight if we're leaving the queue panel completely
+    if (!queuePanel.contains(dragEvent.relatedTarget as Node)) {
+      queuePanel.classList.remove('drag-over');
+    }
+  });
+  
+  queuePanel.addEventListener('drop', async (e) => {
+    const dragEvent = e as DragEvent;
+    dragEvent.preventDefault();
+    queuePanel.classList.remove('drag-over');
+    
+    if (!dragEvent.dataTransfer) return;
+    
+    try {
+      // Try to get JSON data first (from search results or queue items)
+      const jsonData = dragEvent.dataTransfer.getData('application/json');
+      if (jsonData) {
+        const dragData = JSON.parse(jsonData);
+        console.log('Dropped on queue:', dragData);
+        
+        if (dragData.type === 'song' && dragData.song) {
+          await addToQueue(dragData.song);
+        } else if (dragData.type === 'track' && dragData.track) {
+          await addToQueue(dragData.track);
+        } else if (dragData.type === 'queue-song' && dragData.song) {
+          // Moving within queue - just add to end and remove from original position
+          await addToQueue(dragData.song);
+          // Don't remove original as addToQueue handles duplicates
+        } else if (dragData.type === 'deck-song' && dragData.song) {
+          // Dragging from deck to queue
+          console.log(`🎵 Adding track from deck ${dragData.sourceDeck?.toUpperCase()} to queue: "${dragData.song.title}"`);
+          await addToQueue(dragData.song);
+        }
+        return;
+      }
+      
+      // Fallback to deck data (from album cover drag)
+      const deckSide = dragEvent.dataTransfer.getData('text/plain') as 'a' | 'b' | 'c' | 'd';
+      if (deckSide && ['a', 'b', 'c', 'd'].includes(deckSide)) {
+        const song = deckSongs[deckSide];
+        if (song) {
+          console.log(`🎵 Adding track from deck ${deckSide.toUpperCase()} to queue: "${song.title}"`);
+          await addToQueue(song);
+        } else {
+          console.warn(`No song found on deck ${deckSide}`);
+        }
+        return;
+      }
+      
+      // Fallback to song ID
+      const songId = dragEvent.dataTransfer.getData('text/plain');
+      if (songId) {
+        await addToQueue(songId);
+      }
+      
+    } catch (error) {
+      console.error('Error processing queue drop:', error);
+    }
+  });
+}
+
+// Setup Auto-Queue Controls
+function setupAutoQueueControls() {
+  const abButton = document.getElementById('auto-queue-ab') as HTMLButtonElement;
+  const cdButton = document.getElementById('auto-queue-cd') as HTMLButtonElement;
+  
+  if (!abButton || !cdButton) {
+    console.warn('Auto-queue buttons not found');
+    return;
+  }
+  
+  // Update button states based on current config
+  const updateButtonStates = () => {
+    abButton.classList.toggle('active', autoQueueConfig.deckPairAB);
+    cdButton.classList.toggle('active', autoQueueConfig.deckPairCD);
+    
+    // Icons bleiben konstant - nur CSS-Klassen ändern sich für Styling
+    // Kein Text-Update nötig, da A+B und C+D konstant bleiben sollen
+    
+    console.log(`Auto-Queue Config: A+B=${autoQueueConfig.deckPairAB}, C+D=${autoQueueConfig.deckPairCD}`);
+  };
+  
+  // A+B Button Click Handler
+  abButton.addEventListener('click', () => {
+    autoQueueConfig.deckPairAB = !autoQueueConfig.deckPairAB;
+    updateButtonStates();
+    
+    if (autoQueueConfig.deckPairAB) {
+      console.log('🎵 Auto-Queue enabled for Deck A+B');
+      // Immediate preparation: check if A or B is playing and prepare the other
+      prepareDecksOnActivation(['a', 'b']);
+    } else {
+      console.log('⏸️ Auto-Queue disabled for Deck A+B');
+    }
+  });
+  
+  // C+D Button Click Handler  
+  cdButton.addEventListener('click', () => {
+    autoQueueConfig.deckPairCD = !autoQueueConfig.deckPairCD;
+    updateButtonStates();
+    
+    if (autoQueueConfig.deckPairCD) {
+      console.log('🎵 Auto-Queue enabled for Deck C+D');
+      // Immediate preparation: check if C or D is playing and prepare the other
+      prepareDecksOnActivation(['c', 'd']);
+    } else {
+      console.log('⏸️ Auto-Queue disabled for Deck C+D');
+    }
+  });
+  
+  // Initial state update
+  updateButtonStates();
+}
+
+// Prepare decks immediately when auto-queue is activated
+function prepareDecksOnActivation(deckPair: ('a' | 'b' | 'c' | 'd')[]) {
+  // Check if any deck in the pair is currently playing
+  for (const deck of deckPair) {
+    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
+    
+    if (audio && !audio.paused && !audio.ended) {
+      // This deck is playing - preparation handled automatically in Auto-Queue
+      console.log(`🎵 Deck ${deck.toUpperCase()} is playing`);
+      return; // Only prepare one deck
+    }
+  }
+  
+  // If no deck is playing, check if any deck has a loaded track
+  for (const deck of deckPair) {
+    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
+    
+    if (audio && audio.src && audio.readyState >= 1) {
+      // This deck has a track loaded - preparation handled automatically
+      console.log(`🎵 Deck ${deck.toUpperCase()} has a track loaded`);
+      return; // Only prepare one deck
+    }
+  }
+  
+  console.log(`📋 No active tracks in deck pair [${deckPair.join(', ').toUpperCase()}], waiting for manual start`);
+}
+
+// Handle Auto-Queue Logic when a track ends
+function handleAutoQueue(finishedDeck: 'a' | 'b' | 'c' | 'd') {
+  console.log(`🎯 Auto-Queue triggered: Deck ${finishedDeck.toUpperCase()} finished`);
+  
+  // IMPORTANT: Remove the finished track from queue first
+  const finishedSong = getCurrentLoadedSong(finishedDeck);
+  if (finishedSong) {
+    removeQueueItemBySong(finishedSong);
+  }
+  
+  // Prevent multiple simultaneous auto-plays
+  if (autoQueueConfig.isAutoPlaying) {
+    console.log('🔄 Auto-play already in progress, skipping');
+    return;
+  }
+  
+  // Check if queue has available songs for next track
+  const availableItem = getNextAvailableQueueItem();
+  if (!availableItem) {
+    console.log('📭 No available songs in queue, no auto-play possible');
+    return;
+  }
+  
+  autoQueueConfig.isAutoPlaying = true;
+  autoQueueConfig.lastPlayedDeck = finishedDeck;
+  
+  // STEP 1: Stop all other playing tracks immediately
+  console.log('⏹️ Stopping all other decks...');
+  stopAllOtherDecks(finishedDeck);
+  
+  // STEP 2: Wait a moment for stops to complete, then start next deck
+  setTimeout(() => {
+    try {
+      // Determine next deck based on configuration
+      const nextDeck = getNextDeck(finishedDeck);
+      
+      if (!nextDeck) {
+        console.log('⏸️ No valid next deck found (all deck pairs disabled)');
+        autoQueueConfig.isAutoPlaying = false;
+        return;
+      }
+      
+      // Start the next deck (load and play)
+      console.log(`🎯 Auto-Queue: ${finishedDeck.toUpperCase()} → ${nextDeck.toUpperCase()}`);
+      startNextDeckWithNewTrack(nextDeck);
+      
+      // STEP 3: Wait 2 seconds before preparing next deck to avoid race conditions
+      setTimeout(() => {
+        // Verify only one deck is playing before preparing next
+        if (countPlayingDecks() <= 1) {
+          prepareNextDeckInSequence(nextDeck);
+        } else {
+          console.log('⚠️ Multiple decks playing, skipping preparation');
+        }
+        
+        // Reset auto-playing flag after everything is done
+        autoQueueConfig.isAutoPlaying = false;
+      }, 2000); // 2 second delay
+      
+    } catch (error) {
+      console.error('❌ Error in Auto-Queue:', error);
+      autoQueueConfig.isAutoPlaying = false;
+    }
+  }, 500); // 0.5 second delay for stop operations to complete
+}
+
+// Stop all decks except the specified one
+function stopAllOtherDecks(exceptDeck: 'a' | 'b' | 'c' | 'd') {
+  const allDecks: ('a' | 'b' | 'c' | 'd')[] = ['a', 'b', 'c', 'd'];
+  
+  allDecks.forEach(deck => {
+    if (deck === exceptDeck) return; // Skip the finished deck
+    
+    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
+    if (audio && !audio.paused) {
+      console.log(`⏹️ Stopping deck ${deck.toUpperCase()} for Auto-Queue`);
+      audio.pause();
+      
+      // Update UI
+      const playPauseBtn = document.getElementById(`play-pause-${deck}`) as HTMLButtonElement;
+      if (playPauseBtn) {
+        const icon = playPauseBtn.querySelector('.material-icons');
+        if (icon) icon.textContent = 'play_arrow';
+        playPauseBtn.classList.remove('playing');
+      }
+    }
+  });
+}
+
+// Count how many decks are currently playing
+function countPlayingDecks(): number {
+  const allDecks: ('a' | 'b' | 'c' | 'd')[] = ['a', 'b', 'c', 'd'];
+  let playingCount = 0;
+  
+  allDecks.forEach(deck => {
+    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
+    if (audio && !audio.paused && !audio.ended) {
+      playingCount++;
+      console.log(`🎵 Deck ${deck.toUpperCase()} is playing`);
+    }
+  });
+  
+  console.log(`🔢 Total playing decks: ${playingCount}`);
+  return playingCount;
+}
+
+// Get next available song from queue (not assigned to any deck)
+function getNextAvailableQueueItem(): QueueItem | null {
+  return queue.find(item => item.assignedToDeck === null) || null;
+}
+
+// Mark queue item as assigned to a deck
+function assignQueueItemToDeck(queueItem: QueueItem, deck: 'a' | 'b' | 'c' | 'd') {
+  queueItem.assignedToDeck = deck;
+  queueItem.loadedAt = new Date();
+  console.log(`📌 Assigned "${queueItem.song.title}" to deck ${deck.toUpperCase()}`);
+  updateQueueDisplay();
+}
+
+// Remove queue item by song (when track finishes or gets ejected)
+function removeQueueItemBySong(song: OpenSubsonicSong) {
+  const index = queue.findIndex(item => item.song.id === song.id);
+  if (index !== -1) {
+    const removedItem = queue.splice(index, 1)[0];
+    console.log(`🗑️ Removed "${removedItem.song.title}" from queue`);
+    updateQueueDisplay();
+    return removedItem;
+  }
+  return null;
+}
+
+// Start next deck with a new track from queue
+function startNextDeckWithNewTrack(targetDeck: 'a' | 'b' | 'c' | 'd') {
+  // Get next available queue item (not assigned to any deck)
+  const nextQueueItem = getNextAvailableQueueItem();
+  if (!nextQueueItem) {
+    console.log(`📭 No available songs in queue to load onto deck ${targetDeck.toUpperCase()}`);
+    return;
+  }
+  
+  // Double-check that no other deck is playing before starting
+  const playingCount = countPlayingDecks();
+  if (playingCount > 0) {
+    console.log(`⚠️ ${playingCount} deck(s) still playing, waiting before starting ${targetDeck.toUpperCase()}`);
+    
+    // Try again after a short delay
+    setTimeout(() => {
+      startNextDeckWithNewTrack(targetDeck);
+    }, 1000);
+    return;
+  }
+  
+  console.log(`🔄 Loading and starting "${nextQueueItem.song.title}" on deck ${targetDeck.toUpperCase()}`);
+  
+  // Mark queue item as assigned to this deck
+  assignQueueItemToDeck(nextQueueItem, targetDeck);
+  
+  // Load track with auto-play
+  loadTrackToPlayer(targetDeck, nextQueueItem.song, true);
+  
+  console.log(`✅ Successfully started deck ${targetDeck.toUpperCase()}`);
+}
+
+// Prepare the next deck in sequence for seamless transitions
+function prepareNextDeckInSequence(currentDeck: 'a' | 'b' | 'c' | 'd') {
+  // Only prepare if we have available songs in queue
+  const availableItem = getNextAvailableQueueItem();
+  if (!availableItem) {
+    console.log('📭 No available songs in queue to prepare');
+    return;
+  }
+  
+  // Determine what the next deck would be after current
+  const nextDeck = getNextDeck(currentDeck);
+  if (!nextDeck) return;
+  
+  // Check if the next deck is empty
+  const audio = document.getElementById(`audio-${nextDeck}`) as HTMLAudioElement;
+  if (audio && audio.src) {
+    console.log(`🎵 Deck ${nextDeck.toUpperCase()} already has a track, no preparation needed`);
+    return;
+  }
+  
+  console.log(`🔄 Preparing "${availableItem.song.title}" on deck ${nextDeck.toUpperCase()}`);
+  
+  // Mark queue item as assigned to the next deck
+  assignQueueItemToDeck(availableItem, nextDeck);
+  
+  // Load track without playing
+  loadTrackToPlayer(nextDeck, availableItem.song, false);
+}
+
+// Determine the next deck based on configuration and rotation
+function getNextDeck(finishedDeck: 'a' | 'b' | 'c' | 'd'): 'a' | 'b' | 'c' | 'd' | null {
+  // Check which deck pairs are active
+  const isABActive = autoQueueConfig.deckPairAB;
+  const isCDActive = autoQueueConfig.deckPairCD;
+  
+  // If no deck pairs are active, return null
+  if (!isABActive && !isCDActive) {
+    return null;
+  }
+  
+  // If only one deck pair is active, alternate within that pair
+  if (isABActive && !isCDActive) {
+    return finishedDeck === 'a' ? 'b' : 'a';
+  }
+  
+  if (isCDActive && !isABActive) {
+    return finishedDeck === 'c' ? 'd' : 'c';
+  }
+  
+  // Both deck pairs are active - use full rotation A→B→C→D→A
+  const rotationMap: Record<'a' | 'b' | 'c' | 'd', 'a' | 'b' | 'c' | 'd'> = {
+    'a': 'b',
+    'b': 'c', 
+    'c': 'd',
+    'd': 'a'
+  };
+  
+  return rotationMap[finishedDeck];
+}
+
+// Check if auto-queue is active for a specific deck
+function isAutoQueueActiveForDeck(deck: 'a' | 'b' | 'c' | 'd'): boolean {
+  switch (deck) {
+    case 'a':
+    case 'b':
+      return autoQueueConfig.deckPairAB;
+    case 'c':
+    case 'd':
+      return autoQueueConfig.deckPairCD;
+    default:
+      return false;
+  }
+}
+
+// Song aus Queue entfernen (manual removal by user)
 function removeFromQueue(index: number) {
   if (index >= 0 && index < queue.length) {
-    const removedSong = queue.splice(index, 1)[0];
+    const removedItem = queue.splice(index, 1)[0];
     updateQueueDisplay();
-    console.log(`Song "${removedSong.title}" removed from queue`);
+    console.log(`Song "${removedItem.song.title}" removed from queue`);
   }
 }
 
@@ -3379,12 +4406,12 @@ function initializeOpenSubsonicLogin() {
 }
 
 // Audio Player Setup
-function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
+function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) {
   const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
   const ejectBtn = document.getElementById(`eject-${side}`) as HTMLButtonElement;
   const restartBtn = document.getElementById(`restart-${side}`) as HTMLButtonElement;
   const volumeSlider = document.getElementById(`volume-${side}`) as HTMLInputElement;
-  const progressContainer = document.getElementById(`progress-bar-${side}`) as HTMLElement;
+  const progressContainer = document.getElementById(`waveform-${side}`) as HTMLElement;
   const playerDeck = document.getElementById(`player-${side}`) as HTMLElement;
   
   // Audio Event Listeners
@@ -3393,12 +4420,18 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
       // Zeit-Anzeige aktualisieren
       updateTimeDisplay(side, audio.currentTime, audio.duration);
       
+      // ⭐ EXPLOSION SYSTEM: Check for track ending (last 15 seconds)
+      const timeRemaining = audio.duration - audio.currentTime;
+      if (timeRemaining <= 15 && timeRemaining > 0) {
+        handleTrackEnding(side, timeRemaining);
+      }
+      
       // WaveSurfer progress is automatically synced
     }
   });
   
   audio.addEventListener('play', () => {
-    console.log(`?? Player ${side.toUpperCase()} started playing`);
+    console.log(`▶️ Player ${side.toUpperCase()} started playing`);
     if (playerDeck) {
       playerDeck.classList.add('playing');
     }
@@ -3408,6 +4441,8 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
     if (song) {
       setPlayerState(side, song, true);
     }
+    
+    // Auto-Queue preparation now handled in handleAutoQueue
   });
   
   audio.addEventListener('pause', () => {
@@ -3424,10 +4459,13 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
   });
   
   audio.addEventListener('ended', () => {
-    console.log(`?? Player ${side} finished playing`);
+    console.log(`🏁 Player ${side} finished playing`);
     
     // PLAYER STATE: Track finished - clear player
     setPlayerState(side, null, false);
+    
+    // Auto-Queue Logic: Handle automatic playback
+    handleAutoQueue(side);
     
     // Clear deck completely when track ends
     clearPlayerDeck(side);
@@ -3444,16 +4482,18 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
       playerDeck.classList.remove('playing');
     }
     
-    // Auto-Queue functionality
-    if (autoQueueEnabled && queue.length > 0) {
-      console.log(`?? Auto-Queue enabled: Loading next track to Player ${side.toUpperCase()}`);
-      const nextTrack = queue.shift();
-      if (nextTrack) {
-        loadTrackToPlayer(side, nextTrack, true); // Auto-play next track
-        updateQueueDisplay();
+    // Auto-Queue functionality (legacy - new system uses handleAutoQueue)
+    if (autoQueueEnabled) {
+      const availableItem = getNextAvailableQueueItem();
+      if (availableItem) {
+        console.log(`?? Auto-Queue enabled: Loading next track to Player ${side.toUpperCase()}`);
+        assignQueueItemToDeck(availableItem, side);
+        loadTrackToPlayer(side, availableItem.song, true); // Auto-play next track
+      } else {
+        console.log(`? Auto-Queue: No available tracks in queue for Player ${side.toUpperCase()}`);
       }
     } else {
-      console.log(`? Auto-Queue disabled or queue empty on Player ${side.toUpperCase()}`);
+      console.log(`? Auto-Queue disabled on Player ${side.toUpperCase()}`);
     }
   });
   
@@ -3522,6 +4562,12 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
   ejectBtn?.addEventListener('click', () => {
     console.log(`?? Player ${side.toUpperCase()} eject button pressed`);
     
+    // Remove the ejected track from queue first
+    const ejectedSong = getCurrentLoadedSong(side);
+    if (ejectedSong) {
+      removeQueueItemBySong(ejectedSong);
+    }
+    
     // Complete deck clearing including metadata update
     clearPlayerDeck(side);
     
@@ -3548,22 +4594,26 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
     }
   });
   
-  // Volume Control - steuert Web Audio API GainNodes
+  // Volume Control - steuert Web Audio API GainNodes UND HTML Audio Element
   volumeSlider?.addEventListener('input', () => {
     const volume = parseInt(volumeSlider.value) / 100;
     
-    // Web Audio API Gain steuern (f�r Streaming)
-    if (side === 'left' && leftPlayerGain) {
-      leftPlayerGain.gain.value = volume;
-      console.log(`??? Player ${side} Web Audio gain: ${volume}`);
-    } else if (side === 'right' && rightPlayerGain) {
-      rightPlayerGain.gain.value = volume;
-      console.log(`??? Player ${side} Web Audio gain: ${volume}`);
+    // Web Audio API Gain steuern (für Streaming)
+    if (side === 'a' && aPlayerGain) {
+      aPlayerGain.gain.value = volume;
+    } else if (side === 'b' && bPlayerGain) {
+      bPlayerGain.gain.value = volume;
+    } else if (side === 'c' && cPlayerGain) {
+      cPlayerGain.gain.value = volume;
+    } else if (side === 'd' && dPlayerGain) {
+      dPlayerGain.gain.value = volume;
     }
     
     // HTML Audio Element auch setzen (f�r direkte Abh�rung ohne Web Audio)
     audio.volume = volume;
-    console.log(`Player ${side} volume: ${volume * 100}%`);
+    
+    // NUR EINMAL loggen
+    console.log(`??? ${side} player volume: ${Math.round(volume * 100)}%`);
   });
   
   // Progress Bar Click Seeking
@@ -3578,15 +4628,111 @@ function setupAudioPlayer(side: 'left' | 'right', audio: HTMLAudioElement) {
     }
   });
   
-  // Initial volume setting
+  // Initial volume setting - sowohl f�r HTML Audio als auch Web Audio API
   if (volumeSlider) {
-    audio.volume = parseInt(volumeSlider.value) / 100;
+    const initialVolume = parseInt(volumeSlider.value) / 100;
+    audio.volume = initialVolume;
+    
+    // Auch Web Audio API Gain setzen
+    if (side === 'a' && aPlayerGain) {
+      aPlayerGain.gain.value = initialVolume;
+    } else if (side === 'b' && bPlayerGain) {
+      bPlayerGain.gain.value = initialVolume;
+    } else if (side === 'c' && cPlayerGain) {
+      cPlayerGain.gain.value = initialVolume;
+    } else if (side === 'd' && dPlayerGain) {
+      dPlayerGain.gain.value = initialVolume;
+    }
+    
+    console.log(`??? ${side} player initial volume: ${Math.round(initialVolume * 100)}%`);
   }
+  
+  // Setup CRT disturbances for this player
+  setupCRTDisturbances(side);
+}
+
+// CRT Disturbance Effects for Waveforms
+function setupCRTDisturbances(side: 'a' | 'b' | 'c' | 'd') {
+  const waveformContainer = document.getElementById(`waveform-${side}`)?.parentElement;
+  if (!waveformContainer) return;
+  
+  // Random CRT glitches every 15-45 seconds
+  const scheduleNextGlitch = () => {
+    const randomDelay = 15000 + Math.random() * 30000; // 15-45 seconds
+    setTimeout(() => {
+      triggerRandomCRTEffect(waveformContainer, side);
+      scheduleNextGlitch(); // Schedule next glitch
+    }, randomDelay);
+  };
+  
+  // Random neon jitter effects every 20-60 seconds (rarer than CRT glitches)
+  const scheduleNextJitter = () => {
+    const randomDelay = 20000 + Math.random() * 40000; // 20-60 seconds
+    setTimeout(() => {
+      triggerNeonJitter(side);
+      scheduleNextJitter(); // Schedule next jitter
+    }, randomDelay);
+  };
+  
+  scheduleNextGlitch();
+  scheduleNextJitter();
+}
+
+function triggerRandomCRTEffect(container: HTMLElement, side: 'a' | 'b' | 'c' | 'd') {
+  // Only trigger if player is actually playing
+  const playerDeck = document.getElementById(`player-${side}`);
+  if (!playerDeck?.classList.contains('playing')) return;
+  
+  // Random selection of different CRT effects
+  const effects = ['crt-glitch', 'crt-scanline-jump', 'crt-horizontal-hold', 'crt-signal-loss'];
+  const randomEffect = effects[Math.floor(Math.random() * effects.length)];
+  
+  // Add intensive effect class
+  container.classList.add(randomEffect);
+  
+  // Different durations for different effects
+  let effectDuration;
+  switch (randomEffect) {
+    case 'crt-scanline-jump':
+      effectDuration = 150 + Math.random() * 100; // Very short
+      break;
+    case 'crt-horizontal-hold':
+      effectDuration = 300 + Math.random() * 200; // Medium
+      break;
+    case 'crt-signal-loss':
+      effectDuration = 100 + Math.random() * 150; // Very short
+      break;
+    default: // crt-glitch
+      effectDuration = 200 + Math.random() * 600; // Original duration
+  }
+  
+  setTimeout(() => {
+    container.classList.remove(randomEffect);
+  }, effectDuration);
+  
+  console.log(`📺 CRT ${randomEffect} on Player ${side.toUpperCase()} for ${Math.round(effectDuration)}ms`);
+}
+
+function triggerNeonJitter(side: 'a' | 'b' | 'c' | 'd') {
+  // Only trigger if player is actually playing
+  const playerDeck = document.getElementById(`player-${side}`);
+  if (!playerDeck?.classList.contains('playing')) return;
+  
+  // Add neon jitter class
+  playerDeck.classList.add('neon-jitter');
+  
+  // Remove after short duration (100-300ms)
+  const jitterDuration = 100 + Math.random() * 200;
+  setTimeout(() => {
+    playerDeck.classList.remove('neon-jitter');
+  }, jitterDuration);
+  
+  console.log(`✨ Neon jitter on Player ${side.toUpperCase()} for ${Math.round(jitterDuration)}ms`);
 }
 
 // Track in Player laden
 // Update waveform info overlay with track information
-function updateWaveformInfo(side: 'left' | 'right', song: OpenSubsonicSong) {
+function updateWaveformInfo(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong) {
   const waveformInfo = document.getElementById(`waveform-info-${side}`);
   if (!waveformInfo) return;
 
@@ -3600,7 +4746,7 @@ function updateWaveformInfo(side: 'left' | 'right', song: OpenSubsonicSong) {
 }
 
 // Clear waveform info overlay
-function clearWaveformInfo(side: 'left' | 'right') {
+function clearWaveformInfo(side: 'a' | 'b' | 'c' | 'd') {
   const waveformInfo = document.getElementById(`waveform-info-${side}`);
   if (!waveformInfo) return;
 
@@ -3613,7 +4759,7 @@ function clearWaveformInfo(side: 'left' | 'right') {
   if (albumElement) albumElement.textContent = '';
 }
 
-function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoPlay: boolean = false) {
+function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, autoPlay: boolean = false) {
   if (!openSubsonicClient) {
     console.error('OpenSubsonic client not initialized');
     return;
@@ -3639,6 +4785,9 @@ function loadTrackToPlayer(side: 'left' | 'right', song: OpenSubsonicSong, autoP
   
   // PLAYER STATE: Track loaded but not playing yet
   setPlayerState(side, song, false);
+  
+  // Store song data for drag & drop functionality
+  deckSongs[side] = song;
   
   // Neuen Track laden
   audio.src = streamUrl;
@@ -3747,12 +4896,12 @@ function initializeCrossfader() {
       const rightGain = Math.sin(clampedPosition * Math.PI / 2);
       
       // Monitor-Crossfader
-      crossfaderGain.left.gain.value = leftGain;
-      crossfaderGain.right.gain.value = rightGain;
+      crossfaderGain.a.gain.value = leftGain;
+      crossfaderGain.b.gain.value = rightGain;
       
       // Stream-Crossfader (synchron)
-      streamCrossfaderGain.left.gain.value = leftGain;
-      streamCrossfaderGain.right.gain.value = rightGain;
+      streamCrossfaderGain.a.gain.value = leftGain;
+      streamCrossfaderGain.b.gain.value = rightGain;
       
       console.log(`??? Crossfader Web Audio: ${position}, Left: ${leftGain.toFixed(2)}, Right: ${rightGain.toFixed(2)} (Monitor + Stream)`);
     }
@@ -3793,11 +4942,13 @@ function initializeCrossfader() {
 
 // Player Drop Zones initialisieren
 function initializePlayerDropZones() {
-  initializePlayerDropZone('left');
-  initializePlayerDropZone('right');
+  initializePlayerDropZone('a');
+  initializePlayerDropZone('b');
+  initializePlayerDropZone('c');
+  initializePlayerDropZone('d');
 }
 
-function initializePlayerDropZone(side: 'left' | 'right') {
+function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
   const playerDeck = document.getElementById(`player-${side}`);
   if (!playerDeck) return;
   
@@ -3833,6 +4984,18 @@ function initializePlayerDropZone(side: 'left' | 'right') {
         } else if (songData.type === 'track' && songData.track) {
           song = songData.track;
           songId = song?.id || null;
+        } else if (songData.type === 'queue-song' && songData.song) {
+          song = songData.song;
+          songId = song?.id || null;
+          if (song) {
+            console.log(`Queue song: "${song.title}" by ${song.artist}`);
+          }
+        } else if (songData.type === 'deck-song' && songData.song) {
+          song = songData.song;
+          songId = song?.id || null;
+          if (song) {
+            console.log(`Deck song: "${song.title}" by ${song.artist}`);
+          }
         }
       }
     } catch (e) {
@@ -4006,7 +5169,7 @@ async function loadRatingAsync(songId: string) {
 // Audio Level Monitoring f�r Volume Meter
 let volumeMeterIntervals: { [key: string]: NodeJS.Timeout } = {};
 
-function startVolumeMeter(side: 'left' | 'right' | 'mic') {
+function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic') {
   // Stoppe vorherige Intervalle
   if (volumeMeterIntervals[side]) {
     clearInterval(volumeMeterIntervals[side]);
@@ -4021,10 +5184,10 @@ function startVolumeMeter(side: 'left' | 'right' | 'mic') {
   let analyser: AnalyserNode;
   let gainNode: GainNode | null = null;
   
-  if (side === 'left') {
-    gainNode = leftPlayerGain;
-  } else if (side === 'right') {
-    gainNode = rightPlayerGain;
+  if (side === 'a') {
+    gainNode = aPlayerGain;
+  } else if (side === 'b') {
+    gainNode = bPlayerGain;
   } else if (side === 'mic') {
     gainNode = microphoneGain;
   }
@@ -4084,7 +5247,7 @@ function updateVolumeMeter(meterId: string, level: number) {
   });
 }
 
-function stopVolumeMeter(side: 'left' | 'right' | 'mic') {
+function stopVolumeMeter(side: 'a' | 'b' | 'mic') {
   if (volumeMeterIntervals[side]) {
     clearInterval(volumeMeterIntervals[side]);
     delete volumeMeterIntervals[side];
@@ -4093,7 +5256,7 @@ function stopVolumeMeter(side: 'left' | 'right' | 'mic') {
 }
 
 // Audio Event Listeners Setup
-function setupAudioEventListeners(audio: HTMLAudioElement, side: 'left' | 'right') {
+function setupAudioEventListeners(audio: HTMLAudioElement, side: 'a' | 'b' | 'c' | 'd') {
   // Audio zu Mixing-System hinzuf�gen f�r Live-Streaming
   audio.addEventListener('loadeddata', () => {
     console.log(`?? TRACK LOADED: ${side} player audio element src: ${audio.src}`);
@@ -4120,8 +5283,8 @@ function setupAudioEventListeners(audio: HTMLAudioElement, side: 'left' | 'right
   // ZUS�TZLICH: Sicherstellen dass Verbindung bei Play-Event existiert
   audio.addEventListener('play', () => {
     console.log(`?? PLAY EVENT: ${side} player starting playback`);
-    // Verbindung nochmals pr�fen/herstellen bei Wiedergabe
-    if (audioContext && (leftPlayerGain || rightPlayerGain)) {
+    // Verbindung nochmals prüfen/herstellen bei Wiedergabe
+    if (audioContext && (aPlayerGain || bPlayerGain || cPlayerGain || dPlayerGain)) {
       const connected = connectAudioToMixer(audio, side);
       if (connected) {
         console.log(`? ${side} player audio routing verified for stream`);
@@ -4136,29 +5299,13 @@ function setupAudioEventListeners(audio: HTMLAudioElement, side: 'left' | 'right
 
 // Volume Meter bei Audio-Events starten/stoppen
 document.addEventListener('DOMContentLoaded', () => {
-  // Player Volume Control Event Listeners
-  ['left', 'right'].forEach(side => {
-    const volumeSlider = document.getElementById(`volume-${side}`) as HTMLInputElement;
-    
-    volumeSlider?.addEventListener('input', (e) => {
-      const target = e.target as HTMLInputElement;
-      const volume = parseInt(target.value) / 100;
-      
-      if (side === 'left' && leftPlayerGain) {
-        leftPlayerGain.gain.value = volume;
-        console.log(`?? ${side} player volume: ${Math.round(volume * 100)}%`);
-      } else if (side === 'right' && rightPlayerGain) {
-        rightPlayerGain.gain.value = volume;
-        console.log(`?? ${side} player volume: ${Math.round(volume * 100)}%`);
-      }
-    });
-  });
-  
   // Auto-start volume meters when audio mixing is initialized
   setTimeout(() => {
     if (audioContext) {
-      startVolumeMeter('left');
-      startVolumeMeter('right');
+      startVolumeMeter('a');
+      startVolumeMeter('b');
+      startVolumeMeter('c');
+      startVolumeMeter('d');
       startVolumeMeter('mic');
     }
   }, 1000);
@@ -4341,32 +5488,32 @@ function generateStarRating(rating: number): string {
 }
 
 // Update track rating
-function updateTrackRating(trackId: string, rating: number) {
+async function updateTrackRating(trackId: string, rating: number) {
   if (!openSubsonicClient) return;
   
   try {
-    // Store rating locally (in future could sync with server)
-    const storedRatings = JSON.parse(localStorage.getItem('trackRatings') || '{}');
-    storedRatings[trackId] = rating;
-    localStorage.setItem('trackRatings', JSON.stringify(storedRatings));
-    
+    // Update rating via OpenSubsonic API
+    await openSubsonicClient.setRating(trackId, rating);
     console.log(`Rated track ${trackId}: ${rating} stars`);
     
-    // TODO: If OpenSubsonic supports rating API, call it here
-    // openSubsonicClient.setRating(trackId, rating);
+    // Update all star rating displays for this track
+    updateAllStarDisplays(trackId, rating);
   } catch (error) {
     console.error('Failed to update track rating:', error);
   }
 }
 
-// Get stored track rating
-function getStoredTrackRating(trackId: string): number {
-  try {
-    const storedRatings = JSON.parse(localStorage.getItem('trackRatings') || '{}');
-    return storedRatings[trackId] || 0;
-  } catch {
-    return 0;
-  }
+// Update all star rating displays for a track
+function updateAllStarDisplays(trackId: string, rating: number) {
+  // Find all star rating containers for this track (handles both data-song-id and data-track-id)
+  const starContainers = document.querySelectorAll(`[data-track-id="${trackId}"] .star-rating, [data-song-id="${trackId}"] .star-rating, [data-song-id="${trackId}"] .rating-stars`);
+  
+  starContainers.forEach(container => {
+    const stars = container.querySelectorAll('.star');
+    stars.forEach((star, index) => {
+      star.classList.toggle('filled', index < rating);
+    });
+  });
 }
 
 // Show album detail view
@@ -4423,7 +5570,7 @@ function showAlbumDetailView(album: OpenSubsonicAlbum, tracks: OpenSubsonicSong[
               <span class="track-number">${index + 1}</span>
               <span class="track-title">${track.title}</span>
               <div class="track-rating" data-track-id="${track.id}">
-                ${generateStarRating(getStoredTrackRating(track.id))}
+                ${generateStarRating(track.userRating || 0)}
               </div>
               <span class="track-duration">${formatDuration(track.duration || 0)}</span>
             </div>
@@ -4495,15 +5642,10 @@ function showAlbumDetailView(album: OpenSubsonicAlbum, tracks: OpenSubsonicSong[
       });
       
       // Click to rate
-      starElement.addEventListener('click', (e) => {
+      starElement.addEventListener('click', async (e) => {
         e.stopPropagation();
         const rating = parseInt(starElement.getAttribute('data-rating') || '0');
-        updateTrackRating(trackId!, rating);
-        
-        // Update visual state
-        stars.forEach((s, i) => {
-          s.classList.toggle('filled', i < rating);
-        });
+        await updateTrackRating(trackId!, rating);
       });
     });
   });
@@ -4595,14 +5737,14 @@ function showArtistDetailView(artist: OpenSubsonicArtist, albums: OpenSubsonicAl
 
 // Unified Library Browser System
 interface BrowseContext {
-  type: 'home' | 'artist' | 'album' | 'search';
+  type: 'home' | 'artist' | 'album' | 'search' | 'wizard';
   data?: any;
   breadcrumbs: BreadcrumbItem[];
 }
 
 interface BreadcrumbItem {
   label: string;
-  type: 'home' | 'artist' | 'album';
+  type: 'home' | 'artist' | 'album' | 'wizard';
   id?: string;
   action: () => void;
 }
@@ -4724,6 +5866,36 @@ class LibraryBrowser {
     
     this.updateBreadcrumbs();
     this.loadAlbumContent(album);
+  }
+
+  showWizardResults(songs: OpenSubsonicSong[], songTitle: string, artist: string) {
+    this.currentContext = {
+      type: 'wizard',
+      data: { songs, songTitle, artist },
+      breadcrumbs: [
+        { label: 'Library', type: 'home', action: () => this.showHome() },
+        { label: 'Wizard', type: 'wizard', action: () => this.showWizardResults(songs, songTitle, artist) }
+      ]
+    };
+    
+    this.updateBreadcrumbs();
+    this.loadWizardContent(songs);
+  }
+
+  private loadWizardContent(songs: OpenSubsonicSong[]) {
+    const content = document.getElementById('library-content')!;
+    
+    // Use the existing unified songs container
+    const songsContainer = createUnifiedSongsContainer(songs, 'album');
+    content.innerHTML = '';
+    content.appendChild(songsContainer);
+    
+    // Add all the standard click listeners
+    addSongClickListeners(content);
+    addAlbumClickListeners(content);
+    addArtistClickListeners(content);
+    
+    console.log(`✅ Displayed ${songs.length} wizard songs in library-content`);
   }
 
   private async loadHomeContent() {
@@ -5227,16 +6399,11 @@ class MediaContainer {
         });
         
         // Click to rate
-        starElement.addEventListener('click', (e) => {
+        starElement.addEventListener('click', async (e) => {
           e.stopPropagation();
           const rating = parseInt(starElement.getAttribute('data-rating') || '0');
           if (songId) {
-            updateTrackRating(songId, rating);
-            
-            // Update visual state
-            stars.forEach((s, i) => {
-              s.classList.toggle('filled', i < rating);
-            });
+            await updateTrackRating(songId, rating);
           }
         });
       });
@@ -5356,8 +6523,7 @@ class MediaContainer {
       element.className = 'album-wrapper';
       element.innerHTML = `
         <div class="album-clickable" data-album-id="${item.id}">
-          ${coverUrl 
-            ? `<img class="album-cover" src="${coverUrl}" alt="${item.name}" loading="lazy">`
+          ${coverUrl             ? `<img class="album-cover" src="${coverUrl}" alt="${item.name}" loading="lazy">`
             : '<div class="album-cover album-placeholder"><span class="material-icons">album</span></div>'
           }
           <div class="album-title">${escapeHtml(item.name)}</div>
@@ -5743,5 +6909,37 @@ async function loadRandomArtists() {
     if (container) {
       container.innerHTML = '<div class="loading-placeholder">Failed to load random artists</div>';
     }
+  }
+}
+
+// ===== WAVEFORM BLINKING SYSTEM ===== 
+
+// Handle track ending - progressive waveform blinking
+function handleTrackEnding(side: 'a' | 'b' | 'c' | 'd', timeRemaining: number) {
+  const waveformContainer = document.getElementById(`waveform-${side}`);
+  if (!waveformContainer) return;
+  
+  // Remove any existing blink classes
+  waveformContainer.classList.remove('waveform-blink-slow', 'waveform-blink-medium', 'waveform-blink-fast', 'waveform-blink-rapid', 'waveform-blink-critical');
+  
+  // Progressive blinking based on time remaining
+  if (timeRemaining > 4) {
+    waveformContainer.classList.add('waveform-blink-slow');
+  } else if (timeRemaining > 3) {
+    waveformContainer.classList.add('waveform-blink-medium');
+  } else if (timeRemaining > 2) {
+    waveformContainer.classList.add('waveform-blink-fast');
+  } else if (timeRemaining > 1) {
+    waveformContainer.classList.add('waveform-blink-rapid');
+  } else {
+    waveformContainer.classList.add('waveform-blink-critical');
+  }
+}
+
+// Clear waveform blinking when track ends or is ejected
+function clearWaveformBlinking(side: 'a' | 'b' | 'c' | 'd') {
+  const waveformContainer = document.getElementById(`waveform-${side}`);
+  if (waveformContainer) {
+    waveformContainer.classList.remove('waveform-blink-slow', 'waveform-blink-medium', 'waveform-blink-fast', 'waveform-blink-rapid', 'waveform-blink-critical');
   }
 }

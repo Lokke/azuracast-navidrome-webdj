@@ -1,3 +1,38 @@
+/* LCD/CRT Monitor Effect Import */
+@import url(https://fonts.googleapis.com/css?family=Source+Code+Pro:400,500,600,700,900,300,200);
+
+/* KONFIGURIERBARE PLAYER-FARBEN - Nur hier ändern! */
+:root {
+  /* Player A (links oben) - Rot */
+  --player-a-color: #ff7878;
+  
+  /* Player B (rechts oben) - Blau */
+  --player-b-color: #7cacff;
+  
+  /* Player C (links unten) - Gelb */
+  --player-c-color: #ffe570;
+  
+  /* Player D (rechts unten) - Grün */
+  --player-d-color: #7dffad;
+  
+  /* Automatisch generierte Farbtöne - nicht ändern */
+  --player-a-light: color-mix(in srgb, var(--player-a-color) 70%, white);
+  --player-a-dark: color-mix(in srgb, var(--player-a-color) 80%, black);
+  --player-a-glow: color-mix(in srgb, var(--player-a-color) 40%, transparent);
+  
+  --player-b-light: color-mix(in srgb, var(--player-b-color) 70%, white);
+  --player-b-dark: color-mix(in srgb, var(--player-b-color) 80%, black);
+  --player-b-glow: color-mix(in srgb, var(--player-b-color) 40%, transparent);
+  
+  --player-c-light: color-mix(in srgb, var(--player-c-color) 70%, white);
+  --player-c-dark: color-mix(in srgb, var(--player-c-color) 80%, black);
+  --player-c-glow: color-mix(in srgb, var(--player-c-color) 40%, transparent);
+  
+  --player-d-light: color-mix(in srgb, var(--player-d-color) 70%, white);
+  --player-d-dark: color-mix(in srgb, var(--player-d-color) 80%, black);
+  --player-d-glow: color-mix(in srgb, var(--player-d-color) 40%, transparent);
+}
+
 /* Album Header */
 .album-header {
   background: linear-gradient(145deg, #2a2a2a, #1e1e1e);
@@ -40,13 +75,43 @@ body {
 .dj-section {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 2rem;
-  padding: 0.75rem 1.5rem 1.5rem 1.5rem; /* Reduziert oberes Padding von 1.5rem auf 0.75rem */
-  background: #1a1a1a; /* Gleicher Hintergrund wie Content-Browser */
-  /* border-bottom entfernt für nahtlosen Übergang */
-  flex-shrink: 0; /* Verhindert Shrinking */
+  grid-template-rows: 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem 1.5rem 1.5rem;
+  background: #1a1a1a;
+  flex-shrink: 0;
   position: relative;
-  z-index: 10;
+  z-index: 1; /* Reduce to same level as players */
+}
+
+/* Player Positioning im Grid */
+#player-a {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+#player-b {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+#player-c {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+#player-d {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+/* Center Controls zwischen allen Playern */
+.center-controls {
+  grid-column: 2;
+  grid-row: 1 / 3; /* Span beide Reihen */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* Professional Player Deck Design - Harmonized with Mixer */
@@ -122,10 +187,64 @@ body {
   height: auto; /* Remove fixed height, use aspect-ratio instead */
 }
 
+/* Glass effect over album covers in player decks */
+.player-deck .album-cover::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.25), rgba(0,0,0,0.4));
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,0.6),
+    inset 0 -4px 6px rgba(0,0,0,0.7),
+    0 2px 6px rgba(0,0,0,0.8);
+  border-radius: 2px; /* Match album cover border radius */
+  pointer-events: none; /* Allow interaction with the album cover below */
+  z-index: 1;
+  opacity: 0.8; /* Slightly transparent so the image shows through */
+}
+
 .album-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: opacity 0.2s ease; /* Smooth drag feedback */
+}
+
+/* Drag & Drop feedback for album covers */
+.album-cover[draggable="true"] {
+  transition: all 0.2s ease;
+}
+
+.album-cover[draggable="true"]:hover {
+  transform: scale(1.02);
+}
+
+.album-cover[draggable="true"]:active {
+  transform: scale(0.98);
+}
+
+/* Cursor styles for different states */
+.album-cover[draggable="true"] {
+  cursor: grab;
+}
+
+.album-cover[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Not allowed cursor for playing tracks */
+.album-cover[style*="not-allowed"] {
+  cursor: not-allowed !important;
+  opacity: 0.7;
+}
+
+/* Drop zone highlighting */
+.album-cover[style*="rgba(255, 255, 255, 0.1)"] {
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+  background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .album-placeholder {
@@ -222,41 +341,79 @@ body {
   transform: translateY(1px);
 }
 
-/* Play button styling for Player A (left) */
-#player-left .play-pause-btn {
-  border-color: #ff6666;
-  color: #ff6666;
-  background: rgba(255, 102, 102, 0.1);
+/* Play button styling for Player A */
+#player-a .play-pause-btn {
+  border-color: var(--player-a-color);
+  color: var(--player-a-color);
+  background: var(--player-a-glow);
 }
 
-#player-left .play-pause-btn:hover {
-  background: rgba(255, 102, 102, 0.2);
-  border-color: #ff6666;
-  color: #ff6666;
+#player-a .play-pause-btn:hover {
+  background: color-mix(in srgb, var(--player-a-color) 20%, transparent);
+  border-color: var(--player-a-color);
+  color: var(--player-a-color);
 }
 
-#player-left .play-pause-btn.playing {
-  background: #ff6666;
-  border-color: #ff6666;
+#player-a .play-pause-btn.playing {
+  background: var(--player-a-color);
+  border-color: var(--player-a-color);
   color: #fff;
 }
 
-/* Play button styling for Player B (right) */
-#player-right .play-pause-btn {
-  border-color: #66b3ff;
-  color: #66b3ff;
-  background: rgba(102, 179, 255, 0.1);
+/* Play button styling for Player B */
+#player-b .play-pause-btn {
+  border-color: var(--player-b-color);
+  color: var(--player-b-color);
+  background: var(--player-b-glow);
 }
 
-#player-right .play-pause-btn:hover {
-  background: rgba(102, 179, 255, 0.2);
-  border-color: #66b3ff;
-  color: #66b3ff;
+#player-b .play-pause-btn:hover {
+  background: color-mix(in srgb, var(--player-b-color) 20%, transparent);
+  border-color: var(--player-b-color);
+  color: var(--player-b-color);
 }
 
-#player-right .play-pause-btn.playing {
-  background: #66b3ff;
-  border-color: #66b3ff;
+#player-b .play-pause-btn.playing {
+  background: var(--player-b-color);
+  border-color: var(--player-b-color);
+  color: #fff;
+}
+
+/* Play button styling for Player C */
+#player-c .play-pause-btn {
+  border-color: var(--player-c-color);
+  color: var(--player-c-color);
+  background: var(--player-c-glow);
+}
+
+#player-c .play-pause-btn:hover {
+  background: color-mix(in srgb, var(--player-c-color) 20%, transparent);
+  border-color: var(--player-c-color);
+  color: var(--player-c-color);
+}
+
+#player-c .play-pause-btn.playing {
+  background: var(--player-c-color);
+  border-color: var(--player-c-color);
+  color: #fff;
+}
+
+/* Play button styling for Player D */
+#player-d .play-pause-btn {
+  border-color: var(--player-d-color);
+  color: var(--player-d-color);
+  background: var(--player-d-glow);
+}
+
+#player-d .play-pause-btn:hover {
+  background: color-mix(in srgb, var(--player-d-color) 20%, transparent);
+  border-color: var(--player-d-color);
+  color: var(--player-d-color);
+}
+
+#player-d .play-pause-btn.playing {
+  background: var(--player-d-color);
+  border-color: var(--player-d-color);
   color: #fff;
 }
 
@@ -494,7 +651,7 @@ body {
   overflow: hidden;
 }
 
-/* Waveform Container - Full width layout */
+/* Waveform Container - Full width layout mit LCD-Effekt */
 .waveform-container {
   position: relative;
   height: 80px; /* Match album art height */
@@ -504,6 +661,265 @@ body {
   overflow: hidden;
   width: 100%; /* Full width */
   margin: 0; /* Remove any margins */
+  
+  /* LCD/CRT Monitor Effect */
+  font-family: 'Source Code Pro', monospace;
+}
+
+/* LCD Pixel Overlay - angewendet auf alle Waveform-Inhalte */
+.waveform-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-image:
+    /* Scanlines */
+    linear-gradient(to bottom, 
+      transparent 50%, 
+      rgba(0,0,0,.1) 50%),
+    /* RGB Pixel Grid */
+    linear-gradient(to top, 
+      rgba(255,255,255,.1) 33.33333%, 
+      rgba(255,255,255,.2) 33.33333%, 
+      rgba(255,255,255,.2) 66.66666%, 
+      rgba(255,255,255,.3) 66.66666%),
+    linear-gradient(to right, 
+      rgba(255,0,0,.1) 33.33333%, 
+      rgba(0,255,0,.1) 33.33333%, 
+      rgba(0,255,0,.1) 66.66666%, 
+      rgba(0,0,255,.1) 66.66666%);
+  background-size: 
+    100% 2px,  /* Scanlines every 2px */
+    3px 3px,   /* RGB pixels */
+    3px 3px;   /* RGB pixels */
+  mix-blend-mode: multiply;
+  pointer-events: none; /* Damit man durch den Overlay klicken kann */
+  z-index: 10;
+  animation: scanline-flicker 0.1s infinite linear;
+}
+
+/* Subtiler Scanline-Flicker für mehr Authentizität */
+@keyframes scanline-flicker {
+  0% { opacity: 0.95; }
+  50% { opacity: 1; }
+  100% { opacity: 0.95; }
+}
+
+/* CRT Flickering Effects for Playing Waveforms */
+@keyframes crt-flicker {
+  0% { 
+    filter: brightness(1) contrast(1);
+    transform: scaleY(1);
+  }
+  2% { 
+    filter: brightness(1.1) contrast(1.2);
+    transform: scaleY(0.998);
+  }
+  4% { 
+    filter: brightness(0.95) contrast(0.9);
+    transform: scaleY(1.001);
+  }
+  6% { 
+    filter: brightness(1) contrast(1);
+    transform: scaleY(1);
+  }
+  100% { 
+    filter: brightness(1) contrast(1);
+    transform: scaleY(1);
+  }
+}
+
+@keyframes static-noise {
+  0% { 
+    background-position: 0% 0%;
+    opacity: 0;
+  }
+  1% { 
+    background-position: 10% 10%;
+    opacity: 0.03;
+  }
+  2% { 
+    background-position: -5% 5%;
+    opacity: 0;
+  }
+  100% { 
+    background-position: 0% 0%;
+    opacity: 0;
+  }
+}
+
+/* Apply CRT effects to playing waveforms */
+.player-deck.playing .waveform-container {
+  animation: crt-flicker 8s infinite, scanline-jump 12s infinite;
+}
+
+.player-deck.playing .waveform-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle, transparent 2px, rgba(255,255,255,0.1) 2px),
+    radial-gradient(circle, transparent 1px, rgba(0,0,0,0.2) 1px);
+  background-size: 3px 3px, 2px 2px;
+  animation: static-noise 12s infinite, rolling-bar 15s infinite;
+  pointer-events: none;
+  z-index: 10;
+  mix-blend-mode: overlay;
+}
+
+/* Additional CRT Effects */
+@keyframes scanline-jump {
+  0%, 94%, 100% { 
+    transform: translateY(0px);
+  }
+  95% { 
+    transform: translateY(-2px);
+  }
+  96% { 
+    transform: translateY(1px);
+  }
+  97% { 
+    transform: translateY(-1px);
+  }
+  98% { 
+    transform: translateY(0px);
+  }
+}
+
+@keyframes rolling-bar {
+  0%, 90%, 100% { 
+    background-position: 0% 0%;
+    opacity: 0;
+  }
+  91% { 
+    background-position: 0% -100%;
+    opacity: 0.1;
+    background-image: 
+      linear-gradient(0deg, transparent 90%, rgba(255,255,255,0.3) 95%, transparent 100%),
+      radial-gradient(circle, transparent 2px, rgba(255,255,255,0.1) 2px),
+      radial-gradient(circle, transparent 1px, rgba(0,0,0,0.2) 1px);
+  }
+  95% { 
+    background-position: 0% 200%;
+    opacity: 0.05;
+  }
+  99% { 
+    opacity: 0;
+  }
+}
+
+/* Intensive CRT glitch effects */
+.waveform-container.crt-glitch {
+  animation: intense-glitch 0.1s infinite !important;
+  filter: contrast(1.4) brightness(1.2) saturate(0.8) !important;
+}
+
+.waveform-container.crt-glitch::before {
+  animation: heavy-static 0.05s infinite !important;
+  opacity: 0.15 !important;
+}
+
+/* Scanline jump effect */
+.waveform-container.crt-scanline-jump {
+  animation: scanline-jump-effect 0.1s ease-out !important;
+}
+
+/* Horizontal hold problems */
+.waveform-container.crt-horizontal-hold {
+  animation: horizontal-hold 0.15s ease-in-out !important;
+}
+
+/* Signal loss effect */
+.waveform-container.crt-signal-loss {
+  animation: signal-loss 0.08s ease-in-out !important;
+  filter: brightness(0.3) contrast(3) !important;
+}
+
+@keyframes scanline-jump-effect {
+  0% { transform: translateY(0px) scaleY(1); }
+  30% { transform: translateY(-3px) scaleY(0.95); }
+  60% { transform: translateY(2px) scaleY(1.02); }
+  100% { transform: translateY(0px) scaleY(1); }
+}
+
+@keyframes horizontal-hold {
+  0% { transform: translateX(0px); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(1px); }
+  100% { transform: translateX(0px); }
+}
+
+@keyframes signal-loss {
+  0% { 
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  50% { 
+    opacity: 0.1;
+    transform: scaleX(0.98);
+    filter: brightness(0.1) contrast(5);
+  }
+  100% { 
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes intense-glitch {
+  0% { 
+    transform: scaleY(1) skewX(0deg);
+    filter: hue-rotate(0deg);
+  }
+  20% { 
+    transform: scaleY(0.995) skewX(0.5deg);
+    filter: hue-rotate(90deg);
+  }
+  40% { 
+    transform: scaleY(1.002) skewX(-0.3deg);
+    filter: hue-rotate(180deg);
+  }
+  60% { 
+    transform: scaleY(0.998) skewX(0.2deg);
+    filter: hue-rotate(270deg);
+  }
+  80% { 
+    transform: scaleY(1.001) skewX(-0.1deg);
+    filter: hue-rotate(45deg);
+  }
+  100% { 
+    transform: scaleY(1) skewX(0deg);
+    filter: hue-rotate(0deg);
+  }
+}
+
+@keyframes heavy-static {
+  0% { 
+    background-position: 0% 0%;
+    background-size: 2px 2px, 1px 1px;
+  }
+  25% { 
+    background-position: 100% 25%;
+    background-size: 3px 3px, 2px 2px;
+  }
+  50% { 
+    background-position: 50% 100%;
+    background-size: 1px 1px, 3px 3px;
+  }
+  75% { 
+    background-position: 25% 50%;
+    background-size: 4px 4px, 1px 1px;
+  }
+  100% { 
+    background-position: 0% 0%;
+    background-size: 2px 2px, 1px 1px;
+  }
 }
 
 /* Controls Bar - New separated controls section */
@@ -547,6 +963,19 @@ body {
   padding: 16px;
   pointer-events: none; /* Allow waveform interaction underneath */
   z-index: 5; /* Lower than controls */
+}
+
+/* LCD Text-Effekt für alle Text-Elemente in Waveform-Containern */
+.waveform-container *,
+.waveform-container .breadcrumb-element,
+.waveform-container .breadcrumb-btn {
+  font-family: 'Source Code Pro', monospace !important;
+  text-shadow: 
+    1px 0 rgba(255,0,0,.6), 
+    -1px 0 rgba(0,0,255,.6),
+    0 0 8px rgba(0, 0, 0, 1), 
+    0 0 12px rgba(0, 0, 0, 0.8),
+    2px 2px 6px rgba(0, 0, 0, 0.9) !important;
 }
 
 /* Large centered title */
@@ -643,26 +1072,48 @@ body {
   z-index: 10;
 }
 
-.player-label.left {
-  border-color: #ff6666;
-  background: rgba(255, 102, 102, 0.1);
+/* Player A */
+.player-label.a {
+  border-color: var(--player-a-color);
+  background: var(--player-a-glow);
 }
 
-.player-label.right {
-  border-color: #66b3ff;
-  background: rgba(102, 179, 255, 0.1);
+/* Player B */
+.player-label.b {
+  border-color: var(--player-b-color);
+  background: var(--player-b-glow);
+}
+
+/* Player C */
+.player-label.c {
+  border-color: var(--player-c-color);
+  background: var(--player-c-glow);
+}
+
+/* Player D */
+.player-label.d {
+  border-color: var(--player-d-color);
+  background: var(--player-d-glow);
 }
 
 .player-label-dot {
   display: none;
 }
 
-.player-label.left .player-label-dot {
-  background: #ff6666;
+.player-label.a .player-label-dot {
+  background: var(--player-a-color);
 }
 
-.player-label.right .player-label-dot {
-  background: #66b3ff;
+.player-label.b .player-label-dot {
+  background: var(--player-b-color);
+}
+
+.player-label.c .player-label-dot {
+  background: var(--player-c-color);
+}
+
+.player-label.d .player-label-dot {
+  background: var(--player-d-color);
 }
 
 .player-label-text {
@@ -672,12 +1123,20 @@ body {
   text-transform: uppercase;
 }
 
-.player-label.left .player-label-text {
-  color: #ff6666;
+.player-label.a .player-label-text {
+  color: var(--player-a-color);
 }
 
-.player-label.right .player-label-text {
-  color: #66b3ff;
+.player-label.b .player-label-text {
+  color: var(--player-b-color);
+}
+
+.player-label.c .player-label-text {
+  color: var(--player-c-color);
+}
+
+.player-label.d .player-label-text {
+  color: var(--player-d-color);
 }
 
 .player-header {
@@ -2552,29 +3011,136 @@ body {
   transition: all 0.3s ease;
 }
 
-.queue-panel {
+/* Queue Section */
+.queue-section {
   grid-area: queue;
-  background: linear-gradient(135deg, #2a2a2a, #3a3a3a);
-  border: 2px solid #4a4a4a;
-  border-radius: 8px;
+  position: relative;
+}
+
+/* Queue Label Row - seamlessly connected to search bar */
+.queue-label-row {
+  display: flex;
+  align-items: stretch; /* Stretch to match search height */
+  justify-content: space-between;
+  position: relative;
+  margin-bottom: 0;
+  padding: 0; /* No padding for seamless connection */
+  height: 30px; /* Match search height exactly */
+  border-top: 1px solid #444; /* Visual connection to search area */
+}
+
+.queue-label {
+  /* Korrekte Tilted-Breadcrumb Styling */
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 8px 14px;
+  border: 1px solid #444;
+  border-top: none; /* Connect to search area above */
+  clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+  margin-right: 4px; /* Gap zu den Buttons */
+  min-height: 30px;
+  line-height: 1;
+  flex: 1; /* Take available space */
+  /* Active state like Library breadcrumb */
+  color: white;
+  border-color: #666;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Auto-Queue Controls in label row - korrekte Breadcrumb-Spacing */
+.queue-label-row .auto-queue-controls {
+  display: flex;
+  gap: 6px; /* Korrekte Breadcrumb-Gaps wie im Rest der App */
+  margin: 0;
+  align-items: center;
+  height: 30px;
+}
+
+.queue-panel {
+  /* Seamlessly connected to label row above */
+  background: linear-gradient(145deg, #1e1e1e, #2a2a2a);
+  border: 2px solid #444;
+  border-top: none; /* Connect seamlessly to label row */
+  border-radius: 0 0 4px 4px; /* Only bottom corners rounded */
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: 100%;
+  max-height: calc(100% - 30px); /* Account for label row height */
   overflow: hidden;
-  margin: 0 1rem 1rem 0; /* Kleines Margin nur rechts und unten */
+  margin: 0; /* No margin for seamless connection */
+  transition: all 0.3s ease;
 }
 
-.queue-header {
-  padding: 0.75rem;
-  border-bottom: 2px solid #4a4a4a;
-  background: #333;
+/* Queue Panel Drag Over State */
+.queue-panel.drag-over {
+  border-color: #00ff88;
+  background: linear-gradient(135deg, #2a4a2a, #3a5a3a);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
 }
 
-.queue-header h3 {
-  color: #00ff88;
-  margin-bottom: 0.5rem;
-  font-size: 1.1em;
+/* Auto-Queue Controls */
+.auto-queue-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.auto-queue-btn {
+  /* Korrekte Tilted-Breadcrumb Styling wie auf der ganzen Seite */
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.8) !important;
+  padding: 8px 14px;
+  border: 1px solid #444 !important;
+  clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%) !important;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+  margin-right: 4px; /* Gap zwischen Buttons wie bei Breadcrumbs */
+  min-height: 30px;
+  height: 30px;
+  line-height: 1;
+  cursor: pointer;
+  /* Inactive state - dark */
+  color: #ccc !important;
+  box-shadow: none !important;
+  flex-shrink: 0;
+}
+
+/* Remove the last-child special case - all buttons should be tilted */
+
+.auto-queue-btn:hover {
+  color: #fff !important;
+  border-color: #666 !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: translateY(-1px);
+  box-shadow: none !important;
+}
+
+.auto-queue-btn.active {
+  /* Active state - blue like Library breadcrumb clickable */
+  color: #64FFDA !important;
+  border-color: #64FFDA !important;
+  background: rgba(100, 255, 218, 0.1) !important;
+  box-shadow: none !important;
+}
+
+.auto-queue-btn.active:hover {
+  color: #80ffff !important;
+  border-color: #80ffff !important;
+  background: rgba(128, 255, 255, 0.15) !important;
+  box-shadow: none !important;
 }
 
 /* No Search State */
@@ -2641,9 +3207,107 @@ body {
 .queue-items {
   flex: 1;
   overflow-y: auto;
-  padding: 0.75rem;
+  padding: 0.5rem;
   min-height: 0;
   max-height: 100%;
+}
+
+/* Queue Item Wrapper - contains unified song element + queue controls */
+.queue-item-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  margin: 0.125rem 0;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+  cursor: grab;
+}
+
+.queue-item-wrapper:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.queue-item-wrapper:active {
+  cursor: grabbing;
+}
+
+.queue-number {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  color: #888;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 50%;
+}
+
+.queue-item-wrapper .music-card {
+  flex: 1;
+  margin: 0;
+  padding: 0.25rem;
+}
+
+.queue-remove {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.queue-remove:hover {
+  background: rgba(255, 0, 0, 0.2);
+  color: #ff4444;
+}
+
+/* Queue Item Deck Assignment Indicator */
+.queue-item-wrapper.assigned-to-deck {
+  border-left: 4px solid #64FFDA;
+  background: rgba(100, 255, 218, 0.05);
+}
+
+.queue-item-wrapper.assigned-to-deck::before {
+  content: attr(data-assigned-deck);
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #64FFDA;
+  color: #000;
+  padding: 2px 6px;
+  border-radius: 0 12px 12px 0;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  z-index: 10;
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="a"]::before {
+  background: var(--player-a-color, #64FFDA);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="b"]::before {
+  background: var(--player-b-color, #FF6B6B);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="c"]::before {
+  background: var(--player-c-color, #4ECDC4);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="d"]::before {
+  background: var(--player-d-color, #45B7D1);
 }
 
 .queue-items.drag-over {
@@ -3021,11 +3685,21 @@ body {
   align-items: center;
   gap: 0.75rem;
   transition: all 0.3s ease;
+  cursor: grab;
 }
 
 .queue-item:hover {
   background: #404040;
   border-color: #00ff88;
+}
+
+.queue-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.queue-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
 }
 
 .queue-number {
@@ -3169,19 +3843,206 @@ body {
   transform: translateY(-2px);
 }
 
-/* Playing State Indicators */
-.player-deck.playing {
-  border: 2px solid #00ff88;
-  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+/* Playing State Indicators - Individual Deck Colors with Irregular Neon Effects */
+#player-a.playing {
+  border: 2px solid var(--player-a-color);
+  box-shadow: 0 0 10px var(--player-a-glow);
+  animation: neon-pulse-a 7.3s ease-in-out infinite;
+  z-index: 10; /* Higher z-index for deck content */
+  position: relative;
+}
+
+#player-b.playing {
+  border: 2px solid var(--player-b-color);
+  box-shadow: 0 0 10px var(--player-b-glow);
+  animation: neon-pulse-b 8.1s ease-in-out infinite;
+  z-index: 10; /* Higher z-index for deck content */
+  position: relative;
+}
+
+#player-c.playing {
+  border: 2px solid var(--player-c-color);
+  box-shadow: 0 0 10px var(--player-c-glow);
+  animation: neon-pulse-c 6.7s ease-in-out infinite;
+  z-index: 10; /* Higher z-index for deck content */
+  position: relative;
+}
+
+#player-d.playing {
+  border: 2px solid var(--player-d-color);
+  box-shadow: 0 0 10px var(--player-d-glow);
+  animation: neon-pulse-d 9.2s ease-in-out infinite;
+  z-index: 10; /* Higher z-index for deck content */
+  position: relative;
+}
+
+/* Irregular Neon Pulse Animations - Natural breathing patterns with reduced glow */
+@keyframes neon-pulse-a {
+  0% { 
+    box-shadow: 0 0 8px var(--player-a-glow), 0 0 15px var(--player-a-glow);
+    border-color: var(--player-a-color);
+  }
+  23% { 
+    box-shadow: 0 0 18px var(--player-a-glow), 0 0 35px var(--player-a-glow);
+    border-color: var(--player-a-light);
+  }
+  27% { 
+    box-shadow: 0 0 10px var(--player-a-glow), 0 0 22px var(--player-a-glow);
+    border-color: var(--player-a-color);
+  }
+  61% { 
+    box-shadow: 0 0 20px var(--player-a-glow), 0 0 40px var(--player-a-glow), 0 0 60px var(--player-a-glow);
+    border-color: var(--player-a-light);
+  }
+  68% { 
+    box-shadow: 0 0 12px var(--player-a-glow), 0 0 25px var(--player-a-glow);
+    border-color: var(--player-a-color);
+  }
+  100% { 
+    box-shadow: 0 0 8px var(--player-a-glow), 0 0 15px var(--player-a-glow);
+    border-color: var(--player-a-color);
+  }
+}
+
+@keyframes neon-pulse-b {
+  0% { 
+    box-shadow: 0 0 9px var(--player-b-glow), 0 0 18px var(--player-b-glow);
+    border-color: var(--player-b-color);
+  }
+  31% { 
+    box-shadow: 0 0 14px var(--player-b-glow), 0 0 28px var(--player-b-glow);
+    border-color: var(--player-b-light);
+  }
+  34% { 
+    box-shadow: 0 0 11px var(--player-b-glow), 0 0 20px var(--player-b-glow);
+    border-color: var(--player-b-color);
+  }
+  72% { 
+    box-shadow: 0 0 22px var(--player-b-glow), 0 0 45px var(--player-b-glow), 0 0 65px var(--player-b-glow);
+    border-color: var(--player-b-light);
+  }
+  79% { 
+    box-shadow: 0 0 15px var(--player-b-glow), 0 0 30px var(--player-b-glow);
+    border-color: var(--player-b-color);
+  }
+  100% { 
+    box-shadow: 0 0 9px var(--player-b-glow), 0 0 18px var(--player-b-glow);
+    border-color: var(--player-b-color);
+  }
+}
+
+@keyframes neon-pulse-c {
+  0% { 
+    box-shadow: 0 0 8px var(--player-c-glow), 0 0 16px var(--player-c-glow);
+    border-color: var(--player-c-color);
+  }
+  19% { 
+    box-shadow: 0 0 16px var(--player-c-glow), 0 0 32px var(--player-c-glow);
+    border-color: var(--player-c-light);
+  }
+  25% { 
+    box-shadow: 0 0 12px var(--player-c-glow), 0 0 24px var(--player-c-glow);
+    border-color: var(--player-c-color);
+  }
+  56% { 
+    box-shadow: 0 0 19px var(--player-c-glow), 0 0 38px var(--player-c-glow), 0 0 55px var(--player-c-glow);
+    border-color: var(--player-c-light);
+  }
+  63% { 
+    box-shadow: 0 0 10px var(--player-c-glow), 0 0 21px var(--player-c-glow);
+    border-color: var(--player-c-color);
+  }
+  100% { 
+    box-shadow: 0 0 8px var(--player-c-glow), 0 0 16px var(--player-c-glow);
+    border-color: var(--player-c-color);
+  }
+}
+
+@keyframes neon-pulse-d {
+  0% { 
+    box-shadow: 0 0 10px var(--player-d-glow), 0 0 19px var(--player-d-glow);
+    border-color: var(--player-d-color);
+  }
+  26% { 
+    box-shadow: 0 0 15px var(--player-d-glow), 0 0 30px var(--player-d-glow);
+    border-color: var(--player-d-light);
+  }
+  32% { 
+    box-shadow: 0 0 12px var(--player-d-glow), 0 0 25px var(--player-d-glow);
+    border-color: var(--player-d-color);
+  }
+  67% { 
+    box-shadow: 0 0 21px var(--player-d-glow), 0 0 42px var(--player-d-glow), 0 0 62px var(--player-d-glow);
+    border-color: var(--player-d-light);
+  }
+  74% { 
+    box-shadow: 0 0 14px var(--player-d-glow), 0 0 28px var(--player-d-glow);
+    border-color: var(--player-d-color);
+  }
+  100% { 
+    box-shadow: 0 0 10px var(--player-d-glow), 0 0 19px var(--player-d-glow);
+    border-color: var(--player-d-color);
+  }
 }
 
 .player-deck.playing h3 {
-  color: #00ff88;
-  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+  text-shadow: 0 0 10px currentColor;
+}
+
+/* Neon Jitter Effect - Rare electrical interference */
+.player-deck.neon-jitter {
+  animation: neon-jitter 0.1s ease-in-out infinite !important;
+}
+
+@keyframes neon-jitter {
+  0% { 
+    transform: translate(0px, 0px);
+    filter: brightness(1);
+  }
+  10% { 
+    transform: translate(-1px, 1px);
+    filter: brightness(1.2);
+  }
+  20% { 
+    transform: translate(1px, -1px);
+    filter: brightness(0.9);
+  }
+  30% { 
+    transform: translate(-1px, -1px);
+    filter: brightness(1.1);
+  }
+  40% { 
+    transform: translate(1px, 1px);
+    filter: brightness(1);
+  }
+  50% { 
+    transform: translate(0px, -1px);
+    filter: brightness(1.15);
+  }
+  60% { 
+    transform: translate(-1px, 0px);
+    filter: brightness(0.95);
+  }
+  70% { 
+    transform: translate(1px, 0px);
+    filter: brightness(1.05);
+  }
+  80% { 
+    transform: translate(0px, 1px);
+    filter: brightness(1);
+  }
+  90% { 
+    transform: translate(0px, 0px);
+    filter: brightness(1.1);
+  }
+  100% { 
+    transform: translate(0px, 0px);
+    filter: brightness(1);
+  }
 }
 
 .player-deck.playing .track-title {
-  color: #00ff88;
+  text-shadow: 0 0 8px currentColor;
 }
 
 /* Rating System Styles */
@@ -5322,4 +6183,157 @@ body {
     padding: 4px 8px;
     font-size: 10px;
   }
+}
+
+/* ===== SPECTACULAR EXPLOSION & REBUILD SYSTEM ===== */
+
+/* Waveform Blink Effect - Last 5 seconds */
+.waveform-blink-slow {
+  animation: waveformBlink 2s ease-in-out infinite;
+}
+
+.waveform-blink-medium {
+  animation: waveformBlink 1s ease-in-out infinite;
+}
+
+.waveform-blink-fast {
+  animation: waveformBlink 0.5s ease-in-out infinite;
+}
+
+.waveform-blink-rapid {
+  animation: waveformBlink 0.2s ease-in-out infinite;
+}
+
+.waveform-blink-critical {
+  animation: waveformBlink 0.1s ease-in-out infinite;
+}
+
+@keyframes waveformBlink {
+  0%, 100% { 
+    opacity: 1; 
+    box-shadow: 0 0 5px currentColor;
+  }
+  50% { 
+    opacity: 0.3; 
+    box-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
+  }
+}
+
+/* Song Selection Feedback */
+.track-item.selected,
+.track-item-oneline.selected,
+.song-row.selected,
+.unified-song-item.selected {
+  background-color: rgba(124, 172, 255, 0.2) !important;
+  border: 1px solid #7cacff !important;
+  box-shadow: 0 0 10px rgba(124, 172, 255, 0.3) !important;
+}
+
+.track-item,
+.track-item-oneline,
+.song-row,
+.unified-song-item {
+  cursor: pointer;
+  transition: background-color 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
+}
+
+.track-item:hover,
+.track-item-oneline:hover,
+.song-row:hover,
+.unified-song-item:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Song selection feedback for similar songs */
+.song.selected {
+  background: rgba(33, 150, 243, 0.3) !important;
+  border: 1px solid #2196F3 !important;
+  box-shadow: 0 0 5px rgba(33, 150, 243, 0.5);
+}
+
+/* Wizard control in player controls */
+.wizard-control {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  padding: 0 !important; /* Überschreibt das padding von breadcrumb-element */
+  overflow: hidden;
+  flex-shrink: 0; /* Verhindert Schrumpfen */
+  flex-grow: 0; /* Verhindert Wachsen */
+}
+
+.wizard-control:hover:not(.loading) {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
+}
+
+.wizard-control:active:not(.loading) {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.wizard-control.loading {
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none !important; /* Verhindert jegliche Größenänderung */
+}
+
+.wizard-control i.material-icons {
+  font-size: 16px;
+  color: #FFD700;
+  filter: drop-shadow(0 0 3px rgba(255, 215, 0, 0.5));
+  pointer-events: none;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wizard-control .wizard-dice-animation {
+  animation: diceRoll 0.6s ease-in-out;
+  color: #FFD700;
+  filter: drop-shadow(0 0 3px rgba(255, 215, 0, 0.5));
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wizard-control .wizard-loading {
+  animation: spin 1s linear infinite;
+  color: #2196F3;
+  filter: drop-shadow(0 0 3px rgba(33, 150, 243, 0.5));
+}
+
+@keyframes diceRoll {
+  0% { 
+    transform: rotate(0deg);
+  }
+  25% { 
+    transform: rotate(90deg);
+  }
+  50% { 
+    transform: rotate(180deg);
+  }
+  75% { 
+    transform: rotate(270deg);
+  }
+  100% { 
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

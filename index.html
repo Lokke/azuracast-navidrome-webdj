@@ -11,8 +11,18 @@
     <div id="app">
       <!-- Top Section: DJ Controls -->
       <div class="dj-section">
-        <!-- Player A (Left) -->
-        <div class="player-deck" id="player-left" data-player-side="left">
+        <!-- Player A (Top Left) -->
+        <div class="player-deck" id="player-a" data-player-side="a">
+          <div class="player-label a">
+            <div class="player-label-text">A</div>
+          </div>
+        </div>
+
+        <!-- Player B (Top Right) -->
+        <div class="player-deck" id="player-b" data-player-side="b">
+          <div class="player-label b">
+            <div class="player-label-text">B</div>
+          </div>
         </div>
 
         <!-- Center Controls -->
@@ -168,8 +178,18 @@
           </div>
         </div>
 
-        <!-- Player B (Right) -->
-        <div class="player-deck" id="player-right" data-player-side="right">
+        <!-- Player C (Bottom Left) -->
+        <div class="player-deck" id="player-c" data-player-side="c">
+          <div class="player-label c">
+            <div class="player-label-text">C</div>
+          </div>
+        </div>
+
+        <!-- Player D (Bottom Right) -->
+        <div class="player-deck" id="player-d" data-player-side="d">
+          <div class="player-label d">
+            <div class="player-label-text">D</div>
+          </div>
         </div>
       </div>
 
@@ -183,16 +203,27 @@
           </div>
         </div>
         
-        <!-- Queue Panel -->
-        <div class="queue-panel">
-          <div class="queue-header">
-            <h3>Queue</h3>
+        <!-- Queue Section -->
+        <div class="queue-section">
+          <!-- Queue Label Row (outside container like player labels) -->
+          <div class="queue-label-row">
+            <div class="queue-label">
+              <div class="queue-label-text">Queue</div>
+            </div>
             <div class="auto-queue-controls">
-              <button class="auto-queue-btn" id="auto-queue-a">Auto A</button>
-              <button class="auto-queue-btn" id="auto-queue-b">Auto B</button>
+              <button class="auto-queue-btn active" id="auto-queue-ab" title="Auto-Play between Deck A and B">
+                A+B
+              </button>
+              <button class="auto-queue-btn" id="auto-queue-cd" title="Auto-Play between Deck C and D">
+                C+D
+              </button>
             </div>
           </div>
-          <div class="queue-items" id="queue-list"></div>
+          
+          <!-- Queue Container (without header) -->
+          <div class="queue-panel">
+            <div class="queue-items" id="queue-list"></div>
+          </div>
         </div>
       </div>
     </div>
