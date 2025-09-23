@@ -461,6 +461,8 @@ body {
   align-items: center;
   flex-direction: row;
   justify-content: space-between;
+  z-index: 25; /* Higher than volume-meter to prevent overlap */
+  position: relative; /* Ensure z-index works */
 }
 
 .volume-label {
@@ -550,6 +552,8 @@ body {
   padding: 8px 10px; /* Increased padding */
   justify-content: center;
   height: 32px; /* Match button height */
+  z-index: 20; /* Lower than volume-control to prevent overlap */
+  position: relative; /* Ensure z-index works */
 }
 
 /* Specific horizontal layout for breadcrumb volume meters */
@@ -1434,6 +1438,19 @@ body {
 
 .transport-controls button .material-icons {
   font-size: 18px;
+  transition: all 0.2s ease;
+}
+
+.transport-controls button:hover .material-icons {
+  color: #fff;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+.transport-controls button.active .material-icons {
+  color: #4CAF50;
+  text-shadow: 
+    0 0 3px rgba(76, 175, 80, 0.8),
+    0 0 6px rgba(76, 175, 80, 0.6);
 }
 
 .transport-controls button:hover {
@@ -1830,9 +1847,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  position: absolute;
-  top: -10px;
-  right: 1rem;
+  position: relative;
   background: rgba(0, 0, 0, 0.9);
   padding: 0.25rem 0.75rem;
   border: 2px solid #444;
@@ -1868,6 +1883,566 @@ body {
 @keyframes pulse-active {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+/* Status Indicators Container - Zentriert alle Indikatoren */
+.status-indicators-container {
+  display: flex;
+  flex-direction: row;
+  gap: 0.25rem;
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  align-items: center;
+}
+
+/* User Status Indicators */
+.user-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.9);
+  padding: 0.2rem 0.6rem;
+  border: 2px solid #444;
+  border-radius: 2px;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.user-status-indicator.connected {
+  border-color: #4CAF50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.user-status-indicator .user-icon {
+  font-size: 12px;
+  color: #888;
+}
+
+.user-status-indicator.connected .user-icon {
+  color: #4CAF50;
+  transition: all 0.2s ease;
+}
+
+.user-status-indicator .user-text {
+  color: #ccc;
+  min-width: 30px;
+  text-align: left;
+}
+
+/* Combined Stream-Live Indicator */
+.stream-live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.9);
+  padding: 0.2rem 0.6rem;
+  border: 2px solid #444;
+  border-radius: 2px;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  outline: none;
+}
+
+.stream-live-indicator:hover {
+  border-color: #666;
+  background: rgba(0, 0, 0, 0.95);
+  transform: translateY(-1px);
+}
+
+.stream-live-indicator.connected {
+  border-color: #4CAF50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.stream-live-indicator .stream-icon {
+  font-size: 12px;
+  color: #888;
+}
+
+.stream-live-indicator.connected .stream-icon {
+  color: #4CAF50;
+  transition: all 0.2s ease;
+}
+
+.stream-live-indicator .stream-username {
+  color: #ccc;
+  min-width: 30px;
+  text-align: left;
+}
+
+.stream-live-indicator.connected .stream-username {
+  color: #4CAF50;
+}
+
+/* Live Dot in Combined Indicator */
+.stream-live-indicator .live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+  transition: all 0.2s ease;
+}
+
+/* LIVE State - Spectacular Neon Effects + CRT Interference */
+.stream-live-indicator.live {
+  border-color: #ff4444;
+  background: rgba(255, 68, 68, 0.15);
+  box-shadow: 
+    0 0 10px rgba(255, 68, 68, 0.6),
+    0 0 20px rgba(255, 68, 68, 0.4),
+    inset 0 0 10px rgba(255, 68, 68, 0.2);
+  animation: neonPulse 2s ease-in-out infinite, crtGlitch 13s linear infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+/* CRT-style overlay for live indicator only */
+.stream-live-indicator.live::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(255, 68, 68, 0.03) 1px,
+      rgba(255, 68, 68, 0.03) 2px,
+      transparent 2px
+    );
+  animation: crtScanlines 0.37s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* CRT noise overlay for live indicator only */
+.stream-live-indicator.live::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(255, 68, 68, 0.02) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 68, 68, 0.02) 0%, transparent 50%),
+    radial-gradient(circle at 40% 80%, rgba(255, 68, 68, 0.02) 0%, transparent 50%);
+  animation: crtNoise 23s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.stream-live-indicator.live .stream-username {
+  color: #ff4444;
+  text-shadow: 
+    0 0 5px rgba(255, 68, 68, 0.8),
+    0 0 10px rgba(255, 68, 68, 0.6),
+    0 0 15px rgba(255, 68, 68, 0.4);
+  animation: textFlicker 3s ease-in-out infinite, textShake 17s ease-in-out infinite;
+  position: relative;
+  z-index: 3;
+}
+
+.stream-live-indicator.live .stream-icon {
+  color: #ff4444;
+  text-shadow: 
+    0 0 5px rgba(255, 68, 68, 0.8),
+    0 0 10px rgba(255, 68, 68, 0.6),
+    0 0 15px rgba(255, 68, 68, 0.4);
+  animation: iconFlicker 2.5s ease-in-out infinite, crtIconGlitch 13s linear infinite;
+  position: relative;
+  z-index: 3;
+  transition: all 0.1s ease;
+}
+
+.stream-live-indicator.live .live-dot {
+  background: #ff4444;
+  box-shadow: 
+    0 0 8px rgba(255, 68, 68, 0.8),
+    0 0 16px rgba(255, 68, 68, 0.6);
+  animation: dotPulse 1.5s ease-in-out infinite;
+  position: relative;
+  z-index: 3;
+}
+
+/* CRT Animations - Irregular and Rare */
+
+/* Main CRT Glitch Effect - Very Irregular */
+@keyframes crtGlitch {
+  0%, 87%, 100% { 
+    transform: translateX(0);
+    filter: hue-rotate(0deg);
+  }
+  
+  /* Rare glitch burst 1 */
+  2.3% { 
+    transform: translateX(-3px) scale(1.002);
+    filter: hue-rotate(120deg) contrast(1.4);
+  }
+  2.7% { 
+    transform: translateX(2px) scale(0.998);
+    filter: hue-rotate(-90deg) contrast(0.7);
+  }
+  3.1% { 
+    transform: translateX(0) scale(1);
+    filter: hue-rotate(0deg) contrast(1);
+  }
+  
+  /* Long pause... */
+  
+  /* Rare glitch burst 2 */
+  31.7% { 
+    transform: translateX(0);
+    filter: hue-rotate(0deg);
+  }
+  31.9% { 
+    transform: translateX(-1px);
+    filter: hue-rotate(270deg) brightness(1.3);
+  }
+  32.1% { 
+    transform: translateX(1px);
+    filter: hue-rotate(-180deg) brightness(0.8);
+  }
+  32.4% { 
+    transform: translateX(0);
+    filter: hue-rotate(0deg) brightness(1);
+  }
+  
+  /* Even longer pause... */
+  
+  /* Very subtle shake */
+  67.2% { 
+    transform: translateX(0);
+  }
+  67.3% { 
+    transform: translateX(-0.3px);
+  }
+  67.4% { 
+    transform: translateX(0.3px);
+  }
+  67.5% { 
+    transform: translateX(0);
+  }
+  
+  /* Final rare burst */
+  89.1% { 
+    transform: translateX(0) scale(1);
+    filter: hue-rotate(0deg);
+  }
+  89.3% { 
+    transform: translateX(-2px) scale(1.003);
+    filter: hue-rotate(45deg) saturate(1.5);
+  }
+  89.5% { 
+    transform: translateX(1px) scale(0.997);
+    filter: hue-rotate(-120deg) saturate(0.6);
+  }
+  89.8% { 
+    transform: translateX(0) scale(1);
+    filter: hue-rotate(0deg) saturate(1);
+  }
+}
+
+/* CRT Scanlines - Irregular Speed */
+@keyframes crtScanlines {
+  0% { 
+    transform: translateY(-100%);
+    opacity: 0.02;
+  }
+  15% { 
+    opacity: 0.04;
+  }
+  25% { 
+    transform: translateY(-50%);
+    opacity: 0.01;
+  }
+  60% { 
+    transform: translateY(20%);
+    opacity: 0.06;
+  }
+  85% { 
+    opacity: 0.02;
+  }
+  100% { 
+    transform: translateY(100%);
+    opacity: 0.03;
+  }
+}
+
+/* CRT Noise Pattern - Very Slow and Irregular */
+@keyframes crtNoise {
+  0%, 100% { 
+    opacity: 0.01;
+    transform: scale(1) rotate(0deg);
+  }
+  13% { 
+    opacity: 0.03;
+    transform: scale(1.001) rotate(0.05deg);
+  }
+  38% { 
+    opacity: 0.005;
+    transform: scale(0.999) rotate(-0.02deg);
+  }
+  61% { 
+    opacity: 0.04;
+    transform: scale(1.002) rotate(0.08deg);
+  }
+  84% { 
+    opacity: 0.015;
+    transform: scale(0.998) rotate(-0.03deg);
+  }
+}
+
+/* Text Shake - Very Rare and Subtle */
+@keyframes textShake {
+  0%, 96.5%, 100% { 
+    transform: translateX(0);
+  }
+  96.7% { 
+    transform: translateX(-0.4px);
+  }
+  96.9% { 
+    transform: translateX(0.3px);
+  }
+  97.1% { 
+    transform: translateX(-0.2px);
+  }
+  97.3% { 
+    transform: translateX(0.1px);
+  }
+  97.5% { 
+    transform: translateX(0);
+  }
+}
+
+
+
+/* Neon Pulse Animation - Irregular */
+@keyframes neonPulse {
+  0% { 
+    box-shadow: 
+      0 0 5px rgba(255, 68, 68, 0.4),
+      0 0 10px rgba(255, 68, 68, 0.3),
+      inset 0 0 5px rgba(255, 68, 68, 0.1);
+  }
+  25% { 
+    box-shadow: 
+      0 0 15px rgba(255, 68, 68, 0.8),
+      0 0 25px rgba(255, 68, 68, 0.5),
+      inset 0 0 15px rgba(255, 68, 68, 0.3);
+  }
+  50% { 
+    box-shadow: 
+      0 0 8px rgba(255, 68, 68, 0.5),
+      0 0 16px rgba(255, 68, 68, 0.3),
+      inset 0 0 8px rgba(255, 68, 68, 0.15);
+  }
+  75% { 
+    box-shadow: 
+      0 0 20px rgba(255, 68, 68, 0.9),
+      0 0 30px rgba(255, 68, 68, 0.6),
+      inset 0 0 20px rgba(255, 68, 68, 0.4);
+  }
+  100% { 
+    box-shadow: 
+      0 0 5px rgba(255, 68, 68, 0.4),
+      0 0 10px rgba(255, 68, 68, 0.3),
+      inset 0 0 5px rgba(255, 68, 68, 0.1);
+  }
+}
+
+/* Text Flicker Animation - Irregular */
+@keyframes textFlicker {
+  0%, 100% { 
+    text-shadow: 
+      0 0 5px rgba(255, 68, 68, 0.8),
+      0 0 10px rgba(255, 68, 68, 0.6),
+      0 0 15px rgba(255, 68, 68, 0.4);
+  }
+  10% { 
+    text-shadow: 
+      0 0 2px rgba(255, 68, 68, 0.4),
+      0 0 5px rgba(255, 68, 68, 0.3);
+  }
+  15% { 
+    text-shadow: 
+      0 0 8px rgba(255, 68, 68, 1),
+      0 0 15px rgba(255, 68, 68, 0.8),
+      0 0 25px rgba(255, 68, 68, 0.6);
+  }
+  30% { 
+    text-shadow: 
+      0 0 3px rgba(255, 68, 68, 0.5),
+      0 0 8px rgba(255, 68, 68, 0.4);
+  }
+  50% { 
+    text-shadow: 
+      0 0 10px rgba(255, 68, 68, 0.9),
+      0 0 20px rgba(255, 68, 68, 0.7),
+      0 0 30px rgba(255, 68, 68, 0.5);
+  }
+  85% { 
+    text-shadow: 
+      0 0 1px rgba(255, 68, 68, 0.3);
+  }
+}
+
+/* Dot Pulse Animation */
+@keyframes dotPulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 
+      0 0 8px rgba(255, 68, 68, 0.8),
+      0 0 16px rgba(255, 68, 68, 0.6);
+  }
+  50% { 
+    transform: scale(1.3);
+    box-shadow: 
+      0 0 12px rgba(255, 68, 68, 1),
+      0 0 24px rgba(255, 68, 68, 0.8),
+      0 0 36px rgba(255, 68, 68, 0.6);
+  }
+}
+
+/* Icon Flicker Animation - Synchronisiert mit CRT-Störungen */
+@keyframes iconFlicker {
+  0%, 90%, 100% { 
+    text-shadow: 
+      0 0 5px rgba(255, 68, 68, 0.8),
+      0 0 10px rgba(255, 68, 68, 0.6),
+      0 0 15px rgba(255, 68, 68, 0.4);
+    opacity: 1;
+  }
+  12% { 
+    text-shadow: 
+      0 0 2px rgba(255, 68, 68, 0.4);
+    opacity: 0.7;
+  }
+  18% { 
+    text-shadow: 
+      0 0 12px rgba(255, 68, 68, 1),
+      0 0 20px rgba(255, 68, 68, 0.8),
+      0 0 30px rgba(255, 68, 68, 0.6);
+    opacity: 1;
+  }
+  35% { 
+    text-shadow: 
+      0 0 3px rgba(255, 68, 68, 0.5);
+    opacity: 0.8;
+  }
+  60% { 
+    text-shadow: 
+      0 0 8px rgba(255, 68, 68, 0.9),
+      0 0 16px rgba(255, 68, 68, 0.7);
+    opacity: 1;
+  }
+}
+
+/* Icon CRT Glitch Animation - Passt zu crtGlitch */
+@keyframes crtIconGlitch {
+  0%, 87%, 100% { 
+    transform: translateX(0) scale(1);
+    filter: hue-rotate(0deg);
+    color: #ff4444;
+  }
+  
+  /* Störung 1 - Icon wird grün-blau */
+  2.3% { 
+    transform: translateX(-1px) scale(1.05);
+    filter: hue-rotate(180deg);
+    color: #44ff88;
+  }
+  2.7% { 
+    transform: translateX(1px) scale(0.95);
+    filter: hue-rotate(-120deg);
+    color: #8844ff;
+  }
+  3.1% { 
+    transform: translateX(0) scale(1);
+    filter: hue-rotate(0deg);
+    color: #ff4444;
+  }
+  
+  /* Störung 2 - Icon wird gelb-cyan */
+  31.7% { 
+    transform: translateX(0);
+    filter: hue-rotate(0deg);
+    color: #ff4444;
+  }
+  31.9% { 
+    transform: translateX(-0.5px) scale(1.02);
+    filter: hue-rotate(60deg);
+    color: #ffff44;
+  }
+  32.1% { 
+    transform: translateX(0.5px) scale(0.98);
+    filter: hue-rotate(-180deg);
+    color: #44ffff;
+  }
+  32.4% { 
+    transform: translateX(0) scale(1);
+    filter: hue-rotate(0deg);
+    color: #ff4444;
+  }
+  
+  /* Störung 3 - Icon wird magenta */
+  67.2% { 
+    transform: translateX(0);
+    color: #ff4444;
+  }
+  67.4% { 
+    transform: translateX(0.3px) scale(1.01);
+    filter: hue-rotate(-60deg);
+    color: #ff44ff;
+  }
+  67.7% { 
+    transform: translateX(0) scale(1);
+    filter: hue-rotate(0deg);
+    color: #ff4444;
+  }
+  
+  /* Störung 4 - Icon flackert zwischen rot und weiß */
+  89.1% { 
+    color: #ff4444;
+  }
+  89.2% { 
+    color: #ffffff;
+    filter: brightness(1.5);
+  }
+  89.4% { 
+    color: #ff4444;
+    filter: brightness(1);
+  }
+  89.5% { 
+    color: #ffffff;
+    filter: brightness(1.8);
+  }
+  89.7% { 
+    color: #ff4444;
+    filter: brightness(1);
+  }
+}
+
+.user-status-indicator.connected .user-text {
+  color: #4CAF50;
 }
 
 .live-dot {
@@ -1938,6 +2513,14 @@ body {
     0 0 16px rgba(255, 68, 68, 0.5),
     0 4px 12px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.mic-btn-pro.active .mic-icon {
+  animation: iconFlicker 2.5s ease-in-out infinite, crtIconGlitch 13s linear infinite;
+  text-shadow: 
+    0 0 3px rgba(255, 255, 255, 0.8),
+    0 0 6px rgba(255, 68, 68, 0.6),
+    0 0 12px rgba(255, 68, 68, 0.4);
 }
 
 .mic-btn-pro.active::before {
@@ -2260,106 +2843,6 @@ body {
 
 .stream-config-btn .material-icons {
   font-size: 20px;
-}
-
-/* Stream Configuration Panel - Top Level Overlay */
-.stream-config-panel {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: linear-gradient(135deg, #2a2a2a, #3a3a3a);
-  border: 2px solid #00ff88;
-  border-radius: 12px;
-  padding: 1.5rem;
-  width: 350px;
-  max-width: 90vw;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 
-    0 8px 25px rgba(0, 255, 136, 0.2),
-    0 0 0 9999px rgba(0, 0, 0, 0.5);
-  z-index: 99999;
-  display: none; /* Standardmäßig versteckt */
-}
-
-.config-form h3 {
-  color: #00ff88;
-  margin-bottom: 1.5rem;
-  text-align: center;
-}
-
-.config-group {
-  margin-bottom: 1rem;
-}
-
-.config-group label {
-  display: block;
-  color: #ffffff;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.config-group input,
-.config-group select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 2px solid #4a4a4a;
-  border-radius: 6px;
-  background: #333;
-  color: white;
-  font-size: 1rem;
-}
-
-.config-group input:focus,
-.config-group select:focus {
-  outline: none;
-  border-color: #00ff88;
-  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
-}
-
-.config-group small {
-  display: block;
-  color: #888;
-  font-size: 0.8rem;
-  margin-top: 0.25rem;
-  font-style: italic;
-}
-
-.config-buttons {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  margin-top: 1.5rem;
-}
-
-.config-buttons button {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-#save-stream-config {
-  background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
-  color: #000;
-}
-
-#save-stream-config:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.4);
-}
-
-#cancel-stream-config {
-  background: linear-gradient(135deg, #666 0%, #444 100%);
-  color: white;
-}
-
-#cancel-stream-config:hover {
-  background: linear-gradient(135deg, #777 0%, #555 100%);
-  transform: translateY(-2px);
 }
 
 .mic-btn {
@@ -3891,12 +4374,16 @@ body {
 /* Player Drop Zone Styles */
 .player-deck {
   transition: all 0.3s ease;
+  position: relative; /* Ensure proper positioning for drop zones */
 }
 
 .player-deck.drag-over {
-  background: rgba(0, 255, 136, 0.1);
-  border: 2px solid #00ff88;
+  background: rgba(0, 255, 136, 0.1) !important;
+  border: 2px solid #00ff88 !important;
   transform: scale(1.02);
+  box-shadow: 
+    0 0 15px rgba(0, 255, 136, 0.5),
+    inset 0 0 10px rgba(0, 255, 136, 0.2);
 }
 
 .player-deck audio {
@@ -6562,4 +7049,818 @@ body {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* =================================
+   DISCONNECT TIMER DISPLAY
+   ================================= */
+
+/* Timer Overlay - Positioned above all decks */
+.disconnect-timer-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 999999;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none; /* Key fix: Ensure overlay doesn't interfere with drag & drop */
+}
+
+.disconnect-timer-overlay.active {
+  display: flex;
+}
+
+/* Timer Container */
+.timer-display-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  padding: 2rem 2.5rem;
+  border: 3px solid #ff4444;
+  border-radius: 8px;
+  box-shadow: 
+    0 0 20px rgba(255, 68, 68, 0.8),
+    0 0 40px rgba(255, 68, 68, 0.6),
+    inset 0 0 20px rgba(255, 68, 68, 0.1);
+}
+
+/* Warning Message */
+.timer-warning-message {
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ff4444;
+  text-align: center;
+  letter-spacing: 1.5px;
+  text-shadow: 
+    0 0 8px rgba(255, 68, 68, 0.9),
+    0 0 15px rgba(255, 68, 68, 0.7),
+    0 0 25px rgba(255, 68, 68, 0.5);
+  animation: warningFlash 1s ease-in-out infinite;
+  line-height: 1.4;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  border-radius: 4px;
+}
+
+/* Digital Timer Display - Like a digital clock */
+.digital-timer-display {
+  font-family: 'Courier New', monospace;
+  font-size: 3.5rem;
+  font-weight: 900;
+  color: #ff4444;
+  text-align: center;
+  letter-spacing: 0.1em;
+  text-shadow: 
+    0 0 10px rgba(255, 68, 68, 1),
+    0 0 20px rgba(255, 68, 68, 0.8),
+    0 0 30px rgba(255, 68, 68, 0.6),
+    0 0 40px rgba(255, 68, 68, 0.4);
+  background: #000;
+  padding: 0.3em 0.5em;
+  border: 2px solid #333;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Digital display background pattern */
+.digital-timer-display::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(255, 68, 68, 0.05) 1px,
+      rgba(255, 68, 68, 0.05) 2px,
+      transparent 2px
+    );
+  animation: digitalScanlines 0.1s linear infinite;
+  pointer-events: none;
+}
+
+/* Timer Label */
+.timer-label {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #888;
+  text-align: center;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* =================================
+   PROGRESSIVE TIMER ANIMATIONS
+   ================================= */
+
+/* Warning Flash Animation */
+@keyframes warningFlash {
+  0%, 50% { opacity: 1; }
+  25%, 75% { opacity: 0.3; }
+}
+
+/* Digital Scanlines */
+@keyframes digitalScanlines {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+/* Shake Intensity Levels */
+.timer-shake-1 {
+  animation: timerShake1 0.1s linear infinite;
+}
+
+.timer-shake-2 {
+  animation: timerShake2 0.08s linear infinite;
+}
+
+.timer-shake-3 {
+  animation: timerShake3 0.06s linear infinite;
+}
+
+.timer-shake-4 {
+  animation: timerShake4 0.04s linear infinite;
+}
+
+.timer-shake-extreme {
+  animation: timerShakeExtreme 0.02s linear infinite, extremeBlink 0.05s linear infinite;
+}
+
+/* Shake Keyframes - Progressive Intensity */
+@keyframes timerShake1 {
+  0% { transform: translate(-50%, -50%) translateX(0px); }
+  25% { transform: translate(-50%, -50%) translateX(0.5px); }
+  50% { transform: translate(-50%, -50%) translateX(-0.5px); }
+  75% { transform: translate(-50%, -50%) translateX(0.3px); }
+  100% { transform: translate(-50%, -50%) translateX(0px); }
+}
+
+@keyframes timerShake2 {
+  0% { transform: translate(-50%, -50%) translateX(0px) translateY(0px); }
+  25% { transform: translate(-50%, -50%) translateX(1px) translateY(0.5px); }
+  50% { transform: translate(-50%, -50%) translateX(-1px) translateY(-0.5px); }
+  75% { transform: translate(-50%, -50%) translateX(0.8px) translateY(0.3px); }
+  100% { transform: translate(-50%, -50%) translateX(0px) translateY(0px); }
+}
+
+@keyframes timerShake3 {
+  0% { transform: translate(-50%, -50%) translateX(0px) translateY(0px); }
+  20% { transform: translate(-50%, -50%) translateX(1.5px) translateY(1px); }
+  40% { transform: translate(-50%, -50%) translateX(-1.5px) translateY(-1px); }
+  60% { transform: translate(-50%, -50%) translateX(1.2px) translateY(-0.8px); }
+  80% { transform: translate(-50%, -50%) translateX(-0.8px) translateY(1.2px); }
+  100% { transform: translate(-50%, -50%) translateX(0px) translateY(0px); }
+}
+
+@keyframes timerShake4 {
+  0% { transform: translate(-50%, -50%) translateX(0px) translateY(0px) rotate(0deg); }
+  15% { transform: translate(-50%, -50%) translateX(2px) translateY(1.5px) rotate(0.5deg); }
+  30% { transform: translate(-50%, -50%) translateX(-2px) translateY(-1.5px) rotate(-0.5deg); }
+  45% { transform: translate(-50%, -50%) translateX(1.8px) translateY(-1.2px) rotate(0.3deg); }
+  60% { transform: translate(-50%, -50%) translateX(-1.5px) translateY(1.8px) rotate(-0.3deg); }
+  75% { transform: translate(-50%, -50%) translateX(1.2px) translateY(0.8px) rotate(0.2deg); }
+  90% { transform: translate(-50%, -50%) translateX(-0.8px) translateY(-1px) rotate(-0.2deg); }
+  100% { transform: translate(-50%, -50%) translateX(0px) translateY(0px) rotate(0deg); }
+}
+
+@keyframes timerShakeExtreme {
+  0% { transform: translate(-50%, -50%) translateX(0px) translateY(0px) rotate(0deg) scale(1); }
+  10% { transform: translate(-50%, -50%) translateX(3px) translateY(2.5px) rotate(1deg) scale(1.02); }
+  20% { transform: translate(-50%, -50%) translateX(-3px) translateY(-2.5px) rotate(-1deg) scale(0.98); }
+  30% { transform: translate(-50%, -50%) translateX(2.8px) translateY(-2.2px) rotate(0.8deg) scale(1.01); }
+  40% { transform: translate(-50%, -50%) translateX(-2.5px) translateY(2.8px) rotate(-0.8deg) scale(0.99); }
+  50% { transform: translate(-50%, -50%) translateX(2.2px) translateY(1.8px) rotate(0.6deg) scale(1.015); }
+  60% { transform: translate(-50%, -50%) translateX(-1.8px) translateY(-2px) rotate(-0.6deg) scale(0.985); }
+  70% { transform: translate(-50%, -50%) translateX(1.5px) translateY(2.2px) rotate(0.4deg) scale(1.008); }
+  80% { transform: translate(-50%, -50%) translateX(-1.2px) translateY(-1.5px) rotate(-0.4deg) scale(0.992); }
+  90% { transform: translate(-50%, -50%) translateX(0.8px) translateY(1.2px) rotate(0.2deg) scale(1.005); }
+  100% { transform: translate(-50%, -50%) translateX(0px) translateY(0px) rotate(0deg) scale(1); }
+}
+
+/* Extreme Blink Animation */
+@keyframes extremeBlink {
+  0% { 
+    opacity: 1; 
+    filter: brightness(1) contrast(1);
+  }
+  20% { 
+    opacity: 0.1; 
+    filter: brightness(2) contrast(2);
+  }
+  40% { 
+    opacity: 1; 
+    filter: brightness(0.5) contrast(1.5);
+  }
+  60% { 
+    opacity: 0.3; 
+    filter: brightness(1.8) contrast(0.8);
+  }
+  80% { 
+    opacity: 1; 
+    filter: brightness(1.2) contrast(1.3);
+  }
+  100% { 
+    opacity: 1; 
+    filter: brightness(1) contrast(1);
+  }
+}
+
+/* Timer Color Progression */
+.timer-color-urgent {
+  color: #ffaa00 !important;
+  text-shadow: 
+    0 0 10px rgba(255, 170, 0, 1),
+    0 0 20px rgba(255, 170, 0, 0.8),
+    0 0 30px rgba(255, 170, 0, 0.6) !important;
+}
+
+.timer-color-critical {
+  color: #ff6600 !important;
+  text-shadow: 
+    0 0 10px rgba(255, 102, 0, 1),
+    0 0 20px rgba(255, 102, 0, 0.8),
+    0 0 30px rgba(255, 102, 0, 0.6) !important;
+}
+
+.timer-color-extreme {
+  color: #ffffff !important;
+  text-shadow: 
+    0 0 10px rgba(255, 255, 255, 1),
+    0 0 20px rgba(255, 68, 68, 1),
+    0 0 30px rgba(255, 68, 68, 0.8),
+    0 0 40px rgba(255, 68, 68, 0.6) !important;
+}
+
+/* =================================
+   CRT POWER-OFF EFFECTS
+   ================================= */
+
+/* CRT Power-Off Animation for Timer */
+.disconnect-timer-overlay.crt-poweroff {
+  animation: crtPowerOff 0.3s ease-out forwards;
+}
+
+/* CRT Power-Off Animation for Warning */
+.disconnect-timer-overlay.crt-poweroff-warning {
+  animation: crtPowerOffWarning 0.4s ease-out forwards;
+}
+
+/* CRT Power-Off Keyframes - Ultra-fast TV shutdown with full-screen expansion */
+@keyframes crtPowerOff {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+    width: auto;
+  }
+  
+  15% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    filter: brightness(1.8) contrast(1.4);
+    width: auto;
+  }
+  
+  35% {
+    transform: translate(-50%, -50%) scale(2, 0.6);
+    opacity: 0.8;
+    filter: brightness(2.5) contrast(1.2);
+    width: 200vw;
+  }
+  
+  60% {
+    transform: translate(-50%, -50%) scale(4, 0.15);
+    opacity: 0.5;
+    filter: brightness(4) contrast(0.8) blur(1px);
+    width: 300vw;
+  }
+  
+  80% {
+    transform: translate(-50%, -50%) scale(6, 0.03);
+    opacity: 0.2;
+    filter: brightness(8) contrast(0.4) blur(2px);
+    width: 400vw;
+  }
+  
+  100% {
+    transform: translate(-50%, -50%) scale(8, 0);
+    opacity: 0;
+    filter: brightness(15) contrast(0) blur(3px);
+    width: 500vw;
+    display: none;
+  }
+}
+
+/* CRT Power-Off for Warning Messages - Fast full-screen collapse */
+@keyframes crtPowerOffWarning {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+    width: auto;
+  }
+  
+  20% {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 1;
+    filter: brightness(1.5) contrast(1.3);
+    width: auto;
+  }
+  
+  40% {
+    transform: translate(-50%, -50%) scale(2.5, 0.7);
+    opacity: 0.8;
+    filter: brightness(2) contrast(1.1);
+    width: 250vw;
+  }
+  
+  65% {
+    transform: translate(-50%, -50%) scale(4, 0.2);
+    opacity: 0.4;
+    filter: brightness(3.5) contrast(0.7) blur(1px);
+    width: 350vw;
+  }
+  
+  85% {
+    transform: translate(-50%, -50%) scale(6, 0.05);
+    opacity: 0.1;
+    filter: brightness(7) contrast(0.3) blur(2px);
+    width: 450vw;
+  }
+  
+  100% {
+    transform: translate(-50%, -50%) scale(8, 0);
+    opacity: 0;
+    filter: brightness(12) contrast(0) blur(3px);
+    width: 500vw;
+    display: none;
+  }
+}
+
+/* 🔥 FUNKEN-EFFEKT FÜR STREAM BUTTON (erste 10 Sekunden) */
+.sparks-effect {
+  position: relative;
+  overflow: visible !important;
+  animation: sparkle-burst 0.8s infinite alternate;
+}
+
+.sparks-effect::before,
+.sparks-effect::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: radial-gradient(circle, #ffaa00 0%, #ff6600 50%, #ff0000 100%);
+  border-radius: 50%;
+  animation: spark-fly 0.6s infinite;
+  z-index: 1000;
+}
+
+.sparks-effect::before {
+  animation-delay: 0.2s;
+  transform: translate(-50%, -50%) rotate(45deg) translateX(20px);
+}
+
+.sparks-effect::after {
+  animation-delay: 0.4s;
+  transform: translate(-50%, -50%) rotate(-45deg) translateX(25px);
+}
+
+@keyframes sparkle-burst {
+  0% {
+    box-shadow: 
+      0 0 20px #ffaa00,
+      0 0 40px #ff6600,
+      0 0 60px #ff0000,
+      inset 0 0 20px rgba(255, 170, 0, 0.3);
+  }
+  100% {
+    box-shadow: 
+      0 0 30px #ffff00,
+      0 0 50px #ffaa00,
+      0 0 80px #ff6600,
+      inset 0 0 30px rgba(255, 255, 0, 0.4);
+  }
+}
+
+@keyframes spark-fly {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    background: radial-gradient(circle, #ffff00 0%, #ffaa00 50%, #ff6600 100%);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.5) rotate(180deg);
+    background: radial-gradient(circle, #ffffff 0%, #ffaa00 50%, #ff0000 100%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5) rotate(360deg);
+    background: radial-gradient(circle, #ff0000 0%, #660000 100%);
+  }
+}
+
+/* 🚨 PROGRESSIVE GLOBAL EFFECTS (steigern sich mit Countdown-Dauer) */
+
+/* SCHWACHE EFFEKTE (4.0-3.0 Sekunden) */
+.global-flicker-weak {
+  animation: global-flicker-weak 0.3s infinite !important;
+}
+
+.global-shake-weak {
+  animation: global-shake-weak 0.2s infinite !important;
+}
+
+/* MITTLERE EFFEKTE (3.0-2.0 Sekunden) */
+.global-flicker-medium {
+  animation: global-flicker-medium 0.2s infinite !important;
+}
+
+.global-shake-medium {
+  animation: global-shake-medium 0.15s infinite !important;
+}
+
+/* EXTREME EFFEKTE (2.0-0.0 Sekunden) */
+.global-flicker-extreme {
+  animation: global-flicker-crazy 0.1s infinite !important;
+}
+
+.global-shake-crazy {
+  animation: global-shake-wild 0.05s infinite !important;
+}
+
+/* 💫 ZUSÄTZLICHE KRASSE EFFEKTE */
+.global-disco-flash {
+  animation: disco-flash-random 0.08s infinite !important;
+}
+
+/* CRT-ARTIGE MIXER EFFEKTE (OHNE BEWEGUNG) */
+.mixer-crt-flicker {
+  animation: mixer-crt-flicker 0.1s infinite !important;
+}
+
+.mixer-crt-blur {
+  animation: mixer-crt-blur 0.3s infinite !important;
+}
+
+.mixer-crt-scanlines {
+  animation: mixer-crt-scanlines 0.05s infinite !important;
+}
+
+.mixer-crt-static {
+  animation: mixer-crt-static 0.02s infinite !important;
+}
+
+.global-wobble-disorder {
+  animation: wobble-disorder 0.12s infinite !important;
+}
+
+/* SCHWACHE FLICKER ANIMATION */
+@keyframes global-flicker-weak {
+  0% { 
+    opacity: 1; 
+    filter: brightness(1) contrast(1);
+  }
+  50% { 
+    opacity: 0.8; 
+    filter: brightness(1.2) contrast(1.1) hue-rotate(10deg);
+  }
+  100% { 
+    opacity: 1; 
+    filter: brightness(1) contrast(1);
+  }
+}
+
+/* SCHWACHE SHAKE ANIMATION */
+@keyframes global-shake-weak {
+  0% { 
+    transform: translate(0px, 0px) rotate(0deg); 
+  }
+  25% { 
+    transform: translate(-0.5px, 0.5px) rotate(0.2deg); 
+  }
+  50% { 
+    transform: translate(0.5px, -0.5px) rotate(-0.2deg); 
+  }
+  75% { 
+    transform: translate(-0.5px, -0.5px) rotate(0.1deg); 
+  }
+  100% { 
+    transform: translate(0px, 0px) rotate(0deg); 
+  }
+}
+
+/* MITTLERE FLICKER ANIMATION */
+@keyframes global-flicker-medium {
+  0% { 
+    opacity: 1; 
+    filter: brightness(1) contrast(1) hue-rotate(0deg);
+  }
+  25% { 
+    opacity: 0.6; 
+    filter: brightness(1.5) contrast(1.3) hue-rotate(30deg);
+  }
+  50% { 
+    opacity: 0.9; 
+    filter: brightness(0.7) contrast(1.4) hue-rotate(60deg);
+  }
+  75% { 
+    opacity: 0.7; 
+    filter: brightness(1.3) contrast(0.8) hue-rotate(90deg);
+  }
+  100% { 
+    opacity: 1; 
+    filter: brightness(1) contrast(1) hue-rotate(0deg);
+  }
+}
+
+/* MITTLERE SHAKE ANIMATION */
+@keyframes global-shake-medium {
+  0% { 
+    transform: translate(0px, 0px) rotate(0deg) scale(1); 
+  }
+  20% { 
+    transform: translate(-1px, 1px) rotate(0.5deg) scale(1.01); 
+  }
+  40% { 
+    transform: translate(1px, -1px) rotate(-0.5deg) scale(0.99); 
+  }
+  60% { 
+    transform: translate(-1px, -1px) rotate(0.3deg) scale(1.01); 
+  }
+  80% { 
+    transform: translate(1px, 1px) rotate(-0.3deg) scale(0.99); 
+  }
+  100% { 
+    transform: translate(0px, 0px) rotate(0deg) scale(1); 
+  }
+}
+
+@keyframes global-flicker-crazy {
+  0% { 
+    opacity: 1; 
+    filter: brightness(1) contrast(1) hue-rotate(0deg);
+    background-color: inherit;
+  }
+  10% { 
+    opacity: 0.1; 
+    filter: brightness(3) contrast(2) hue-rotate(90deg);
+    background-color: rgba(255, 0, 0, 0.3);
+  }
+  20% { 
+    opacity: 0.9; 
+    filter: brightness(0.3) contrast(1.5) hue-rotate(180deg);
+    background-color: rgba(0, 255, 0, 0.2);
+  }
+  30% { 
+    opacity: 0.2; 
+    filter: brightness(2.5) contrast(0.5) hue-rotate(270deg);
+    background-color: rgba(0, 0, 255, 0.4);
+  }
+  40% { 
+    opacity: 0.8; 
+    filter: brightness(0.1) contrast(3) hue-rotate(45deg);
+    background-color: rgba(255, 255, 0, 0.3);
+  }
+  50% { 
+    opacity: 0.05; 
+    filter: brightness(4) contrast(1) hue-rotate(135deg);
+    background-color: rgba(255, 0, 255, 0.5);
+  }
+  60% { 
+    opacity: 1; 
+    filter: brightness(0.2) contrast(2.5) hue-rotate(225deg);
+    background-color: rgba(0, 255, 255, 0.2);
+  }
+  70% { 
+    opacity: 0.3; 
+    filter: brightness(3.5) contrast(0.3) hue-rotate(315deg);
+    background-color: rgba(255, 128, 0, 0.4);
+  }
+  80% { 
+    opacity: 0.7; 
+    filter: brightness(0.05) contrast(4) hue-rotate(60deg);
+    background-color: rgba(128, 255, 128, 0.3);
+  }
+  90% { 
+    opacity: 0.1; 
+    filter: brightness(5) contrast(0.8) hue-rotate(200deg);
+    background-color: rgba(128, 0, 255, 0.6);
+  }
+  100% { 
+    opacity: 0.9; 
+    filter: brightness(1) contrast(1) hue-rotate(360deg);
+    background-color: inherit;
+  }
+}
+
+@keyframes global-shake-wild {
+  0% { 
+    transform: translate(0px, 0px) rotate(0deg) scale(1); 
+  }
+  10% { 
+    transform: translate(-3px, 2px) rotate(1deg) scale(1.02); 
+  }
+  20% { 
+    transform: translate(2px, -1px) rotate(-1deg) scale(0.98); 
+  }
+  30% { 
+    transform: translate(-1px, 3px) rotate(2deg) scale(1.01); 
+  }
+  40% { 
+    transform: translate(4px, -2px) rotate(-2deg) scale(0.99); 
+  }
+  50% { 
+    transform: translate(-2px, -3px) rotate(1deg) scale(1.03); 
+  }
+  60% { 
+    transform: translate(3px, 1px) rotate(-1deg) scale(0.97); 
+  }
+  70% { 
+    transform: translate(-4px, -1px) rotate(2deg) scale(1.01); 
+  }
+  80% { 
+    transform: translate(1px, 4px) rotate(-2deg) scale(0.99); 
+  }
+  90% { 
+    transform: translate(-1px, -2px) rotate(1deg) scale(1.02); 
+  }
+  100% { 
+    transform: translate(0px, 0px) rotate(0deg) scale(1); 
+  }
+}
+
+/* 💫 DISCO FLASH - Zufällige Blitze */
+@keyframes disco-flash-random {
+  0% { 
+    background-color: inherit;
+    box-shadow: none;
+  }
+  15% { 
+    background-color: rgba(255, 0, 255, 0.8);
+    box-shadow: 0 0 20px #ff00ff, inset 0 0 20px rgba(255, 0, 255, 0.5);
+  }
+  25% { 
+    background-color: inherit;
+    box-shadow: none;
+  }
+  45% { 
+    background-color: rgba(0, 255, 255, 0.7);
+    box-shadow: 0 0 25px #00ffff, inset 0 0 15px rgba(0, 255, 255, 0.6);
+  }
+  55% { 
+    background-color: inherit;
+    box-shadow: none;
+  }
+  75% { 
+    background-color: rgba(255, 255, 0, 0.9);
+    box-shadow: 0 0 30px #ffff00, inset 0 0 25px rgba(255, 255, 0, 0.4);
+  }
+  85% { 
+    background-color: inherit;
+    box-shadow: none;
+  }
+  95% { 
+    background-color: rgba(255, 128, 0, 0.6);
+    box-shadow: 0 0 15px #ff8000, inset 0 0 10px rgba(255, 128, 0, 0.7);
+  }
+  100% { 
+    background-color: inherit;
+    box-shadow: none;
+  }
+}
+
+/* 🌀 WOBBLE DISORDER - Verrückte Verzerrung */
+@keyframes wobble-disorder {
+  0% { 
+    transform: perspective(200px) rotateX(0deg) rotateY(0deg) skew(0deg, 0deg) scale(1);
+    filter: blur(0px);
+  }
+  12% { 
+    transform: perspective(200px) rotateX(5deg) rotateY(-3deg) skew(2deg, -1deg) scale(1.03);
+    filter: blur(0.5px);
+  }
+  25% { 
+    transform: perspective(200px) rotateX(-3deg) rotateY(4deg) skew(-3deg, 2deg) scale(0.97);
+    filter: blur(1px);
+  }
+  37% { 
+    transform: perspective(200px) rotateX(2deg) rotateY(-5deg) skew(1deg, -3deg) scale(1.05);
+    filter: blur(0.3px);
+  }
+  50% { 
+    transform: perspective(200px) rotateX(-4deg) rotateY(2deg) skew(-2deg, 4deg) scale(0.95);
+    filter: blur(1.2px);
+  }
+  62% { 
+    transform: perspective(200px) rotateX(6deg) rotateY(-1deg) skew(3deg, -2deg) scale(1.02);
+    filter: blur(0.7px);
+  }
+  75% { 
+    transform: perspective(200px) rotateX(-2deg) rotateY(3deg) skew(-4deg, 1deg) scale(0.98);
+    filter: blur(0.9px);
+  }
+  87% { 
+    transform: perspective(200px) rotateX(1deg) rotateY(-4deg) skew(2deg, -3deg) scale(1.04);
+    filter: blur(0.4px);
+  }
+  100% { 
+    transform: perspective(200px) rotateX(0deg) rotateY(0deg) skew(0deg, 0deg) scale(1);
+    filter: blur(0px);
+  }
+}
+
+/* CRT-ARTIGE MIXER KEYFRAMES (OHNE BEWEGUNG) */
+@keyframes mixer-crt-flicker {
+  0% { 
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+  }
+  20% { 
+    opacity: 0.95;
+    filter: brightness(1.1) contrast(1.1);
+  }
+  40% { 
+    opacity: 0.8;
+    filter: brightness(0.9) contrast(1.2);
+  }
+  60% { 
+    opacity: 1.1;
+    filter: brightness(1.2) contrast(0.9);
+  }
+  80% { 
+    opacity: 0.9;
+    filter: brightness(1.05) contrast(1.05);
+  }
+  100% { 
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+  }
+}
+
+@keyframes mixer-crt-blur {
+  0% { 
+    filter: blur(0px) brightness(1);
+  }
+  50% { 
+    filter: blur(2px) brightness(1.1);
+  }
+  100% { 
+    filter: blur(0px) brightness(1);
+  }
+}
+
+@keyframes mixer-crt-scanlines {
+  0% { 
+    background-image: linear-gradient(90deg, transparent 98%, rgba(0,255,0,0.03) 100%);
+    filter: brightness(1);
+  }
+  50% { 
+    background-image: linear-gradient(90deg, transparent 95%, rgba(0,255,0,0.08) 100%);
+    filter: brightness(1.05);
+  }
+  100% { 
+    background-image: linear-gradient(90deg, transparent 98%, rgba(0,255,0,0.03) 100%);
+    filter: brightness(1);
+  }
+}
+
+@keyframes mixer-crt-static {
+  0% { 
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+    filter: saturate(1);
+  }
+  25% { 
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+    filter: saturate(1.1);
+  }
+  50% { 
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    filter: saturate(0.9);
+  }
+  75% { 
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07);
+    filter: saturate(1.05);
+  }
+  100% { 
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+    filter: saturate(1);
+  }
 }

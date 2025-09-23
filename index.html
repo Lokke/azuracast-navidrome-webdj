@@ -9,6 +9,19 @@
   </head>
   <body>
     <div id="app">
+      <!-- Disconnect Timer Display - Above all decks -->
+      <div class="disconnect-timer-overlay" id="disconnect-timer-overlay">
+        <div class="timer-display-container">
+          <div class="timer-warning-message" id="timer-warning-message">
+            HALTEN SIE DIE TASTE 3 SEKUNDEN GEDRÜCKT ZUM TRENNEN
+          </div>
+          <div class="digital-timer-display" id="digital-timer-display">
+            3.00000
+          </div>
+          <div class="timer-label">DISCONNECT COUNTDOWN</div>
+        </div>
+      </div>
+
       <!-- Top Section: DJ Controls -->
       <div class="dj-section">
         <!-- Player A (Top Left) -->
@@ -72,11 +85,21 @@
           <div class="dj-controls" id="dj-controls" style="display: none;">
             <!-- Professional Center Mixer Panel -->
             <div class="center-mixer-panel">
-              <!-- Live Status Indicator - Clickable -->
-              <button class="live-status-indicator" id="live-status">
-                <div class="live-dot"></div>
-                <span class="live-text">LIVE</span>
-              </button>
+              <!-- Status Indicators Container -->
+              <div class="status-indicators-container">
+                <!-- OpenSubsonic Status -->
+                <div class="user-status-indicator" id="opensubsonic-user-status">
+                  <span class="material-icons user-icon">music_note</span>
+                  <span class="user-text" id="opensubsonic-username">-</span>
+                </div>
+                
+                <!-- Combined Stream Status & Live Indicator - Clickable -->
+                <button class="stream-live-indicator" id="stream-live-status">
+                  <span class="material-icons stream-icon">dns</span>
+                  <span class="stream-username" id="stream-username-display">-</span>
+                  <div class="live-dot"></div>
+                </button>
+              </div>
               
               <!-- Microphone Section (Left: Volume, Center: Button, Right: Meter) -->
               <div class="microphone-section">
@@ -120,14 +143,6 @@
                   <span>A</span>
                   <span>B</span>
                 </div>
-              </div>
-              
-              <!-- Secondary Controls Row -->
-              <div class="secondary-controls">
-                <button class="config-btn-pro" id="stream-config-btn">
-                  <span class="material-icons">settings</span>
-                  <span>CONFIG</span>
-                </button>
               </div>
             </div>
           </div>
@@ -179,39 +194,6 @@
           <div class="queue-panel">
             <div class="queue-items" id="queue-list"></div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Stream Configuration Panel - Top Level Overlay -->
-    <div class="stream-config-panel" id="stream-config-panel" style="display: none;">
-      <div class="config-form">
-        <h3>Streaming Configuration</h3>
-        <div class="config-group">
-          <label for="stream-server-url">Server URL:</label>
-          <input type="text" id="stream-server-url" placeholder="http://localhost:8000" value="">
-        </div>
-        <div class="config-group">
-          <label for="stream-username">Username:</label>
-          <input type="text" id="stream-username" placeholder="Username (optional)" value="">
-        </div>
-        <div class="config-group">
-          <label for="stream-password">Password:</label>
-          <input type="password" id="stream-password" placeholder="Password" value="">
-        </div>
-        <div class="config-group">
-          <label for="stream-bitrate">Bitrate (kbps):</label>
-          <select id="stream-bitrate">
-            <option value="128">128 kbps</option>
-            <option value="160">160 kbps</option>
-            <option value="192" selected>192 kbps</option>
-            <option value="256">256 kbps</option>
-            <option value="320">320 kbps</option>
-          </select>
-        </div>
-        <div class="config-buttons">
-          <button id="save-stream-config">Save</button>
-          <button id="cancel-stream-config">Cancel</button>
         </div>
       </div>
     </div>

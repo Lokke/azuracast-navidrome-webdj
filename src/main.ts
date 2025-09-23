@@ -1,24 +1,55 @@
 import "./style.css";
 import { SubsonicApiClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist } from "./navidrome";
 import WaveSurfer from 'wavesurfer.js';
+import * as THREE from 'three';
 
 console.log("SubCaster loaded!");
 
-// Forward declarations for functions used before definition
-declare function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic'): void;
-declare function updateVolumeMeter(meterId: string, level: number): void;
-declare function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement): void;
-declare function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, autoPlay?: boolean): void;
-declare function initializeCrossfader(): void;
-declare function initializePlayerDropZones(): void;
-declare function setupQueueDropZone(): void;
-declare function setupAutoQueueControls(): void;
-declare function clearWaveformInfo(side: 'a' | 'b' | 'c' | 'd'): void;
-declare function clearWaveformBlinking(side: 'a' | 'b' | 'c' | 'd'): void;
+// User status update function
+function updateUserStatus(service: 'opensubsonic' | 'stream', username: string, connected: boolean) {
+  if (service === 'opensubsonic') {
+    const indicator = document.getElementById('opensubsonic-user-status');
+    const label = document.getElementById('opensubsonic-username');
+    
+    if (indicator) {
+      if (connected) {
+        indicator.classList.add('connected');
+        indicator.classList.remove('disconnected');
+      } else {
+        indicator.classList.add('disconnected');
+        indicator.classList.remove('connected');
+      }
+    }
+    
+    if (label) {
+      label.textContent = connected ? username : '-';
+    }
+  } else if (service === 'stream') {
+    const indicator = document.getElementById('stream-live-status');
+    const label = document.getElementById('stream-username-display');
+    
+    if (indicator) {
+      if (connected) {
+        indicator.classList.add('connected');
+        indicator.classList.remove('disconnected');
+      } else {
+        indicator.classList.add('disconnected');
+        indicator.classList.remove('connected');
+        indicator.classList.remove('live'); // Remove live state when disconnected
+      }
+    }
+    
+    if (label) {
+      label.textContent = connected ? username : '-';
+    }
+  }
+  
+  console.log(`🔄 Updated ${service} status: ${connected ? `connected as ${username}` : 'disconnected'}`);
+}
 
 // Global variables
-declare let libraryBrowser: any;
-declare let volumeMeterIntervals: { [key: string]: NodeJS.Timeout };
+let libraryBrowser: any; // Wird später als LibraryBrowser initialisiert
+// let volumeMeterIntervals: { [key: string]: NodeJS.Timeout }; // Wird später definiert
 
 // Global state for search results
 let lastSearchResults: any = null;
@@ -446,11 +477,29 @@ async function initializeAudioMixing() {
     
     // Volume Meter sofort nach Audio-Initialisierung starten
     setTimeout(() => {
-      console.log('?? Starting volume meters...');
-      startVolumeMeter('a');
-      startVolumeMeter('b');
-      startVolumeMeter('mic');
-    }, 500); // Kurze Verz�gerung f�r Audio-Kontext Stabilit�t
+      console.log('🎵 Starting volume meters...');
+      try {
+        if (typeof startVolumeMeter === 'function') {
+          startVolumeMeter('a');
+          startVolumeMeter('b');
+          startVolumeMeter('mic');
+          console.log('🎵 Volume meters started successfully');
+        } else {
+          console.warn('🎵 startVolumeMeter function not available yet');
+          // Retry later when function is available
+          setTimeout(() => {
+            if (typeof startVolumeMeter === 'function') {
+              startVolumeMeter('a');
+              startVolumeMeter('b');
+              startVolumeMeter('mic');
+              console.log('🎵 Volume meters started on retry');
+            }
+          }, 2000);
+        }
+      } catch (error) {
+        console.error('🎵 Error starting volume meters:', error);
+      }
+    }, 500); // Kurze Verzögerung für Audio-Kontext Stabilität
     
     return true;
   } catch (error) {
@@ -681,6 +730,11 @@ function initializePlayerDecks() {
   
   // Setup Wizard labels for similar songs
   setupWizardLabels();
+  
+  // Mark that we need to setup audio event listeners later
+  setTimeout(() => {
+    console.log('🎵 Audio event listeners will be setup in main DOMContentLoaded...');
+  }, 100);
   
   console.log('All 4 player decks initialized with professional layout');
 }
@@ -974,16 +1028,19 @@ function initializePlayerSystem() {
   // 3. Initialize crossfader functionality
   initializeCrossfader();
   
-  // 4. Setup drop zones for drag & drop
-  initializePlayerDropZones();
+  // 4. Setup drop zones for drag & drop (with delay to ensure DOM is ready)
+  setTimeout(() => {
+    console.log('🎯 Initializing drop zones after DOM is ready...');
+    initializePlayerDropZones();
+    setupQueueDropZone();
+    console.log('🎯 Drop zones initialization complete');
+    
+    // Setup album cover drag & drop after drop zones are ready
+    setupAlbumCoverDragDrop();
+    console.log('🎯 Album cover drag & drop initialized');
+  }, 500);
   
-  // 5. Setup album cover drag & drop
-  setupAlbumCoverDragDrop();
-  
-  // 6. Setup queue drop zone
-  setupQueueDropZone();
-  
-  // 7. Setup auto-queue controls
+  // 5. Setup auto-queue controls
   setupAutoQueueControls();
   
   console.log('Complete player system initialized');
@@ -1062,18 +1119,34 @@ function setupAlbumCoverDragDrop() {
     
     // Make album cover draggable when it has content
     function updateDragability() {
+      if (!albumCover) {
+        console.warn(`🎵 Album cover for deck ${side} not found`);
+        return;
+      }
+      
       const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
       const hasTrack = audio && audio.src && !audio.paused;
-      const hasLoadedTrack = audio && audio.src && audio.readyState >= 1;
+      const hasLoadedTrack = audio && audio.src; // Simplified: just check if there's a source
+      const songData = deckSongs[side];
       
-      if (!albumCover) return;
+      console.log(`🎵 Deck ${side} dragability check:`, {
+        hasAudio: !!audio,
+        hasSrc: !!audio?.src,
+        hasLoadedTrack,
+        isPlaying: hasTrack,
+        songData: !!songData
+      });
       
       if (hasLoadedTrack) {
         albumCover.draggable = true;
         albumCover.style.cursor = hasTrack ? 'not-allowed' : 'grab';
+        albumCover.setAttribute('draggable', 'true'); // Ensure attribute is set
+        console.log(`🎵 Deck ${side} album cover: draggable=true, cursor=${hasTrack ? 'not-allowed' : 'grab'}`);
       } else {
         albumCover.draggable = false;
         albumCover.style.cursor = 'default';
+        albumCover.removeAttribute('draggable'); // Remove attribute
+        console.log(`🎵 Deck ${side} album cover: draggable=false (no track loaded)`);
       }
     }
     
@@ -1081,10 +1154,15 @@ function setupAlbumCoverDragDrop() {
     const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
     if (audio) {
       audio.addEventListener('loadstart', updateDragability);
+      audio.addEventListener('loadeddata', updateDragability); // Add this for better detection
+      audio.addEventListener('canplay', updateDragability); // Add this for better detection
       audio.addEventListener('play', updateDragability);
       audio.addEventListener('pause', updateDragability);
       audio.addEventListener('ended', updateDragability);
     }
+    
+    // Initial dragability check
+    updateDragability();
     
     albumCover.addEventListener('dragstart', (e) => {
       const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
@@ -1093,15 +1171,18 @@ function setupAlbumCoverDragDrop() {
       if (audio && !audio.paused) {
         e.preventDefault();
         albumCover.style.cursor = 'not-allowed';
+        console.log(`🎵 Prevented drag from deck ${side} - track is playing`);
         return;
       }
       
-      // Check if there's actually a track loaded
-      if (!audio || !audio.src || audio.readyState < 1) {
+      // Check if there's actually a track loaded (relaxed check)
+      if (!audio || !audio.src) {
         e.preventDefault();
+        console.log(`🎵 Prevented drag from deck ${side} - no track loaded`);
         return;
       }
       
+      console.log(`🎵 Starting drag from deck ${side}`);
       albumCover.style.cursor = 'grabbing';
       if (e.dataTransfer) {
         // Get the song data for this deck
@@ -1117,7 +1198,25 @@ function setupAlbumCoverDragDrop() {
           e.dataTransfer.setData('application/json', JSON.stringify(dragData));
           console.log(`🎵 Dragging track from deck ${side.toUpperCase()}: "${song.title}"`);
         } else {
-          console.warn(`❌ No song data found for deck ${side.toUpperCase()}`);
+          console.warn(`❌ No song data found for deck ${side.toUpperCase()}, trying fallback`);
+          // Fallback: try to get song info from UI elements
+          const titleElement = document.querySelector(`#player-${side} .track-title`);
+          const artistElement = document.querySelector(`#player-${side} .track-artist`);
+          if (titleElement && artistElement) {
+            const fallbackSong = {
+              id: 'unknown',
+              title: titleElement.textContent || 'Unknown Title',
+              artist: artistElement.textContent || 'Unknown Artist',
+              album: 'Unknown Album'
+            };
+            const dragData = {
+              type: 'deck-song',
+              song: fallbackSong,
+              sourceDeck: side
+            };
+            e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+            console.log(`🎵 Using fallback song data for deck ${side}`);
+          }
         }
         
         // Fallback text data for backwards compatibility
@@ -1539,10 +1638,55 @@ let autoQueueConfig = {
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("DOM fully loaded and parsed");
   
-  // Initialize Player Decks
+  // 1. Initialize Player Decks first (creates HTML)
   initializePlayerDecks();
   
-  // Login-Formular initialisieren
+  // 2. Setup audio event listeners AFTER deck creation
+  setTimeout(() => {
+    console.log('🎵 Setting up audio event listeners for all players...');
+    ['a', 'b', 'c', 'd'].forEach(side => {
+      const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+      if (audio) {
+        console.log(`🎵 Setting up audio for player ${side.toUpperCase()}`);
+        try {
+          setupAudioEventListeners(audio, side as 'a' | 'b' | 'c' | 'd');
+          setupAudioPlayer(side as 'a' | 'b' | 'c' | 'd', audio);
+          console.log(`✅ Audio setup complete for player ${side.toUpperCase()}`);
+        } catch (error) {
+          console.error(`❌ Audio setup failed for player ${side.toUpperCase()}:`, error);
+        }
+      } else {
+        console.error(`❌ Audio element not found for player ${side.toUpperCase()}`);
+      }
+    });
+  }, 200);
+  
+  // 3. Initialize other systems
+  initializeCrossfader();
+  
+  // 4. Setup drop zones with delay
+  setTimeout(() => {
+    initializePlayerDropZones();
+    setupQueueDropZone();
+    setupAlbumCoverDragDrop();
+    setupAutoQueueControls();
+  }, 500);
+  
+  // 5. Initialize UI components
+  initializeOpenSubsonicLogin();
+  initializeStreamConfigPanel();
+  initializeMediaLibrary();
+  
+  // 6. Initialize rating system
+  initializeRatingListeners();
+  
+  // 7. Auto-start volume meters after everything is ready
+  setTimeout(() => {
+    autoStartVolumeMeters();
+  }, 1000);
+  
+  console.log("✅ Main initialization complete!");
+});  // Login-Formular initialisieren
   initializeOpenSubsonicLogin();
   
   // Stream-Konfiguration Panel initialisieren
@@ -2533,6 +2677,18 @@ async function initializeMusicLibrary() {
     enableLibraryAfterLogin();
     console.log("✅ Library browser initialized after login");
     
+    // Re-initialize drop zones after library is loaded
+    setTimeout(() => {
+      console.log("🎯 Re-initializing drop zones after library load...");
+      initializePlayerDropZones();
+      setupQueueDropZone();
+      console.log("🎯 Drop zones re-initialized after library load");
+      
+      // Re-initialize album cover drag & drop after library load
+      setupAlbumCoverDragDrop();
+      console.log("🎯 Album cover drag & drop re-initialized after library load");
+    }, 1000);
+    
   } catch (error) {
     console.error("❌ Error loading music library:", error);
     showError("Error loading music library: " + error);
@@ -2781,16 +2937,28 @@ function createUnifiedSongElement(song: OpenSubsonicSong, context: 'search' | 'a
   // Drag and Drop aktivieren
   trackItem.draggable = true;
   trackItem.addEventListener('dragstart', (e) => {
+    console.log('🚀 DRAGSTART on track item:', song.title, 'by', song.artist);
+    console.log('🚀 Event target:', e.target);
+    console.log('🚀 DataTransfer available:', !!e.dataTransfer);
+    
     if (e.dataTransfer) {
       // Set JSON data (preferred)
-      e.dataTransfer.setData('application/json', JSON.stringify({
+      const dragData = {
         type: 'song',
         song: song,
         sourceUrl: openSubsonicClient?.getStreamUrl(song.id)
-      }));
+      };
+      
+      console.log('🚀 Setting drag data:', dragData);
+      
+      e.dataTransfer.setData('application/json', JSON.stringify(dragData));
       // Set song ID as text/plain for fallback compatibility
       e.dataTransfer.setData('text/plain', song.id);
       e.dataTransfer.effectAllowed = 'copy';
+      
+      console.log('🚀 Drag data set successfully');
+    } else {
+      console.error('🚀 ERROR: No dataTransfer available!');
     }
   });
   
@@ -4366,6 +4534,9 @@ function initializeOpenSubsonicLogin() {
       if (authenticated) {
         console.log("✅ OpenSubsonic connected successfully!");
         
+        // Update OpenSubsonic user status
+        updateUserStatus('opensubsonic', username, true);
+        
         // Update stream configuration with stream credentials
         const streamUrl = streamServerInput.value.trim() || streamServer;
         const streamUser = streamUsernameInput.value.trim() || finalStreamUsername;
@@ -4377,13 +4548,20 @@ function initializeOpenSubsonicLogin() {
           streamConfig.username = streamUser;
           streamConfig.password = streamPass;
           console.log('✅ Stream configuration updated');
+          
+          // Update stream user status
+          updateUserStatus('stream', streamUser, true);
         } else {
           console.log('⚠️ Stream credentials incomplete - streaming will not be available');
+          updateUserStatus('stream', '-', false);
         }
         
         // Hide login form, show DJ controls
         loginForm.style.display = 'none';
         djControls.style.display = 'flex';
+        
+        // Initialize Live Streaming functionality (after DJ controls are visible)
+        initializeLiveStreaming();
         
         // Initialize music library
         console.log("🎵 About to call initializeMusicLibrary...");
@@ -4398,6 +4576,10 @@ function initializeOpenSubsonicLogin() {
         
       } else {
         console.log('❌ Login failed - Wrong username or password');
+        // Reset user status indicators
+        updateUserStatus('opensubsonic', '-', false);
+        updateUserStatus('stream', '-', false);
+        
         if (loginBtn) {
           loginBtn.textContent = 'Login Failed';
           setTimeout(() => {
@@ -4409,6 +4591,10 @@ function initializeOpenSubsonicLogin() {
       
     } catch (error) {
       console.error("❌ OpenSubsonic connection error:", error);
+      // Reset user status indicators on error
+      updateUserStatus('opensubsonic', '-', false);
+      updateUserStatus('stream', '-', false);
+      
       if (loginBtn) {
         loginBtn.textContent = 'Connection Error';
         setTimeout(() => {
@@ -4644,9 +4830,21 @@ function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) 
   restartBtn?.addEventListener('click', () => {
     if (audio.src) {
       audio.currentTime = 0;
-      console.log(`?? Player ${side.toUpperCase()} restarted`);
+      
+      // WaveSurfer Progressbar auch zurücksetzen
+      const wavesurfer = waveSurfers[side];
+      if (wavesurfer) {
+        try {
+          wavesurfer.seekTo(0);
+          console.log(`🌊 WaveSurfer ${side.toUpperCase()} reset to position 0`);
+        } catch (e) {
+          console.warn(`⚠️ WaveSurfer reset error on Player ${side}:`, e);
+        }
+      }
+      
+      console.log(`🔄 Player ${side.toUpperCase()} restarted`);
     } else {
-      console.log(`? No track loaded on Player ${side}`);
+      console.log(`❌ No track loaded on Player ${side}`);
       showError(`No track loaded on Player ${side.toUpperCase()}`);
     }
   });
@@ -4871,13 +5069,24 @@ function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, 
   // Load new waveform using WaveSurfer (lädt automatisch neue Waveform)
   loadWaveform(side, audio.src, song.duration);
   
-  // Audio-Event-Listener werden nach allen Funktionsdefinitionen hinzugef�gt
+  // Audio-Event-Listener werden nach allen Funktionsdefinitionen hinzugefügt
   setupAudioEventListeners(audio, side);
+  
+  // Update drag functionality for this deck after loading
+  setTimeout(() => {
+    const albumCover = document.getElementById(`album-cover-${side}`);
+    if (albumCover) {
+      // Trigger dragability update
+      const updateEvent = new Event('loadeddata');
+      audio.dispatchEvent(updateEvent);
+      console.log(`🎵 Updated drag functionality for deck ${side} after loading track`);
+    }
+  }, 100);
   
   // Note: We don't sync WaveSurfer with audio to avoid double playback
   // WaveSurfer handles playback directly via play button
   
-  // Song ID f�r Rating-System speichern
+  // Song ID für Rating-System speichern
   audio.dataset.songId = song.id;
   
   // Rating anzeigen (async laden)
@@ -4999,26 +5208,178 @@ function initializeCrossfader() {
 
 // Player Drop Zones initialisieren
 function initializePlayerDropZones() {
+  console.log('🎯 Initializing all player drop zones...');
+  
+  // Debug: Check if elements exist
+  ['a', 'b', 'c', 'd'].forEach(side => {
+    const deck = document.getElementById(`player-${side}`);
+    console.log(`🎯 Player ${side} deck:`, deck ? 'FOUND' : 'NOT FOUND', deck);
+  });
+  
+  // Ensure body allows drop events
+  document.body.addEventListener('dragover', (e) => {
+    console.log('🌐 Body dragover event fired');
+    e.preventDefault(); // Allow drop
+  });
+  
+  document.body.addEventListener('drop', (e) => {
+    console.log('🌐 Body drop event fired');
+    e.preventDefault(); // Prevent default file handling
+  });
+  
+  // Test: Add a global drag detection
+  document.addEventListener('dragstart', (e) => {
+    console.log('🚀 GLOBAL DRAGSTART detected:', e.target);
+    console.log('🚀 Draggable element:', e.target);
+    console.log('🚀 DataTransfer available:', !!e.dataTransfer);
+  });
+  
   initializePlayerDropZone('a');
   initializePlayerDropZone('b');
   initializePlayerDropZone('c');
   initializePlayerDropZone('d');
+  
+  console.log('🎯 All player drop zones initialized');
+  
+  // Debug: Test all current draggable elements
+  setTimeout(() => {
+    debugDraggableElements();
+  }, 2000);
 }
+
+// Debug function to test all draggable elements
+function debugDraggableElements() {
+  console.log('🔍 DEBUGGING DRAGGABLE ELEMENTS:');
+  
+  const draggableElements = document.querySelectorAll('[draggable="true"]');
+  console.log(`🔍 Found ${draggableElements.length} draggable elements:`);
+  
+  draggableElements.forEach((element, index) => {
+    console.log(`🔍 Draggable ${index + 1}:`, element);
+    console.log(`  - Tag: ${element.tagName}`);
+    console.log(`  - Classes: ${element.className}`);
+    console.log(`  - ID: ${element.id}`);
+    console.log(`  - Has dragstart listener:`, element.hasAttribute('ondragstart') || element.addEventListener.length > 0);
+  });
+  
+  // Test drop zones
+  console.log('🔍 DEBUGGING DROP ZONES:');
+  ['a', 'b', 'c', 'd'].forEach(side => {
+    const deck = document.getElementById(`player-${side}`);
+    if (deck) {
+      console.log(`🔍 Drop zone ${side}:`, deck);
+      console.log(`  - Has drag-over class:`, deck.classList.contains('drag-over'));
+      console.log(`  - Style display:`, getComputedStyle(deck).display);
+      console.log(`  - Style visibility:`, getComputedStyle(deck).visibility);
+      console.log(`  - Style pointer-events:`, getComputedStyle(deck).pointerEvents);
+      console.log(`  - Style z-index:`, getComputedStyle(deck).zIndex);
+      console.log(`  - Style position:`, getComputedStyle(deck).position);
+    }
+  });
+  
+  // Check for overlapping elements
+  console.log('🔍 CHECKING FOR OVERLAPPING ELEMENTS:');
+  const overlays = document.querySelectorAll('[style*="position: fixed"], [style*="position: absolute"], .disconnect-timer-overlay, .stream-config-panel');
+  overlays.forEach((overlay, index) => {
+    const computed = getComputedStyle(overlay);
+    console.log(`🔍 Overlay ${index + 1}:`, overlay);
+    console.log(`  - Display:`, computed.display);
+    console.log(`  - Visibility:`, computed.visibility);
+    console.log(`  - Z-index:`, computed.zIndex);
+    console.log(`  - Pointer-events:`, computed.pointerEvents);
+    console.log(`  - Classes:`, overlay.className);
+  });
+}
+
+// Global debug function - call this from browser console
+(window as any).debugDragDrop = function() {
+  console.log('🔧 MANUAL DRAG & DROP DEBUG STARTED');
+  debugDraggableElements();
+  
+  // Test if we can manually trigger drag events
+  const firstDraggable = document.querySelector('[draggable="true"]');
+  if (firstDraggable) {
+    console.log('🔧 Testing manual drag event on:', firstDraggable);
+    
+    const dragEvent = new DragEvent('dragstart', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: new DataTransfer()
+    });
+    
+    const result = firstDraggable.dispatchEvent(dragEvent);
+    console.log('🔧 Manual drag event result:', result);
+  }
+  
+  // Test drop zones
+  ['a', 'b', 'c', 'd'].forEach(side => {
+    const deck = document.getElementById(`player-${side}`);
+    if (deck) {
+      console.log(`🔧 Testing drop zone ${side}`);
+      
+      const dragOverEvent = new DragEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: new DataTransfer()
+      });
+      
+      const result = deck.dispatchEvent(dragOverEvent);
+      console.log(`🔧 Drop zone ${side} dragover result:`, result);
+    }
+  });
+};
+
+console.log('🔧 Debug function ready! Call debugDragDrop() from browser console to test.');
 
 function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
   const playerDeck = document.getElementById(`player-${side}`);
-  if (!playerDeck) return;
+  if (!playerDeck) {
+    console.warn(`Player deck ${side} not found for drop zone setup`);
+    return;
+  }
+  
+  console.log(`🎯 Setting up drop zone for player ${side}`);
   
   playerDeck.addEventListener('dragover', (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    console.log(`🎯 Dragover on player ${side}`);
+    if (e.dataTransfer) {
+      // Check if it's a deck-to-deck move
+      const jsonData = e.dataTransfer.getData('application/json');
+      if (jsonData) {
+        try {
+          const dragData = JSON.parse(jsonData);
+          if (dragData.type === 'deck-song') {
+            e.dataTransfer.dropEffect = 'move'; // Move operation for deck songs
+          } else {
+            e.dataTransfer.dropEffect = 'copy'; // Copy operation for library songs
+          }
+        } catch {
+          e.dataTransfer.dropEffect = 'copy'; // Fallback
+        }
+      } else {
+        e.dataTransfer.dropEffect = 'copy'; // Fallback
+      }
+    }
     playerDeck.classList.add('drag-over');
   });
   
-  playerDeck.addEventListener('dragleave', () => {
+  playerDeck.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log(`🎯 Dragenter on player ${side}`);
+  });
+  
+  playerDeck.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log(`🎯 Dragleave on player ${side}`);
     playerDeck.classList.remove('drag-over');
   });
   
   playerDeck.addEventListener('drop', async (e) => {
+    console.log(`🎯 DROP EVENT on player ${side}!`);
     e.preventDefault();
     playerDeck.classList.remove('drag-over');
     
@@ -5050,8 +5411,38 @@ function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
         } else if (songData.type === 'deck-song' && songData.song) {
           song = songData.song;
           songId = song?.id || null;
+          const sourceDeck = songData.sourceDeck;
+          console.log(`🎵 Detected deck-song drop: from ${sourceDeck} to ${side}, song:`, song);
+          
           if (song) {
-            console.log(`Deck song: "${song.title}" by ${song.artist}`);
+            console.log(`🎵 Moving deck song from ${sourceDeck?.toUpperCase()} to ${side.toUpperCase()}: "${song.title}"`);
+            
+            // Load track to target deck
+            if (song && songId) {
+              console.log(`⬇️ Moving song ${songId} from Player ${sourceDeck?.toUpperCase()} to Player ${side.toUpperCase()}`);
+              
+              // Load track to target deck WITHOUT auto-play
+              loadTrackToPlayer(side, song, false);
+              console.log(`✅ Track "${song.title}" moved to Player ${side.toUpperCase()}`);
+              
+              // Clear the source deck (move operation)
+              if (sourceDeck && sourceDeck !== side) {
+                console.log(`🗑️ About to clear source deck ${sourceDeck.toUpperCase()}`);
+                try {
+                  clearPlayerDeck(sourceDeck as 'a' | 'b' | 'c' | 'd');
+                  console.log(`✅ Source deck ${sourceDeck.toUpperCase()} cleared successfully`);
+                } catch (error) {
+                  console.error(`❌ Error clearing source deck ${sourceDeck.toUpperCase()}:`, error);
+                }
+              } else {
+                console.log(`ℹ️ Not clearing source deck (same as target or invalid): source=${sourceDeck}, target=${side}`);
+              }
+              return; // Exit early since we handled the move
+            } else {
+              console.error(`❌ Missing song or songId for move operation`);
+            }
+          } else {
+            console.error(`❌ No song data in deck-song drop`);
           }
         }
       }
@@ -5354,11 +5745,12 @@ function setupAudioEventListeners(audio: HTMLAudioElement, side: 'a' | 'b' | 'c'
   });
 }
 
-// Volume Meter bei Audio-Events starten/stoppen
-document.addEventListener('DOMContentLoaded', () => {
+// Volume Meter Auto-Start (will be called from main initialization)
+function autoStartVolumeMeters() {
   // Auto-start volume meters when audio mixing is initialized
   setTimeout(() => {
     if (audioContext) {
+      console.log('🎵 Auto-starting volume meters...');
       startVolumeMeter('a');
       startVolumeMeter('b');
       startVolumeMeter('c');
@@ -5366,7 +5758,709 @@ document.addEventListener('DOMContentLoaded', () => {
       startVolumeMeter('mic');
     }
   }, 1000);
-});
+}
+
+// Live Streaming State
+let isLiveStreaming = false;
+let liveStreamStartTime: number = 0;
+
+// Initialize Live Streaming Click Handler
+function initializeLiveStreaming() {
+  const streamLiveButton = document.getElementById('stream-live-status') as HTMLButtonElement;
+  
+  if (streamLiveButton) {
+    console.log('🔴 Live streaming button found and event listeners added');
+    
+    // Remove the old click listener and add new mousedown/mouseup listeners
+    streamLiveButton.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      console.log('🔴 Live streaming button pressed down');
+      
+      const isConnected = streamLiveButton.classList.contains('connected');
+      
+      if (!isConnected) {
+        console.log('❌ Cannot start live streaming - not connected to stream server');
+        return;
+      }
+      
+      handleStreamButtonPress();
+    });
+    
+    streamLiveButton.addEventListener('mouseup', (e) => {
+      e.preventDefault();
+      console.log('🔴 Live streaming button released');
+      handleStreamButtonRelease();
+    });
+    
+    streamLiveButton.addEventListener('mouseleave', (e) => {
+      e.preventDefault();
+      console.log('🔴 Live streaming button mouse left');
+      handleStreamButtonRelease();
+    });
+    
+    // Prevent context menu
+    streamLiveButton.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+  } else {
+    console.log('❌ Live streaming button not found');
+  }
+}
+
+// Handle stream button press (mousedown)
+function handleStreamButtonPress() {
+  if (!isLiveStreaming) {
+    // Start Live Streaming instantly
+    startLiveStreaming();
+  } else {
+    // Start disconnect countdown for live streaming
+    startDisconnectCountdown();
+  }
+}
+
+// Handle stream button release (mouseup/mouseleave)
+function handleStreamButtonRelease() {
+  if (isDisconnecting) {
+    // Stop countdown and show warning only if already connected
+    stopDisconnectCountdown();
+    if (isLiveStreaming) {
+      // Only show warning if stream has been live for more than 1 second
+      const streamDuration = Date.now() - liveStreamStartTime;
+      if (streamDuration > 1000) {
+        showWarningMessage("safety mechanism active!<br>press and hold for 5 seconds to disconnect");
+      }
+    }
+  }
+}
+
+// Variables for disconnect timer
+let disconnectTimer: NodeJS.Timeout | null = null;
+let disconnectStartTime: number = 0;
+let isDisconnecting: boolean = false;
+const DISCONNECT_DURATION = 5000; // 5 seconds in milliseconds
+
+// Toggle Live Streaming with Hold-to-Disconnect
+function toggleLiveStreaming() {
+  const streamLiveButton = document.getElementById('stream-live-status') as HTMLButtonElement;
+  
+  if (!streamLiveButton) return;
+  
+  if (!isLiveStreaming) {
+    // Start Live Streaming (instant)
+    startLiveStreaming();
+  } else {
+    // Stop Live Streaming requires hold-to-disconnect (only if connected)
+    if (isLiveStreaming) {
+      // Only show warning if stream has been live for more than 1 second
+      const streamDuration = Date.now() - liveStreamStartTime;
+      if (streamDuration > 1000) {
+        showWarningMessage("safety mechanism active!<br>press and hold for 5 seconds to disconnect");
+      }
+    }
+  }
+}
+
+// Start Live Streaming
+function startLiveStreaming() {
+  const streamLiveButton = document.getElementById('stream-live-status') as HTMLButtonElement;
+  if (!streamLiveButton) return;
+  
+  isLiveStreaming = true;
+  liveStreamStartTime = Date.now(); // Track when stream started
+  streamLiveButton.classList.add('live');
+  
+  // 🔥 Funken-Effekt für die ersten 10 Sekunden
+  streamLiveButton.classList.add('sparks-effect');
+  setTimeout(() => {
+    streamLiveButton.classList.remove('sparks-effect');
+  }, 10000);
+  
+  console.log('🔴 LIVE STREAMING STARTED - SPARKS FOR 10 SECONDS!');
+}
+
+// GLOBALE FUNKTION: Alle Disconnect-Effekte sofort stoppen
+function clearAllDisconnectEffects() {
+  console.log('🛑 CLEARING ALL DISCONNECT EFFECTS...');
+  
+  // Alle CSS-Klassen entfernen
+  document.querySelectorAll('*').forEach(el => {
+    el.classList.remove('global-flicker-weak', 'global-flicker-medium', 'global-flicker-extreme', 
+                        'global-shake-weak', 'global-shake-medium', 'global-shake-crazy', 
+                        'global-disco-flash', 'mixer-crt-flicker', 'mixer-crt-blur', 
+                        'mixer-crt-scanlines', 'mixer-crt-static');
+  });
+  
+  // Zusätzlich: CSS-Override einfügen um Animationen zu stoppen
+  let overrideStyle = document.getElementById('disconnect-effects-override');
+  if (!overrideStyle) {
+    overrideStyle = document.createElement('style');
+    overrideStyle.id = 'disconnect-effects-override';
+    document.head.appendChild(overrideStyle);
+  }
+  
+  overrideStyle.textContent = `
+    .global-flicker-weak,
+    .global-flicker-medium,
+    .global-flicker-extreme,
+    .global-shake-weak,
+    .global-shake-medium,
+    .global-shake-crazy,
+    .global-disco-flash,
+    .mixer-crt-flicker,
+    .mixer-crt-blur,
+    .mixer-crt-scanlines,
+    .mixer-crt-static {
+      animation: none !important;
+      transform: none !important;
+      filter: none !important;
+      opacity: 1 !important;
+      background-color: initial !important;
+      box-shadow: none !important;
+      background-image: none !important;
+    }
+  `;
+  
+  // Style-Override nach 500ms wieder entfernen um normale Animationen zu erlauben
+  setTimeout(() => {
+    if (overrideStyle && overrideStyle.parentNode) {
+      overrideStyle.remove();
+    }
+    console.log('✅ Disconnect effects cleanup complete - normal animations restored');
+  }, 500);
+}
+
+// THREE.JS EXPLOSIONS-SYSTEM
+let explosionScene: THREE.Scene | null = null;
+let explosionRenderer: THREE.WebGLRenderer | null = null;
+let explosionCamera: THREE.PerspectiveCamera | null = null;
+let explosionParticles: THREE.Points[] = [];
+let smokeClouds: THREE.Points[] = [];
+let animationId: number | null = null;
+
+function initExplosionSystem() {
+  // Scene erstellen
+  explosionScene = new THREE.Scene();
+  
+  // Camera erstellen
+  explosionCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  explosionCamera.position.z = 5;
+  
+  // Renderer erstellen (transparent für Overlay)
+  explosionRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  explosionRenderer.setSize(window.innerWidth, window.innerHeight);
+  explosionRenderer.setClearColor(0x000000, 0); // Transparenter Hintergrund
+  
+  // Canvas als Overlay hinzufügen
+  const canvas = explosionRenderer.domElement;
+  canvas.style.position = 'fixed';
+  canvas.style.top = '0';
+  canvas.style.left = '0';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.style.pointerEvents = 'none';
+  canvas.style.zIndex = '9999';
+  canvas.id = 'explosion-canvas';
+  
+  document.body.appendChild(canvas);
+  
+  console.log('🎆 Three.js explosion system initialized');
+}
+
+function createExplosion(element: Element) {
+  if (!explosionScene || !explosionRenderer || !explosionCamera) return;
+  
+  const rect = element.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  
+  // Weltkoordinaten berechnen
+  const worldX = (centerX / window.innerWidth) * 2 - 1;
+  const worldY = -(centerY / window.innerHeight) * 2 + 1;
+  
+  // Partikel-Geometrie für Explosion
+  const particles = new THREE.BufferGeometry();
+  const particleCount = 100;
+  const positions = new Float32Array(particleCount * 3);
+  const velocities = new Float32Array(particleCount * 3);
+  const colors = new Float32Array(particleCount * 3);
+  
+  for (let i = 0; i < particleCount; i++) {
+    const i3 = i * 3;
+    
+    // Startposition (Container-Position)
+    positions[i3] = worldX * 2;
+    positions[i3 + 1] = worldY * 2;
+    positions[i3 + 2] = 0;
+    
+    // Zufällige Geschwindigkeit in alle Richtungen
+    velocities[i3] = (Math.random() - 0.5) * 0.4;
+    velocities[i3 + 1] = (Math.random() - 0.5) * 0.4;
+    velocities[i3 + 2] = (Math.random() - 0.5) * 0.2;
+    
+    // Orange/Rot/Gelb Explosion-Farben
+    colors[i3] = 1.0; // R
+    colors[i3 + 1] = Math.random() * 0.8; // G
+    colors[i3 + 2] = 0.0; // B
+  }
+  
+  particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  particles.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+  particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  
+  // Partikel-Material
+  const material = new THREE.PointsMaterial({
+    size: 0.1,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1.0,
+    blending: THREE.AdditiveBlending
+  });
+  
+  const particleSystem = new THREE.Points(particles, material);
+  particleSystem.userData = { life: 1.0, decay: 0.02 };
+  
+  explosionScene.add(particleSystem);
+  explosionParticles.push(particleSystem);
+  
+  console.log(`💥 Explosion created at (${centerX}, ${centerY})`);
+}
+
+function createSmokeCloud(element: Element) {
+  if (!explosionScene || !explosionRenderer || !explosionCamera) return;
+  
+  const rect = element.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  
+  // Weltkoordinaten berechnen
+  const worldX = (centerX / window.innerWidth) * 2 - 1;
+  const worldY = -(centerY / window.innerHeight) * 2 + 1;
+  
+  // Rauch-Partikel
+  const smoke = new THREE.BufferGeometry();
+  const smokeCount = 50;
+  const positions = new Float32Array(smokeCount * 3);
+  const velocities = new Float32Array(smokeCount * 3);
+  const colors = new Float32Array(smokeCount * 3);
+  
+  for (let i = 0; i < smokeCount; i++) {
+    const i3 = i * 3;
+    
+    // Startposition mit leichter Streuung
+    positions[i3] = worldX * 2 + (Math.random() - 0.5) * 0.5;
+    positions[i3 + 1] = worldY * 2 + (Math.random() - 0.5) * 0.3;
+    positions[i3 + 2] = 0;
+    
+    // Langsame Aufwärtsbewegung
+    velocities[i3] = (Math.random() - 0.5) * 0.02;
+    velocities[i3 + 1] = Math.random() * 0.05 + 0.02;
+    velocities[i3 + 2] = (Math.random() - 0.5) * 0.01;
+    
+    // Grau-Rauch-Farben
+    const gray = 0.3 + Math.random() * 0.4;
+    colors[i3] = gray;
+    colors[i3 + 1] = gray;
+    colors[i3 + 2] = gray;
+  }
+  
+  smoke.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  smoke.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+  smoke.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  
+  // Rauch-Material
+  const material = new THREE.PointsMaterial({
+    size: 0.15,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.7,
+    blending: THREE.NormalBlending
+  });
+  
+  const smokeSystem = new THREE.Points(smoke, material);
+  smokeSystem.userData = { life: 5.0, decay: 0.004 }; // 5 Sekunden Lebensdauer
+  
+  explosionScene.add(smokeSystem);
+  smokeClouds.push(smokeSystem);
+  
+  console.log(`💨 Smoke cloud created at (${centerX}, ${centerY})`);
+}
+
+function animateExplosions() {
+  if (!explosionScene || !explosionRenderer || !explosionCamera) return;
+  
+  // Explosions-Partikel updaten
+  for (let i = explosionParticles.length - 1; i >= 0; i--) {
+    const particles = explosionParticles[i];
+    const positions = particles.geometry.attributes.position;
+    const velocities = particles.geometry.attributes.velocity;
+    const material = particles.material as THREE.PointsMaterial;
+    
+    // Partikel bewegen
+    for (let j = 0; j < positions.count; j++) {
+      const j3 = j * 3;
+      positions.array[j3] += velocities.array[j3];
+      positions.array[j3 + 1] += velocities.array[j3 + 1];
+      positions.array[j3 + 2] += velocities.array[j3 + 2];
+      
+      // Gravitation simulieren
+      velocities.array[j3 + 1] -= 0.005;
+    }
+    
+    positions.needsUpdate = true;
+    
+    // Lebensdauer reduzieren
+    particles.userData.life -= particles.userData.decay;
+    material.opacity = particles.userData.life;
+    
+    // Tote Partikel entfernen
+    if (particles.userData.life <= 0) {
+      explosionScene.remove(particles);
+      explosionParticles.splice(i, 1);
+    }
+  }
+  
+  // Rauch-Partikel updaten
+  for (let i = smokeClouds.length - 1; i >= 0; i--) {
+    const smoke = smokeClouds[i];
+    const positions = smoke.geometry.attributes.position;
+    const velocities = smoke.geometry.attributes.velocity;
+    const material = smoke.material as THREE.PointsMaterial;
+    
+    // Rauch bewegen
+    for (let j = 0; j < positions.count; j++) {
+      const j3 = j * 3;
+      positions.array[j3] += velocities.array[j3];
+      positions.array[j3 + 1] += velocities.array[j3 + 1];
+      positions.array[j3 + 2] += velocities.array[j3 + 2];
+    }
+    
+    positions.needsUpdate = true;
+    
+    // Lebensdauer reduzieren
+    smoke.userData.life -= smoke.userData.decay;
+    material.opacity = smoke.userData.life * 0.7; // Maximal 0.7 Opacity
+    
+    // Toten Rauch entfernen
+    if (smoke.userData.life <= 0) {
+      explosionScene.remove(smoke);
+      smokeClouds.splice(i, 1);
+    }
+  }
+  
+  // Szene rendern
+  explosionRenderer.render(explosionScene, explosionCamera);
+  
+  // Animation fortsetzen wenn Partikel vorhanden
+  if (explosionParticles.length > 0 || smokeClouds.length > 0) {
+    animationId = requestAnimationFrame(animateExplosions);
+  } else {
+    animationId = null;
+  }
+}
+
+function explodeAllContainers() {
+  console.log('💥🚀 EXPLODING ALL CONTAINERS! 🚀💥');
+  
+  // Three.js System initialisieren falls noch nicht geschehen
+  if (!explosionScene) {
+    initExplosionSystem();
+  }
+  
+  // Alle Container finden (außer Mixer)
+  const containers = document.querySelectorAll('.player-deck, .breadcrumb-bar, .crossfader-container, .volume-meter, .mic-controls, .queue-container, .content-section, .music-library');
+  
+  containers.forEach((container, index) => {
+    // Container verstecken mit zeitversetzter Explosion
+    setTimeout(() => {
+      // Explosion erstellen
+      createExplosion(container);
+      
+      // Container ausblenden
+      (container as HTMLElement).style.transition = 'opacity 0.1s ease';
+      (container as HTMLElement).style.opacity = '0';
+      
+      // Nach kurzer Verzögerung Rauchwolke erstellen
+      setTimeout(() => {
+        createSmokeCloud(container);
+      }, 200);
+      
+    }, index * 100); // Gestaffelte Explosionen
+  });
+  
+  // Animation starten
+  if (!animationId) {
+    animateExplosions();
+  }
+  
+  // Nach 5 Sekunden Container wieder einblenden
+  setTimeout(() => {
+    fadeInContainers();
+  }, 5000);
+}
+
+function fadeInContainers() {
+  console.log('✨ Fading containers back in...');
+  
+  const containers = document.querySelectorAll('.player-deck, .breadcrumb-bar, .crossfader-container, .volume-meter, .mic-controls, .queue-container, .content-section, .music-library');
+  
+  containers.forEach((container, index) => {
+    setTimeout(() => {
+      (container as HTMLElement).style.transition = 'opacity 1s ease';
+      (container as HTMLElement).style.opacity = '1';
+    }, index * 100); // Gestaffelte Wiedereinblendung
+  });
+  
+  // Explosions-System nach weiteren 2 Sekunden aufräumen
+  setTimeout(cleanupExplosionSystem, 2000);
+}
+
+function cleanupExplosionSystem() {
+  console.log('🧹 Cleaning up explosion system...');
+  
+  // Animation stoppen
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+    animationId = null;
+  }
+  
+  // Arrays leeren
+  explosionParticles.length = 0;
+  smokeClouds.length = 0;
+  
+  // Canvas entfernen
+  const canvas = document.getElementById('explosion-canvas');
+  if (canvas) {
+    canvas.remove();
+  }
+  
+  // Three.js Objekte aufräumen
+  if (explosionRenderer) {
+    explosionRenderer.dispose();
+    explosionRenderer = null;
+  }
+  
+  explosionScene = null;
+  explosionCamera = null;
+  
+  console.log('✅ Explosion system cleaned up');
+}
+
+// Stop Live Streaming (only after successful disconnect countdown)
+function stopLiveStreaming() {
+  const streamLiveButton = document.getElementById('stream-live-status') as HTMLButtonElement;
+  if (!streamLiveButton) return;
+  
+  isLiveStreaming = false;
+  streamLiveButton.classList.remove('live');
+  
+  // 🛑 SOFORTIGE EFFEKT-BEREINIGUNG!
+  clearAllDisconnectEffects();
+  
+  console.log('⏹️ LIVE STREAMING STOPPED - ALL EFFECTS CLEANED UP!');
+}
+
+// Show warning message for short clicks
+function showWarningMessage(message: string) {
+  const overlay = document.getElementById('disconnect-timer-overlay');
+  const warningMessage = document.getElementById('timer-warning-message');
+  const timerDisplay = document.getElementById('digital-timer-display');
+  
+  if (!overlay || !warningMessage || !timerDisplay) return;
+  
+  // Reset any previous animations
+  overlay.classList.remove('crt-poweroff', 'crt-poweroff-warning');
+  
+  // Hide timer display, show only warning
+  timerDisplay.style.display = 'none';
+  warningMessage.innerHTML = message;
+  warningMessage.style.display = 'block';
+  
+  overlay.classList.add('active');
+  
+  // Hide warning after 4 seconds with CRT power-off effect
+  setTimeout(() => {
+    overlay.classList.add('crt-poweroff-warning');
+    
+    // Actually hide after animation completes
+    setTimeout(() => {
+      overlay.classList.remove('active', 'crt-poweroff-warning');
+      timerDisplay.style.display = 'block';
+      warningMessage.style.display = 'block';
+    }, 400); // Match new faster animation duration
+  }, 4000);
+}
+
+// Start disconnect countdown
+function startDisconnectCountdown() {
+  if (isDisconnecting) return;
+  
+  const overlay = document.getElementById('disconnect-timer-overlay');
+  const timerDisplay = document.getElementById('digital-timer-display');
+  
+  if (!overlay || !timerDisplay) return;
+  
+  // WICHTIG: Erst alles vorbereiten, dann Timer starten!
+  isDisconnecting = true;
+  overlay.classList.add('active');
+  
+  // Warten bis Overlay definitiv sichtbar ist, dann Timer starten
+  requestAnimationFrame(() => {
+    // Jetzt erst den Timer starten wenn alles bereit ist
+    disconnectStartTime = Date.now();
+    
+    // Start countdown animation
+    disconnectTimer = setInterval(() => {
+      const elapsed = Date.now() - disconnectStartTime;
+      const remaining = Math.max(0, DISCONNECT_DURATION - elapsed);
+      const seconds = remaining / 1000;
+      
+      // Update timer display with 5 decimal places
+      timerDisplay.textContent = `disconnecting in: ${seconds.toFixed(5)}`;
+      
+      // Apply progressive effects based on remaining time
+      applyProgressiveTimerEffects(overlay, seconds);
+      
+      if (remaining <= 0) {
+        // Countdown complete - SOFORT alle Effekte stoppen!
+        clearInterval(disconnectTimer!);
+        disconnectTimer = null;
+        isDisconnecting = false;
+        
+        // 🛑 SOFORT alle globalen Effekte entfernen BEVOR irgendwas anderes passiert!
+        clearAllDisconnectEffects();
+        
+        // 💥 CONTAINER EXPLOSION FINALE! 💥
+        explodeAllContainers();
+        
+        // Start CRT power-off animation
+        overlay.classList.add('crt-poweroff');
+        
+        // Remove all timer effects
+        overlay.classList.remove('timer-shake-1', 'timer-shake-2', 'timer-shake-3', 'timer-shake-4', 'timer-shake-extreme');
+        
+        // Actually disconnect and hide after animation completes
+        setTimeout(() => {
+          overlay.classList.remove('active', 'crt-poweroff');
+          overlay.className = 'disconnect-timer-overlay';
+          
+          // Actually disconnect
+          stopLiveStreaming();
+        }, 300); // Match new faster animation duration
+      }
+    }, 10); // Update every 10ms for smooth countdown
+  }); // Close requestAnimationFrame
+}
+
+// Stop disconnect countdown
+function stopDisconnectCountdown() {
+  if (disconnectTimer) {
+    clearInterval(disconnectTimer);
+    disconnectTimer = null;
+  }
+  
+  isDisconnecting = false;
+  
+  const overlay = document.getElementById('disconnect-timer-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    // Remove all timer effects
+    overlay.className = 'disconnect-timer-overlay';
+  }
+  
+  // 🛑 SOFORTIGE EFFEKT-BEREINIGUNG!
+  clearAllDisconnectEffects();
+  
+  // 🧹 Explosions-System aufräumen falls aktiv
+  if (explosionScene || explosionRenderer) {
+    cleanupExplosionSystem();
+  }
+  
+  console.log('🛑 All global disconnect effects STOPPED!');
+}
+
+// Apply progressive timer effects based on remaining time
+function applyProgressiveTimerEffects(overlay: HTMLElement, seconds: number) {
+  const timerDisplay = document.getElementById('digital-timer-display');
+  if (!timerDisplay) return;
+  
+  // Remove all previous effect classes first
+      overlay.classList.remove('timer-shake-1', 'timer-shake-2', 'timer-shake-3', 'timer-shake-4');
+      timerDisplay.classList.remove('timer-color-urgent', 'timer-color-critical');  // IMMER alle globalen Effekte von allen Elementen entfernen
+  document.querySelectorAll('*').forEach(el => {
+    el.classList.remove('global-flicker-weak', 'global-flicker-medium', 'global-flicker-extreme', 
+                        'global-shake-weak', 'global-shake-medium', 'global-shake-crazy', 
+                        'global-disco-flash', 'mixer-crt-flicker', 'mixer-crt-blur', 
+                        'mixer-crt-scanlines', 'mixer-crt-static');
+  });
+  
+  if (seconds > 4.0) {
+    // 5.0 - 4.0 seconds: Minimal effects
+    overlay.classList.add('timer-shake-1');
+  } else if (seconds > 3.0) {
+    // 4.0 - 3.0 seconds: Light effects + schwache globale Effekte
+    overlay.classList.add('timer-shake-2');
+    timerDisplay.classList.add('timer-color-urgent');
+    
+    // SCHWACHE globale Effekte für wichtige UI-Elemente + Music Library
+    document.querySelectorAll('.player-deck, .breadcrumb-bar, .crossfader-container, .volume-meter, .music-library').forEach(el => {
+      el.classList.add('global-flicker-weak', 'global-shake-weak');
+    });
+    
+    // Spezielle CRT-Effekte für Mixer (ohne Bewegung)
+    document.querySelectorAll('.mixer-section').forEach(el => {
+      el.classList.add('mixer-crt-flicker');
+    });
+    
+  } else if (seconds > 2.0) {
+    // 3.0 - 2.0 seconds: Moderate effects + mittlere globale Effekte
+    overlay.classList.add('timer-shake-3');
+    timerDisplay.classList.add('timer-color-critical');
+    
+    // MITTLERE globale Effekte für mehr Elemente + Music Library
+    document.querySelectorAll('.player-deck, .breadcrumb-bar, .crossfader-container, .volume-meter, .mic-controls, .queue-container, .music-library').forEach(el => {
+      el.classList.add('global-flicker-medium', 'global-shake-medium');
+    });
+    
+    // Mittlere CRT-Effekte für Mixer
+    document.querySelectorAll('.mixer-section').forEach(el => {
+      el.classList.add('mixer-crt-flicker', 'mixer-crt-blur');
+    });
+    
+  } else if (seconds > 1.0) {
+    // 2.0 - 1.0 seconds: Heavy effects + starke globale Effekte
+    overlay.classList.add('timer-shake-4');
+    timerDisplay.classList.add('timer-color-critical');
+    
+    // STARKE globale Effekte + erste Disco-Blitze + Music Library
+    document.querySelectorAll('.player-deck, .breadcrumb-bar, .crossfader-container, .volume-meter, .mic-controls, .queue-container, .content-section, .music-library').forEach(el => {
+      el.classList.add('global-flicker-extreme', 'global-shake-crazy');
+      if (Math.random() > 0.7) el.classList.add('global-disco-flash');
+    });
+    
+    // Starke CRT-Effekte für Mixer
+    document.querySelectorAll('.mixer-section').forEach(el => {
+      el.classList.add('mixer-crt-flicker', 'mixer-crt-blur', 'mixer-crt-scanlines');
+    });
+    
+  } else {
+    // 1.0 - 0.0 seconds: Finale intensive Effekte (aber kontrolliert)
+    overlay.classList.add('timer-shake-4');
+    timerDisplay.classList.add('timer-color-critical');
+    
+    // Intensive Effekte nur für wichtige Bereiche + Music Library
+    document.querySelectorAll('.player-deck, .breadcrumb-bar, .crossfader-container, .volume-meter, .mic-controls, .queue-container, .content-section, .music-library').forEach(el => {
+      el.classList.add('global-flicker-extreme', 'global-shake-crazy');
+      if (Math.random() > 0.5) el.classList.add('global-disco-flash');
+    });
+    
+    // MAXIMALE CRT-Effekte für Mixer (immer noch ohne Bewegung)
+    document.querySelectorAll('.mixer-section').forEach(el => {
+      el.classList.add('mixer-crt-flicker', 'mixer-crt-blur', 'mixer-crt-scanlines', 'mixer-crt-static');
+    });
+    
+    console.log('🚨 FINAL COUNTDOWN - MAXIMUM INTENSITY! 🚨');
+  }
+}
 
 // Recent Albums Funktion entfernt - wird nicht mehr ben�tigt
 
@@ -6505,8 +7599,7 @@ class LibraryBrowser {
   }
 }
 
-// Global instance
-let libraryBrowser: LibraryBrowser;
+// Global instance - declared above
 
 // Globale Drag-Scroll-Funktionalität für horizontale Container
 function addDragScrollingToContainer(container: HTMLElement) {
@@ -7271,4 +8364,128 @@ function clearWaveformBlinking(side: 'a' | 'b' | 'c' | 'd') {
   }
 }
 
-});
+// Global debug function for drag and drop
+function debugDragDrop() {
+  console.log('🔍 === DRAG & DROP DEBUG ===');
+  
+  // Check all draggable elements
+  const draggableElements = document.querySelectorAll('[draggable="true"]');
+  console.log(`🔍 Found ${draggableElements.length} draggable elements`);
+  
+  draggableElements.forEach((element, index) => {
+    console.log(`🔍 Draggable ${index + 1}:`, element);
+  });
+  
+  // Check drop zones
+  ['a', 'b', 'c', 'd'].forEach(side => {
+    const deck = document.getElementById(`player-${side}`);
+    console.log(`🔍 Player ${side} deck:`, deck ? 'EXISTS' : 'MISSING');
+    
+    if (deck) {
+      // Test if drop zone listeners are active
+      const rect = deck.getBoundingClientRect();
+      console.log(`🔍 Player ${side} position:`, rect);
+      console.log(`🔍 Player ${side} pointer-events:`, window.getComputedStyle(deck).pointerEvents);
+      console.log(`🔍 Player ${side} z-index:`, window.getComputedStyle(deck).zIndex);
+    }
+  });
+  
+  // Check queue drop zone
+  const queueList = document.getElementById('queue-list');
+  console.log('🔍 Queue drop zone:', queueList ? 'EXISTS' : 'MISSING');
+  if (queueList) {
+    console.log(`🔍 Queue pointer-events:`, window.getComputedStyle(queueList).pointerEvents);
+    console.log(`🔍 Queue z-index:`, window.getComputedStyle(queueList).zIndex);
+  }
+  
+  // Test manual drop zone re-initialization
+  console.log('🔍 Re-initializing drop zones...');
+  try {
+    initializePlayerDropZones();
+    setupQueueDropZone();
+    console.log('🔍 Drop zones re-initialized successfully');
+  } catch (error) {
+    console.error('🔍 Error re-initializing drop zones:', error);
+  }
+}
+
+// Manual test function for drop zones
+function testDropZones() {
+  console.log('🧪 === TESTING DROP ZONES ===');
+  
+  // Simulate dragover on each deck
+  ['a', 'b', 'c', 'd'].forEach(side => {
+    const deck = document.getElementById(`player-${side}`);
+    if (deck) {
+      console.log(`🧪 Testing player ${side}...`);
+      
+      // Create synthetic dragover event
+      const dragEvent = new DragEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: new DataTransfer()
+      });
+      
+      deck.dispatchEvent(dragEvent);
+    }
+  });
+}
+
+// Test album cover dragability
+function testAlbumCoverDrag() {
+  console.log('🧪 === TESTING ALBUM COVER DRAG ===');
+  
+  ['a', 'b', 'c', 'd'].forEach(side => {
+    const albumCover = document.getElementById(`album-cover-${side}`);
+    const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+    const sideKey = side as 'a' | 'b' | 'c' | 'd';
+    
+    console.log(`🧪 Deck ${side}:`, {
+      albumCover: albumCover ? 'EXISTS' : 'MISSING',
+      draggable: albumCover?.draggable,
+      draggableAttr: albumCover?.getAttribute('draggable'),
+      audioSrc: audio?.src || 'NO SOURCE',
+      deckSong: deckSongs[sideKey] ? `"${deckSongs[sideKey]?.title}"` : 'NO SONG DATA',
+      cursor: albumCover?.style.cursor || 'default'
+    });
+    
+    // Try to make it draggable manually
+    if (albumCover && audio?.src) {
+      albumCover.draggable = true;
+      albumCover.setAttribute('draggable', 'true');
+      console.log(`🧪 Manually made deck ${side} draggable`);
+    }
+  });
+  
+  // Re-check draggable elements
+  setTimeout(() => {
+    const draggableElements = document.querySelectorAll('[draggable="true"]');
+    console.log(`🧪 Total draggable elements now: ${draggableElements.length}`);
+    draggableElements.forEach((el, i) => {
+      console.log(`🧪 Draggable ${i + 1}:`, el.id, el.className);
+    });
+  }, 100);
+}
+
+// Initialize audio event listeners for all players after DOM is ready
+function initializeAllAudioEventListeners() {
+  ['a', 'b', 'c', 'd'].forEach(side => {
+    const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+    if (audio) {
+      console.log(`🎵 Setting up audio event listeners for player ${side.toUpperCase()}`);
+      try {
+        setupAudioEventListeners(audio, side as 'a' | 'b' | 'c' | 'd');
+        console.log(`✅ Audio event listeners setup complete for player ${side.toUpperCase()}`);
+      } catch (error) {
+        console.error(`❌ Error setting up audio event listeners for player ${side.toUpperCase()}:`, error);
+      }
+    } else {
+      console.error(`❌ Audio element for player ${side.toUpperCase()} not found`);
+    }
+  });
+}
+
+// Make functions globally available
+(window as any).debugDragDrop = debugDragDrop;
+(window as any).testDropZones = testDropZones;
+(window as any).testAlbumCoverDrag = testAlbumCoverDrag;
