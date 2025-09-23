@@ -4701,7 +4701,8 @@ body {
   text-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
 }
 
-.star.hover-preview {
+.star.hover-preview,
+.rating-star.hover-preview {
   color: #ffed4a;
 }
 

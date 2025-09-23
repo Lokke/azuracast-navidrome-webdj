@@ -1,0 +1,5 @@
+{
+  "name": "subcaster-electron",
+  "main": "main.js",
+  "type": "commonjs"
+}

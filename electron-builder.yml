@@ -1,0 +1,102 @@
+appId: com.lokke.subcaster
+productName: SubCaster
+directories:
+  buildResources: build
+  output: dist-electron
+buildVersion: "1.0.0"
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!**/node_modules/*.d.ts"
+  - "!**/node_modules/.bin"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/._*"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
+  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
+  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
+  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+
+extraResources:
+  - "assets/**/*"
+
+# Windows configuration
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: SubCaster
+
+# macOS configuration
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.music
+  gatekeeperAssess: false
+  hardenedRuntime: true
+
+dmg:
+  title: "${productName} ${version}"
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# Linux configuration
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
+      arch:
+        - x64
+  category: AudioVideo
+  synopsis: Professional streaming and podcasting software
+  description: >
+    SubCaster is a professional DJ and streaming software with 4-deck mixing capabilities,
+    live streaming to Shoutcast/Icecast servers, and OpenSubsonic integration.
+
+appImage:
+  license: license.txt
+
+# Publishing configuration
+publish:
+  provider: github
+  owner: Lokke
+  repo: subcaster
+
+# Compression
+compression: maximum
+
+# Build configuration
+buildDependenciesFromSource: false
+nodeGypRebuild: false
+
+# Metadata
+copyright: Copyright © 2024-2025 Felix Pielok

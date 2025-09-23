@@ -3027,9 +3027,11 @@ function updateRatingDisplay(songId: string, rating: number) {
     container.innerHTML = createStarRating(rating, songId);
   });
   
-  // Update player rating if this song is currently playing
+  // Update player rating if this song is currently playing (ALL DECKS)
   updatePlayerRating('a', songId, rating);
   updatePlayerRating('b', songId, rating);
+  updatePlayerRating('c', songId, rating);
+  updatePlayerRating('d', songId, rating);
 }
 
 // Player Rating aktualisieren
@@ -5539,28 +5541,60 @@ function initializeRatingListeners() {
   document.addEventListener('click', async (event) => {
     const target = event.target as HTMLElement;
     
-    if (target.classList.contains('star')) {
-      const rating = parseInt(target.dataset.rating || '0');
-      const songId = target.dataset.songId;
+    if (target.classList.contains('star') || target.classList.contains('rating-star')) {
+      let rating = parseInt(target.dataset.rating || '0');
+      let songId = target.dataset.songId;
+      
+      // Fallback: Wenn kein data-song-id, prüfe ob es ein Player-Rating ist
+      if (!songId) {
+        const playerRatingContainer = target.closest('[id^="player-rating-"]');
+        if (playerRatingContainer) {
+          const playerId = playerRatingContainer.id.split('-')[2]; // z.B. "a" aus "player-rating-a"
+          const audio = document.getElementById(`audio-${playerId}`) as HTMLAudioElement;
+          songId = audio?.dataset.songId;
+          
+          // Rating über Position im Container ermitteln
+          if (!rating) {
+            const stars = Array.from(playerRatingContainer.querySelectorAll('.star, .rating-star'));
+            rating = stars.indexOf(target) + 1;
+          }
+        }
+      }
       
       if (songId && rating > 0) {
         await setRating(songId, rating);
         
-        // Async Rating laden f�r bessere Performance
+        // Async Rating laden für bessere Performance
         loadRatingAsync(songId);
       }
     }
   });
   
-  // Hover-Effekte f�r Sterne
+  // Hover-Effekte für Sterne
   document.addEventListener('mouseover', (event) => {
     const target = event.target as HTMLElement;
     
-    if (target.classList.contains('star')) {
-      const rating = parseInt(target.dataset.rating || '0');
-      const songId = target.dataset.songId;
+    if (target.classList.contains('star') || target.classList.contains('rating-star')) {
+      let rating = parseInt(target.dataset.rating || '0');
+      let songId = target.dataset.songId;
       
-      if (songId) {
+      // Fallback: Wenn kein data-song-id, prüfe ob es ein Player-Rating ist
+      if (!songId) {
+        const playerRatingContainer = target.closest('[id^="player-rating-"]');
+        if (playerRatingContainer) {
+          const playerId = playerRatingContainer.id.split('-')[2]; // z.B. "a" aus "player-rating-a"
+          const audio = document.getElementById(`audio-${playerId}`) as HTMLAudioElement;
+          songId = audio?.dataset.songId;
+          
+          // Rating über Position im Container ermitteln
+          if (!rating) {
+            const stars = Array.from(playerRatingContainer.querySelectorAll('.star, .rating-star'));
+            rating = stars.indexOf(target) + 1;
+          }
+        }
+      }
+      
+      if (songId && rating > 0) {
         highlightStars(songId, rating);
       }
     }
@@ -5569,8 +5603,18 @@ function initializeRatingListeners() {
   document.addEventListener('mouseout', (event) => {
     const target = event.target as HTMLElement;
     
-    if (target.classList.contains('star')) {
-      const songId = target.dataset.songId;
+    if (target.classList.contains('star') || target.classList.contains('rating-star')) {
+      let songId = target.dataset.songId;
+      
+      // Fallback: Wenn kein data-song-id, prüfe ob es ein Player-Rating ist
+      if (!songId) {
+        const playerRatingContainer = target.closest('[id^="player-rating-"]');
+        if (playerRatingContainer) {
+          const playerId = playerRatingContainer.id.split('-')[2]; // z.B. "a" aus "player-rating-a"
+          const audio = document.getElementById(`audio-${playerId}`) as HTMLAudioElement;
+          songId = audio?.dataset.songId;
+        }
+      }
       
       if (songId) {
         resetStarHighlight(songId);
@@ -5579,24 +5623,71 @@ function initializeRatingListeners() {
   });
 }
 
-// Sterne f�r Hover-Effekt hervorheben
+// Sterne für Hover-Effekt hervorheben
 function highlightStars(songId: string, rating: number) {
-  const stars = document.querySelectorAll(`[data-song-id="${songId}"] .star`);
-  stars.forEach((star, index) => {
-    const starElement = star as HTMLElement;
-    if (index < rating) {
-      starElement.classList.add('hover-preview');
-    } else {
-      starElement.classList.remove('hover-preview');
+  // Alle Rating-Container für diesen Song finden
+  const ratingContainers = document.querySelectorAll(`[data-song-id="${songId}"]`);
+  
+  ratingContainers.forEach(container => {
+    // Alle Sterne in diesem Container (sowohl .star als auch .rating-star)
+    const stars = container.querySelectorAll('.star, .rating-star');
+    
+    stars.forEach((star, index) => {
+      const starElement = star as HTMLElement;
+      if (index < rating) {
+        starElement.classList.add('hover-preview');
+      } else {
+        starElement.classList.remove('hover-preview');
+      }
+    });
+  });
+  
+  // Auch Player-Rating-Container für diesen Song hervorheben
+  const playerRatings = document.querySelectorAll(`[id^="player-rating-"]`);
+  playerRatings.forEach(playerRating => {
+    const stars = playerRating.querySelectorAll('.star, .rating-star');
+    // Prüfen ob dieser Player den Song hat
+    const playerId = playerRating.id.split('-')[2]; // z.B. "a" aus "player-rating-a"
+    const audio = document.getElementById(`audio-${playerId}`) as HTMLAudioElement;
+    
+    if (audio && audio.dataset.songId === songId) {
+      stars.forEach((star, index) => {
+        const starElement = star as HTMLElement;
+        if (index < rating) {
+          starElement.classList.add('hover-preview');
+        } else {
+          starElement.classList.remove('hover-preview');
+        }
+      });
     }
   });
 }
 
-// Stern-Highlight zur�cksetzen
+// Stern-Highlight zurücksetzen
 function resetStarHighlight(songId: string) {
-  const stars = document.querySelectorAll(`[data-song-id="${songId}"] .star`);
-  stars.forEach(star => {
-    star.classList.remove('hover-preview');
+  // Alle Rating-Container für diesen Song finden
+  const ratingContainers = document.querySelectorAll(`[data-song-id="${songId}"]`);
+  
+  ratingContainers.forEach(container => {
+    const stars = container.querySelectorAll('.star, .rating-star');
+    stars.forEach(star => {
+      star.classList.remove('hover-preview');
+    });
+  });
+  
+  // Auch Player-Rating-Container für diesen Song zurücksetzen
+  const playerRatings = document.querySelectorAll(`[id^="player-rating-"]`);
+  playerRatings.forEach(playerRating => {
+    const stars = playerRating.querySelectorAll('.star, .rating-star');
+    // Prüfen ob dieser Player den Song hat
+    const playerId = playerRating.id.split('-')[2]; // z.B. "a" aus "player-rating-a"
+    const audio = document.getElementById(`audio-${playerId}`) as HTMLAudioElement;
+    
+    if (audio && audio.dataset.songId === songId) {
+      stars.forEach(star => {
+        star.classList.remove('hover-preview');
+      });
+    }
   });
 }
 
