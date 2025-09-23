@@ -14,8 +14,10 @@ dist-ssr
 
 # Environment variables
 .env
+.env.*
 .env.docker
 .env.docker.*
+.env.backup
 
 # Editor directories and files
 .github
