@@ -4465,7 +4465,9 @@ body {
 
 /* Media Sections - Optimized for compact header */
 .media-section {
-  margin-bottom: 1.2rem; /* Further reduced for compact design */
+  margin-bottom: 0.8rem; /* Weiter reduziert von 1.2rem auf 0.8rem */
+  overflow: hidden; /* Verhindert Überlauf */
+  height: auto; /* Automatische Höhe basierend auf Inhalt */
 }
 
 .media-section:first-child {
@@ -4473,14 +4475,14 @@ body {
 }
 
 .section-title {
-  font-size: 1.2rem;
+  font-size: 1.1rem; /* Kleiner von 1.2rem auf 1.1rem */
   font-weight: 700;
   color: #fff;
-  margin-bottom: 0.75rem; /* Reduziert von 1rem */
+  margin-bottom: 0.5rem; /* Reduziert von 0.75rem auf 0.5rem */
   padding-left: 0.5rem;
   border-left: 3px solid #00ff88;
   background: linear-gradient(90deg, rgba(0, 255, 136, 0.1) 0%, transparent 100%);
-  padding: 0.4rem 0 0.4rem 1rem; /* Reduziertes padding */
+  padding: 0.3rem 0 0.3rem 1rem; /* Reduziertes padding von 0.4rem auf 0.3rem */
 }
 
 /* Horizontal Scrolling Lists */
@@ -5725,37 +5727,48 @@ body {
 
 /* Album Cards - Quadratisch und einheitlich */
 .album-card {
-  width: 180px;
-  min-width: 180px;
-  max-width: 180px;
+  width: 135px !important; /* Verkleinert von 180px auf 135px (25% kleiner) */
+  min-width: 135px !important;
+  max-width: 135px !important;
   height: auto; /* Höhe wird durch Content bestimmt */
-  flex-shrink: 0;
+  flex-shrink: 0 !important;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
   padding: 0;
   transition: all 0.2s ease;
   overflow: hidden;
+  white-space: nowrap; /* Verhindert Textumbruch in der Karte */
+  display: flex; /* Flex statt inline-block für bessere Kontrolle */
+  flex-direction: column; /* Vertikal angeordnet */
+  align-items: center; /* Zentriert */
 }
 
 /* Library Album Cover - Spezifisch für Browse/Search Bereiche */
 .library-album-cover {
-  width: 180px;
-  height: 180px; /* Gleiche Höhe wie Breite für perfekte Quadrate */
+  width: 135px;
+  height: 135px; /* Gleiche Höhe wie Breite für perfekte Quadrate */
   border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 12px;
+  margin-bottom: 8px; /* Reduziert von 12px auf 8px */
   position: relative;
   background: rgba(255, 255, 255, 0.05);
   flex-shrink: 0;
 }
 
 .library-album-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  transition: transform 0.2s ease;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  transition: transform 0.2s ease !important;
+  /* Verhindere Drag für Library-Images um Scroll-Konflikt zu vermeiden */
+  -webkit-user-drag: none !important;
+  -khtml-user-drag: none !important;
+  -moz-user-drag: none !important;
+  -o-user-drag: none !important;
+  user-drag: none !important;
+  pointer-events: none !important; /* Verhindere auch andere Pointer-Events auf dem Image */
 }
 
 .music-card:hover .library-album-cover img,
@@ -5776,23 +5789,27 @@ body {
 }
 
 .album-title {
-  font-size: 14px;
+  font-size: 13px; /* Etwas kleiner für kompaktere Darstellung */
   font-weight: 600;
   color: white;
-  margin: 0 0 4px 0;
-  line-height: 1.3;
+  margin: 0 0 3px 0; /* Reduziert von 4px auf 3px */
+  line-height: 1.2; /* Reduziert von 1.3 auf 1.2 */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 0 8px; /* Etwas Innenabstand für bessere Lesbarkeit */
+  text-align: center; /* Zentriert für einheitliches Layout */
 }
 
 .album-artist {
-  font-size: 13px;
+  font-size: 12px; /* Etwas kleiner von 13px auf 12px */
   color: rgba(255, 255, 255, 0.7);
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 0 8px; /* Etwas Innenabstand für bessere Lesbarkeit */
+  text-align: center; /* Zentriert für einheitliches Layout */
 }
 
 /* Artist Cards */
@@ -6016,24 +6033,37 @@ body {
 
 /* Horizontal Scroll Containers */
 .horizontal-scroll {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 8px 0 16px 0;
+  display: flex !important;
+  gap: 10px; /* Reduziert von 16px auf 10px */
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 6px 0 12px 0; /* Reduziert von 8px/16px auf 6px/12px */
   scroll-behavior: smooth;
   cursor: grab;
   user-select: none;
+  white-space: nowrap !important; /* Verhindert Umbruch */
+  flex-wrap: nowrap !important; /* Keine Umbrüche */
+  align-items: flex-start; /* Alles an der Oberseite ausrichten */
+  height: auto; /* Automatische Höhe basierend auf Inhalt */
+  max-height: 200px; /* Maximale Höhe um Überlauf zu verhindern */
   /* Verstecke Scrollbar standardmäßig */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge */
 }
 
-/* Webkit Scrollbar verstecken */
+/* Webkit Scrollbar standardmäßig verstecken aber funktionsfähig lassen */
 .horizontal-scroll::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+  height: 8px;
+  background: transparent;
+}
+
+.horizontal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.horizontal-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
 }
 
 /* Zeige Scrollbar nur bei Hover über den Container */
@@ -6042,14 +6072,8 @@ body {
   -ms-overflow-style: auto; /* IE/Edge */
 }
 
-.horizontal-scroll:hover::-webkit-scrollbar {
-  height: 8px;
-  display: block;
-}
-
 .horizontal-scroll:hover::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
 }
 
 .horizontal-scroll:hover::-webkit-scrollbar-thumb {
@@ -6069,6 +6093,12 @@ body {
 
 .horizontal-scroll.dragging * {
   pointer-events: none; /* Verhindert Klicks während des Draggings */
+}
+
+/* Hover-Effekte nur wenn nicht gedraggt wird */
+.horizontal-scroll:not(.dragging) .album-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* Vertical Song List Container */
@@ -6094,22 +6124,6 @@ body {
   margin-top: 0;
 }
 
-/* Responsive Grid for larger screens */
-@media (min-width: 1200px) {
-  .horizontal-scroll {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 24px;
-    overflow: visible;
-  }
-  
-  .album-card,
-  .artist-card {
-    width: auto;
-    min-width: auto;
-  }
-}
-
 /* ===== END MODERN CARDS ===== */
 
 /* Clickable item effects */
@@ -6125,6 +6139,25 @@ body {
 
 .clickable:active {
   transform: translateY(0);
+}
+
+/* Clickable Artist Names */
+.clickable-artist {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px; /* Negative margins to compensate padding */
+}
+
+.clickable-artist:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.clickable-artist:active {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Library Login Hint */

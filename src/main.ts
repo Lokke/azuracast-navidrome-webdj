@@ -3375,19 +3375,27 @@ function addSongClickListeners(container: Element) {
 
 // Album Click Listeners hinzuf�gen
 function addAlbumClickListeners(container: Element) {
-  // Support both modern and legacy album items
-  const albumItems = container.querySelectorAll('.album-item, .album-item-modern');
+  // Support both modern library and legacy album items
+  const albumItems = container.querySelectorAll('.album-item, .album-item-modern, .album-card.clickable');
   console.log(`Adding album click listeners to ${albumItems.length} albums in container:`, container);
   
   albumItems.forEach((item, index) => {
     const albumId = (item as HTMLElement).dataset.albumId;
     console.log(`Setting up album ${index}: ID=${albumId}`);
     
+    // Check if the container is being dragged to prevent conflicts
+    const scrollContainer = item.closest('.horizontal-scroll');
+    
     // Entferne vorherige Listener falls vorhanden
     const clonedItem = item.cloneNode(true);
     item.parentNode?.replaceChild(clonedItem, item);
     
     clonedItem.addEventListener('click', async (e) => {
+      // Don't handle click if we're in drag mode
+      if (scrollContainer && scrollContainer.classList.contains('dragging')) {
+        return;
+      }
+      
       // Check if clicked on play button - handle differently
       const target = e.target as HTMLElement;
       if (target.closest('.album-play-button')) {
@@ -5902,14 +5910,21 @@ class LibraryBrowser {
     const content = document.getElementById('library-content')!;
     content.innerHTML = `
       <div class="media-section">
-        <h3 class="section-title">Recently Added Albums</h3>
+        <h3 class="section-title">recently added albums</h3>
         <div class="horizontal-scroll" id="recent-albums">
           <div class="loading-placeholder">Loading recently added albums...</div>
         </div>
       </div>
 
       <div class="media-section">
-        <h3 class="section-title">Random Albums</h3>
+        <h3 class="section-title">most played albums</h3>
+        <div class="horizontal-scroll" id="most-played-albums">
+          <div class="loading-placeholder">Loading most played albums...</div>
+        </div>
+      </div>
+
+      <div class="media-section">
+        <h3 class="section-title">random albums</h3>
         <div class="horizontal-scroll" id="random-albums">
           <div class="loading-placeholder">Loading random albums...</div>
         </div>
@@ -5985,11 +6000,14 @@ class LibraryBrowser {
         
         // Add event listeners for album cards
         albumsContainer.querySelectorAll('[data-album-id]').forEach(card => {
-          card.addEventListener('click', () => {
-            const albumId = card.getAttribute('data-album-id');
-            const album = albums.find(a => a.id === albumId);
-            if (album) {
-              libraryBrowser.showAlbum(album);
+          card.addEventListener('click', (e) => {
+            // Nur klicken wenn nicht gedraggt wird
+            if (!albumsContainer.classList.contains('dragging')) {
+              const albumId = card.getAttribute('data-album-id');
+              const album = albums.find(a => a.id === albumId);
+              if (album) {
+                libraryBrowser.showAlbum(album);
+              }
             }
           });
         });
@@ -6167,11 +6185,14 @@ class LibraryBrowser {
         
         // Add event listeners for album cards
         albumContainer.querySelectorAll('[data-album-id]').forEach(card => {
-          card.addEventListener('click', () => {
-            const albumId = card.getAttribute('data-album-id');
-            const album = results.album?.find(a => a.id === albumId);
-            if (album) {
-              libraryBrowser.showAlbum(album);
+          card.addEventListener('click', (e) => {
+            // Nur klicken wenn nicht gedraggt wird
+            if (!albumContainer.classList.contains('dragging')) {
+              const albumId = card.getAttribute('data-album-id');
+              const album = results.album?.find(a => a.id === albumId);
+              if (album) {
+                libraryBrowser.showAlbum(album);
+              }
             }
           });
         });
@@ -6209,8 +6230,9 @@ class LibraryBrowser {
     if (!openSubsonicClient) return;
 
     try {
-      const [recentAlbums, randomAlbums, randomArtists] = await Promise.all([
+      const [recentAlbums, mostPlayedAlbums, randomAlbums, randomArtists] = await Promise.all([
         openSubsonicClient.getNewestAlbums(20), // Uses getAlbumList2 with type=newest
+        openSubsonicClient.getAlbumList2('frequent', 20), // Uses getAlbumList2 with type=frequent
         openSubsonicClient.getRandomAlbums(20), // Uses getAlbumList2 with type=random
         openSubsonicClient.getRandomArtists(20)
       ]);
@@ -6224,7 +6246,7 @@ class LibraryBrowser {
               <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
             </div>
             <h4 class="album-title">${escapeHtml(album.name)}</h4>
-            <p class="album-artist">${escapeHtml(album.artist)}</p>
+            <p class="album-artist clickable-artist" data-artist-name="${escapeHtml(album.artist)}" data-artist-id="${album.artistId || ''}">${escapeHtml(album.artist)}</p>
           </div>
         `).join('');
         
@@ -6236,11 +6258,48 @@ class LibraryBrowser {
         
         // Add event listeners for recent album cards
         recentContainer.querySelectorAll('[data-album-id]').forEach(card => {
-          card.addEventListener('click', () => {
-            const albumId = card.getAttribute('data-album-id');
-            const album = recentAlbums.find(a => a.id === albumId);
-            if (album) {
-              libraryBrowser.showAlbum(album);
+          card.addEventListener('click', (e) => {
+            // Nur klicken wenn nicht gedraggt wird
+            if (!recentContainer.classList.contains('dragging')) {
+              const albumId = card.getAttribute('data-album-id');
+              const album = recentAlbums.find(a => a.id === albumId);
+              if (album) {
+                libraryBrowser.showAlbum(album);
+              }
+            }
+          });
+        });
+      }
+
+      // Most Played Albums
+      const mostPlayedContainer = document.getElementById('most-played-albums');
+      if (mostPlayedContainer && mostPlayedAlbums.length > 0) {
+        const albumsHtml = mostPlayedAlbums.map(album => `
+          <div class="album-card clickable" data-album-id="${album.id}">
+            <div class="library-album-cover">
+              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+            </div>
+            <h4 class="album-title">${escapeHtml(album.name)}</h4>
+            <p class="album-artist clickable-artist" data-artist-name="${escapeHtml(album.artist)}" data-artist-id="${album.artistId || ''}">${escapeHtml(album.artist)}</p>
+          </div>
+        `).join('');
+        
+        mostPlayedContainer.className = 'horizontal-scroll';
+        mostPlayedContainer.innerHTML = albumsHtml;
+        
+        // Add drag scrolling to container
+        this.addDragScrolling(mostPlayedContainer as HTMLElement);
+        
+        // Add event listeners for most played album cards
+        mostPlayedContainer.querySelectorAll('[data-album-id]').forEach(card => {
+          card.addEventListener('click', (e) => {
+            // Nur klicken wenn nicht gedraggt wird
+            if (!mostPlayedContainer.classList.contains('dragging')) {
+              const albumId = card.getAttribute('data-album-id');
+              const album = mostPlayedAlbums.find(a => a.id === albumId);
+              if (album) {
+                libraryBrowser.showAlbum(album);
+              }
             }
           });
         });
@@ -6255,7 +6314,7 @@ class LibraryBrowser {
               <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
             </div>
             <h4 class="album-title">${escapeHtml(album.name)}</h4>
-            <p class="album-artist">${escapeHtml(album.artist)}</p>
+            <p class="album-artist clickable-artist" data-artist-name="${escapeHtml(album.artist)}" data-artist-id="${album.artistId || ''}">${escapeHtml(album.artist)}</p>
           </div>
         `).join('');
         
@@ -6267,11 +6326,14 @@ class LibraryBrowser {
         
         // Add event listeners for random album cards
         randomContainer.querySelectorAll('[data-album-id]').forEach(card => {
-          card.addEventListener('click', () => {
-            const albumId = card.getAttribute('data-album-id');
-            const album = randomAlbums.find(a => a.id === albumId);
-            if (album) {
-              libraryBrowser.showAlbum(album);
+          card.addEventListener('click', (e) => {
+            // Nur klicken wenn nicht gedraggt wird
+            if (!randomContainer.classList.contains('dragging')) {
+              const albumId = card.getAttribute('data-album-id');
+              const album = randomAlbums.find(a => a.id === albumId);
+              if (album) {
+                libraryBrowser.showAlbum(album);
+              }
             }
           });
         });
@@ -6316,20 +6378,81 @@ class LibraryBrowser {
     
     // Nach dem Laden der Inhalte: Drag-Scroll-Funktionalität zu allen horizontalen Containern hinzufügen
     this.initializeHorizontalScrollDragging();
+    
+    // Artist-Namen klickbar machen
+    this.initializeArtistClickListeners();
   }
 
   // Drag-Scroll-Funktionalität für horizontale Container
   private initializeHorizontalScrollDragging() {
+    // Finde alle horizontalen Scroll-Container
     const scrollContainers = document.querySelectorAll('.horizontal-scroll');
+    console.log(`Initializing drag scrolling for ${scrollContainers.length} containers`);
     
-    scrollContainers.forEach(container => {
+    scrollContainers.forEach((container, index) => {
+      console.log(`Adding drag scrolling to container ${index}:`, container);
       this.addDragScrolling(container as HTMLElement);
     });
+
+    // Observer für dynamisch hinzugefügte Container
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node as Element;
+            // Prüfe ob das Element selbst ein horizontal-scroll Container ist
+            if (element.classList.contains('horizontal-scroll')) {
+              console.log('Adding drag scrolling to dynamically added container:', element);
+              this.addDragScrolling(element as HTMLElement);
+            }
+            // Prüfe auch alle Kinder des Elements
+            const childContainers = element.querySelectorAll('.horizontal-scroll');
+            childContainers.forEach(child => {
+              console.log('Adding drag scrolling to dynamically added child container:', child);
+              this.addDragScrolling(child as HTMLElement);
+            });
+          }
+        });
+      });
+    });
+
+    // Beobachte Änderungen im Library Content
+    const libraryContent = document.getElementById('library-content');
+    if (libraryContent) {
+      observer.observe(libraryContent, { childList: true, subtree: true });
+    }
   }
 
   private addDragScrolling(container: HTMLElement) {
     // Verwende die globale Funktion
     addDragScrollingToContainer(container);
+  }
+
+  private initializeArtistClickListeners() {
+    // Finde alle klickbaren Artist-Namen
+    const clickableArtists = document.querySelectorAll('.clickable-artist');
+    console.log(`Initializing artist click listeners for ${clickableArtists.length} artists`);
+    
+    clickableArtists.forEach(artistElement => {
+      artistElement.addEventListener('click', (e) => {
+        e.stopPropagation(); // Verhindert Album-Click
+        
+        const artistName = artistElement.getAttribute('data-artist-name');
+        const artistId = artistElement.getAttribute('data-artist-id');
+        
+        if (artistName) {
+          // Erstelle ein Artist-Objekt für den LibraryBrowser
+          const artist = {
+            id: artistId || artistName, // Fallback auf Name falls keine ID
+            name: artistName,
+            albumCount: 0 // Wird vom Server aktualisiert
+          };
+          
+          console.log(`🎤 Artist clicked: "${artistName}"`);
+          libraryBrowser.showArtist(artist);
+        }
+      });
+    });
   }
 }
 
@@ -6338,54 +6461,103 @@ let libraryBrowser: LibraryBrowser;
 
 // Globale Drag-Scroll-Funktionalität für horizontale Container
 function addDragScrollingToContainer(container: HTMLElement) {
+  console.log('Setting up drag scrolling for container:', container);
+  
+  // Prüfe ob bereits initialisiert
+  if (container.dataset.dragScrollInitialized === 'true') {
+    console.log('Drag scrolling already initialized for this container');
+    return;
+  }
+  
   let isDown = false;
   let startX = 0;
   let scrollLeft = 0;
+  let hasMoved = false; // Tracks if actual dragging occurred
+
+  // Markiere als initialisiert
+  container.dataset.dragScrollInitialized = 'true';
 
   container.addEventListener('mousedown', (e: MouseEvent) => {
     isDown = true;
-    container.classList.add('dragging');
+    hasMoved = false;
+    // NICHT sofort dragging-Klasse setzen - erst bei tatsächlicher Bewegung
     startX = e.pageX - container.offsetLeft;
     scrollLeft = container.scrollLeft;
-    e.preventDefault(); // Verhindert Textauswahl
+    // e.preventDefault() NICHT hier - sonst werden Click-Events blockiert
   });
 
   container.addEventListener('mouseleave', () => {
     isDown = false;
+    hasMoved = false;
     container.classList.remove('dragging');
   });
 
   container.addEventListener('mouseup', () => {
     isDown = false;
-    container.classList.remove('dragging');
+    // Nur verzögertes Entfernen wenn tatsächlich gedraggt wurde
+    if (hasMoved) {
+      setTimeout(() => {
+        container.classList.remove('dragging');
+        hasMoved = false;
+      }, 50); // Längere Verzögerung für bessere Erkennung
+    } else {
+      // Sofort entfernen wenn nicht gedraggt wurde
+      container.classList.remove('dragging');
+      hasMoved = false;
+    }
   });
 
   container.addEventListener('mousemove', (e: MouseEvent) => {
     if (!isDown) return;
-    e.preventDefault();
+    
     const x = e.pageX - container.offsetLeft;
     const walk = (x - startX) * 2; // Scroll-Geschwindigkeit (2x)
-    container.scrollLeft = scrollLeft - walk;
+    
+    // Nur bei tatsächlicher Bewegung als Drag behandeln
+    if (Math.abs(walk) > 8) { // Erhöhte Schwelle für bessere Unterscheidung
+      if (!hasMoved) {
+        // Erst jetzt als Drag kennzeichnen
+        hasMoved = true;
+        container.classList.add('dragging');
+        e.preventDefault();
+      }
+      container.scrollLeft = scrollLeft - walk;
+    }
   });
 
   // Touch-Support für mobile Geräte
   container.addEventListener('touchstart', (e: TouchEvent) => {
     isDown = true;
-    container.classList.add('dragging');
+    hasMoved = false;
     startX = e.touches[0].pageX - container.offsetLeft;
     scrollLeft = container.scrollLeft;
   });
 
   container.addEventListener('touchend', () => {
     isDown = false;
-    container.classList.remove('dragging');
+    if (hasMoved) {
+      setTimeout(() => {
+        container.classList.remove('dragging');
+        hasMoved = false;
+      }, 50);
+    } else {
+      container.classList.remove('dragging');
+      hasMoved = false;
+    }
   });
 
   container.addEventListener('touchmove', (e: TouchEvent) => {
     if (!isDown) return;
     const x = e.touches[0].pageX - container.offsetLeft;
     const walk = (x - startX) * 2;
-    container.scrollLeft = scrollLeft - walk;
+    
+    if (Math.abs(walk) > 8) {
+      if (!hasMoved) {
+        hasMoved = true;
+        container.classList.add('dragging');
+      }
+      container.scrollLeft = scrollLeft - walk;
+    }
   });
 }
 
@@ -6447,15 +6619,33 @@ class MediaContainer {
     if (!this.container) return;
 
     this.container.innerHTML = '';
-    this.container.className = `media-container ${this.config.displayMode}-mode ${this.config.itemType}-type`;
+    
+    // Behalte wichtige CSS-Klassen bei (wie horizontal-scroll)
+    const existingClasses = this.container.className.split(' ');
+    const preservedClasses = existingClasses.filter(cls => 
+      cls === 'horizontal-scroll' || cls.startsWith('horizontal-')
+    );
+    
+    this.container.className = [
+      ...preservedClasses,
+      'media-container', 
+      `${this.config.displayMode}-mode`, 
+      `${this.config.itemType}-type`
+    ].join(' ');
 
     this.config.items.forEach(item => {
       const element = this.createMediaElement(item);
       this.container.appendChild(element);
     });
 
-    // Enable drag scrolling after rendering
-    this.enableSmartDragScrolling();
+    // Verwende die globale Drag-Scrolling Funktion für horizontale Container
+    if (this.container.classList.contains('horizontal-scroll')) {
+      console.log('Adding global drag scrolling to horizontal scroll container:', this.container);
+      addDragScrollingToContainer(this.container);
+    } else {
+      // Fallback für Grid-Container
+      this.enableSmartDragScrolling();
+    }
     
     // Add rating handlers for songs
     this.setupSongRatingHandlers();

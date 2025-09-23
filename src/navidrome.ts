@@ -32,6 +32,7 @@ interface OpenSubsonicSong {
   genre?: string;
   coverArt?: string;
   userRating?: number;  // 1-5 stars rating
+  playCount?: number;  // Play count für Statistics
   artists?: OpenSubsonicArtistRef[];  // Array von Artists mit ID und Name
   albumArtists?: OpenSubsonicArtistRef[];  // Array von Album Artists
   displayArtist?: string;  // Anzeige-String für Artists
@@ -638,7 +639,7 @@ class SubsonicApiClient {
     }
   }
 
-  // Get newest albums - using Feishin's approach with getAlbumList2
+  // Get newest albums using getAlbumList2
   async getNewestAlbums(size = 20): Promise<OpenSubsonicAlbum[]> {
     try {
       console.log('🔗 API Call: getAlbumList2 with type=newest, size=' + size);
@@ -721,6 +722,146 @@ class SubsonicApiClient {
   // Tracks eines Albums abrufen (Alias für getAlbumSongs)
   async getAlbumTracks(albumId: string): Promise<OpenSubsonicSong[]> {
     return this.getAlbumSongs(albumId);
+  }
+
+  // Spezielle API-Methoden für Ihr System
+  async getMostPlayedSongs(count: number = 100): Promise<OpenSubsonicSong[]> {
+    try {
+      console.log(`🎵 Loading most played songs (count: ${count})`);
+      
+      if (!this.auth) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Verwende getRandomSongs und filtere nach playCount als Fallback
+      // Da getTopSongs einen artist Parameter erfordert
+      const url = new URL(`${this.config.serverUrl}/rest/getRandomSongs`);
+      url.searchParams.append('u', this.config.username);
+      url.searchParams.append('t', this.auth.token);
+      url.searchParams.append('s', this.auth.salt);
+      url.searchParams.append('v', '1.16.1');
+      url.searchParams.append('c', 'webdj');
+      url.searchParams.append('f', 'json');
+      url.searchParams.append('size', (count * 3).toString()); // Mehr laden um zu filtern
+      
+      const response = await fetch(url.toString());
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data['subsonic-response']?.status !== 'ok') {
+        throw new Error(data['subsonic-response']?.error?.message || 'API error');
+      }
+
+      let songs = data['subsonic-response']?.randomSongs?.song || [];
+      
+      // Sortiere nach playCount (falls verfügbar) und limitiere
+      songs = songs
+        .filter((song: any) => song.playCount && song.playCount > 0)
+        .sort((a: any, b: any) => (b.playCount || 0) - (a.playCount || 0))
+        .slice(0, count);
+      
+      // Falls nicht genug Songs mit playCount, fülle mit restlichen auf
+      if (songs.length < count) {
+        const remainingSongs = data['subsonic-response']?.randomSongs?.song || [];
+        const additionalSongs = remainingSongs
+          .filter((song: any) => !songs.find(s => s.id === song.id))
+          .slice(0, count - songs.length);
+        songs = [...songs, ...additionalSongs];
+      }
+      
+      console.log(`📦 Most played songs loaded: ${songs.length} songs`);
+      
+      // Transformiere die Daten in OpenSubsonicSong Format
+      return songs.map((song: any) => ({
+        id: song.id,
+        title: song.title || song.name,
+        artist: song.artist || song.artistName || 'Unknown Artist',
+        album: song.album || song.albumName || 'Unknown Album',
+        albumId: song.albumId,
+        duration: song.duration || 0,
+        size: song.size || 0,
+        suffix: song.suffix || song.format || 'mp3',
+        bitRate: song.bitRate || 0,
+        year: song.year,
+        genre: song.genre,
+        coverArt: song.coverArt || song.albumArt,
+        userRating: song.userRating,
+        playCount: song.playCount
+      }));
+      
+    } catch (error) {
+      console.error('Failed to load most played songs:', error);
+      return [];
+    }
+  }
+
+  async getTopRatedSongs(count: number = 500): Promise<OpenSubsonicSong[]> {
+    try {
+      console.log(`⭐ Loading top rated songs (count: ${count})`);
+      
+      if (!this.auth) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Für Top Rated verwenden wir getRandomSongs als Fallback
+      // Da nicht alle Server getTopSongs unterstützen
+      const url = new URL(`${this.config.serverUrl}/rest/getRandomSongs`);
+      url.searchParams.append('u', this.config.username);
+      url.searchParams.append('t', this.auth.token);
+      url.searchParams.append('s', this.auth.salt);
+      url.searchParams.append('v', '1.16.1');
+      url.searchParams.append('c', 'webdj');
+      url.searchParams.append('f', 'json');
+      url.searchParams.append('size', count.toString());
+      
+      const response = await fetch(url.toString());
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data['subsonic-response']?.status !== 'ok') {
+        throw new Error(data['subsonic-response']?.error?.message || 'API error');
+      }
+
+      let songs = data['subsonic-response']?.randomSongs?.song || [];
+      
+      // Filtere Songs mit Rating > 0 und sortiere nach Rating
+      songs = songs
+        .filter((song: any) => song.userRating && song.userRating > 0)
+        .sort((a: any, b: any) => (b.userRating || 0) - (a.userRating || 0))
+        .slice(0, Math.min(count, 100)); // Limitiere auf 100 um Performance zu gewährleisten
+      
+      console.log(`📦 Top rated songs loaded: ${songs.length} songs`);
+      
+      // Transformiere die Daten in OpenSubsonicSong Format
+      return songs.map((song: any) => ({
+        id: song.id,
+        title: song.title || song.name,
+        artist: song.artist || song.artistName || 'Unknown Artist',
+        album: song.album || song.albumName || 'Unknown Album',
+        albumId: song.albumId,
+        duration: song.duration || 0,
+        size: song.size || 0,
+        suffix: song.suffix || song.format || 'mp3',
+        bitRate: song.bitRate || 0,
+        year: song.year,
+        genre: song.genre,
+        coverArt: song.coverArt || song.albumArt,
+        userRating: song.userRating,
+        playCount: song.playCount
+      }));
+      
+    } catch (error) {
+      console.error('Failed to load top rated songs:', error);
+      return [];
+    }
   }
 }
 
