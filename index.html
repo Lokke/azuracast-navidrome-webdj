@@ -29,26 +29,42 @@
         <div class="center-controls">
           <!-- Login Form Overlay -->
           <div class="OpenSubsonic-login" id="OpenSubsonic-login">
-            <!-- Login Label like Player Labels -->
-            <div class="login-label">
-              <span class="login-label-text">Login</span>
+            <div class="login-form">
+              <!-- OpenSubsonic Section -->
+              <div class="form-group" id="opensubsonic-section">
+                <h4>OpenSubsonic (Music Library)</h4>
+                <div class="login-input-container">
+                  <input type="text" id="OpenSubsonic-server" placeholder="OpenSubsonic Server URL">
+                </div>
+                <div class="login-input-container">
+                  <input type="text" id="OpenSubsonic-username" placeholder="OpenSubsonic Username">
+                </div>
+                <div class="login-input-container">
+                  <input type="password" id="OpenSubsonic-password" placeholder="OpenSubsonic Password">
+                </div>
+              </div>
+              
+              <!-- Stream Section -->
+              <div class="form-group" id="stream-section">
+                <h4>Stream Server (AzuraCast/Icecast)</h4>
+                <div class="login-input-container">
+                  <input type="text" id="stream-server-url" placeholder="Stream Server URL">
+                </div>
+                <div class="login-input-container">
+                  <input type="text" id="stream-username" placeholder="Stream Username">
+                </div>
+                <div class="login-input-container">
+                  <input type="password" id="stream-password" placeholder="Stream Password">
+                </div>
+              </div>
             </div>
             
-            <div class="login-form">
-              <div class="login-input-container">
-                <input type="text" id="OpenSubsonic-server" placeholder="Server URL" value="https://musik.radio-endstation.de">
-              </div>
-              <div class="login-input-container">
-                <input type="text" id="OpenSubsonic-username" placeholder="Username">
-              </div>
-              <div class="login-input-container">
-                <input type="password" id="OpenSubsonic-password" placeholder="Password">
-              </div>
-              <div class="login-button-container">
-                <button type="button" id="OpenSubsonic-login-btn">
-                  <span class="material-icons">login</span>
-                </button>
-              </div>
+            <!-- Login Button outside the form -->
+            <div class="login-button-container">
+              <button type="button" id="OpenSubsonic-login-btn">
+                <span class="material-icons">login</span>
+                <span>Connect</span>
+              </button>
             </div>
           </div>
           
@@ -115,67 +131,6 @@
               </div>
             </div>
           </div>
-          
-          <!-- Stream Configuration Panel -->
-          <div class="stream-config-panel" id="stream-config-panel" style="display: none;">
-            <div class="config-form">
-              <h3>Streaming Configuration</h3>
-              <div class="config-group">
-                <label for="stream-server-url">Server URL:</label>
-                <input type="text" id="stream-server-url" placeholder="http://localhost:8000" value="http://localhost:8000">
-              </div>
-              <div class="config-group">
-                <label for="stream-server-type">Server Type:</label>
-                <select id="stream-server-type">
-                  <option value="icecast" selected>Icecast</option>
-                  <option value="shoutcast">Shoutcast</option>
-                </select>
-              </div>
-              <div class="config-group mount-point-group">
-                <label for="mount-point">Mount Point (Icecast only):</label>
-                <input type="text" id="mount-point" placeholder="/live" value="/live">
-                <small>Leave empty for Shoutcast v1</small>
-              </div>
-              <div class="config-group">
-                <label for="stream-username">Username:</label>
-                <input type="text" id="stream-username" placeholder="Username (optional for some servers)" value="test">
-              </div>
-              <div class="config-group">
-                <label for="stream-password">Password:</label>
-                <input type="password" id="stream-password" placeholder="Password" value="hackme">
-              </div>
-              <div class="config-group">
-                <label for="stream-bitrate">Bitrate (kbps):</label>
-                <select id="stream-bitrate">
-                  <option value="64">64 kbps</option>
-                  <option value="96">96 kbps</option>
-                  <option value="128" selected>128 kbps</option>
-                  <option value="160">160 kbps</option>
-                  <option value="192">192 kbps</option>
-                  <option value="256">256 kbps</option>
-                  <option value="320">320 kbps</option>
-                </select>
-              </div>
-              <div class="config-group">
-                <label for="stream-format">Audio Format:</label>
-                <select id="stream-format">
-                  <option value="mp3" selected>MP3</option>
-                  <option value="aac">AAC</option>
-                </select>
-                <small>Note: Browser converts to AAC/Opus, server can transcode to MP3</small>
-              </div>
-              <div class="config-group">
-                <div id="proxy-status" style="display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(76, 175, 80, 0.2); border-radius: 4px;">
-                  <span class="material-icons" style="color: #4CAF50; font-size: 16px;">security</span>
-                  <span style="color: #4CAF50; font-size: 12px; font-weight: 500;">CORS Proxy Active</span>
-                </div>
-              </div>
-              <div class="config-buttons">
-                <button id="save-stream-config">Save</button>
-                <button id="cancel-stream-config">Cancel</button>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Player C (Bottom Left) -->
@@ -224,6 +179,39 @@
           <div class="queue-panel">
             <div class="queue-items" id="queue-list"></div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stream Configuration Panel - Top Level Overlay -->
+    <div class="stream-config-panel" id="stream-config-panel" style="display: none;">
+      <div class="config-form">
+        <h3>Streaming Configuration</h3>
+        <div class="config-group">
+          <label for="stream-server-url">Server URL:</label>
+          <input type="text" id="stream-server-url" placeholder="http://localhost:8000" value="">
+        </div>
+        <div class="config-group">
+          <label for="stream-username">Username:</label>
+          <input type="text" id="stream-username" placeholder="Username (optional)" value="">
+        </div>
+        <div class="config-group">
+          <label for="stream-password">Password:</label>
+          <input type="password" id="stream-password" placeholder="Password" value="">
+        </div>
+        <div class="config-group">
+          <label for="stream-bitrate">Bitrate (kbps):</label>
+          <select id="stream-bitrate">
+            <option value="128">128 kbps</option>
+            <option value="160">160 kbps</option>
+            <option value="192" selected>192 kbps</option>
+            <option value="256">256 kbps</option>
+            <option value="320">320 kbps</option>
+          </select>
+        </div>
+        <div class="config-buttons">
+          <button id="save-stream-config">Save</button>
+          <button id="cancel-stream-config">Cancel</button>
         </div>
       </div>
     </div>

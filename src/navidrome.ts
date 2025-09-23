@@ -768,7 +768,7 @@ class SubsonicApiClient {
       if (songs.length < count) {
         const remainingSongs = data['subsonic-response']?.randomSongs?.song || [];
         const additionalSongs = remainingSongs
-          .filter((song: any) => !songs.find(s => s.id === song.id))
+          .filter((song: any) => !songs.find((s: any) => s.id === song.id))
           .slice(0, count - songs.length);
         songs = [...songs, ...additionalSongs];
       }

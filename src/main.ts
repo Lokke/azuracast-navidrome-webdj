@@ -4,6 +4,22 @@ import WaveSurfer from 'wavesurfer.js';
 
 console.log("SubCaster loaded!");
 
+// Forward declarations for functions used before definition
+declare function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic'): void;
+declare function updateVolumeMeter(meterId: string, level: number): void;
+declare function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement): void;
+declare function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, autoPlay?: boolean): void;
+declare function initializeCrossfader(): void;
+declare function initializePlayerDropZones(): void;
+declare function setupQueueDropZone(): void;
+declare function setupAutoQueueControls(): void;
+declare function clearWaveformInfo(side: 'a' | 'b' | 'c' | 'd'): void;
+declare function clearWaveformBlinking(side: 'a' | 'b' | 'c' | 'd'): void;
+
+// Global variables
+declare let libraryBrowser: any;
+declare let volumeMeterIntervals: { [key: string]: NodeJS.Timeout };
+
 // Global state for search results
 let lastSearchResults: any = null;
 let lastSearchQuery: string = '';
@@ -289,7 +305,7 @@ function getStreamServerUrl(): string {
     const proxyServer = import.meta.env.VITE_PROXY_SERVER || 'http://localhost:3001';
     return `${proxyServer}/stream`;
   } else {
-    return import.meta.env.VITE_STREAM_SERVER || 'http://localhost:8000';
+    return import.meta.env.VITE_STREAM_SERVER || '';
   }
 }
 
@@ -2030,8 +2046,9 @@ async function startDirectStream(): Promise<boolean> {
     const password = useUnifiedLogin ? unifiedPassword : individualPassword;
     
     if (!username || !password) {
-      const missingType = useUnifiedLogin ? 'unified' : 'individual streaming';
-      throw new Error(`Missing ${missingType} credentials: username or password not set in .env`);
+      // Don't show error message if no credentials are set - this is expected on first run
+      console.log('⚠️ Stream credentials not configured - streaming will not be available');
+      return false;
     }
     
     const credentials = btoa(`${username}:${password}`);
@@ -2306,20 +2323,13 @@ function initializeStreamConfigPanel() {
     }
   });
   
-  // Panel schlie�en
+  // Panel schließen
   cancelBtn?.addEventListener('click', () => {
-    loadStreamConfig(); // �nderungen verwerfen
+    loadStreamConfig(); // Änderungen verwerfen
     if (configPanel) {
       configPanel.style.display = 'none';
     }
   });
-  
-  // Server-Type �nderung verwalten
-  const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
-  typeSelect?.addEventListener('change', updateMountPointVisibility);
-  
-  // Initial Mount Point Sichtbarkeit setzen
-  updateMountPointVisibility();
   
   // Panel schlie�en bei Klick au�erhalb
   document.addEventListener('click', (event) => {
@@ -2347,12 +2357,9 @@ function loadStreamConfig() {
   
   // UI-Felder aktualisieren mit aktueller Konfiguration (inkl. .env Werte)
   const urlInput = document.getElementById('stream-server-url') as HTMLInputElement;
-  const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
-  const mountInput = document.getElementById('mount-point') as HTMLInputElement;
   const usernameInput = document.getElementById('stream-username') as HTMLInputElement;
   const passwordInput = document.getElementById('stream-password') as HTMLInputElement;
   const bitrateSelect = document.getElementById('stream-bitrate') as HTMLSelectElement;
-  const formatSelect = document.getElementById('stream-format') as HTMLSelectElement;
   
   // Credential-Logik (Unified oder Individual)
   const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
@@ -2366,11 +2373,7 @@ function loadStreamConfig() {
   
   // Server-Konfiguration aus Environment-Variablen
   const envStreamServer = import.meta.env.VITE_STREAM_SERVER;
-  const envStreamPort = import.meta.env.VITE_STREAM_PORT;
-  const envStreamMount = import.meta.env.VITE_STREAM_MOUNT;
-  
-  // Original Server-URL anzeigen (nicht die Proxy-URL)
-  const originalServerUrl = envStreamServer || 'http://localhost:8000';
+  const originalServerUrl = envStreamServer || '';
   const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
   
   if (urlInput) {
@@ -2381,12 +2384,9 @@ function loadStreamConfig() {
       urlInput.style.borderColor = '#4CAF50';
     }
   }
-  if (typeSelect) typeSelect.value = streamConfig.serverType;
-  if (mountInput) mountInput.value = streamConfig.mountPoint;
   if (usernameInput) usernameInput.value = finalUsername || '';
   if (passwordInput) passwordInput.value = finalPassword || '';
   if (bitrateSelect) bitrateSelect.value = streamConfig.bitrate.toString();
-  if (formatSelect) formatSelect.value = streamConfig.format;
   
   // Server-Konfiguration verstecken wenn in .env definiert
   if (envStreamServer) {
@@ -2394,17 +2394,7 @@ function loadStreamConfig() {
     if (serverGroup) serverGroup.style.display = 'none';
   }
   
-  if (envStreamServer) {
-    const typeGroup = document.querySelector('.config-group:has(#stream-server-type)') as HTMLElement;
-    if (typeGroup) typeGroup.style.display = 'none';
-  }
-  
-  if (envStreamMount) {
-    const mountGroup = document.querySelector('.config-group:has(#mount-point)') as HTMLElement;
-    if (mountGroup) mountGroup.style.display = 'none';
-  }
-  
-  // Felder verstecken wenn bereits gef�llt
+  // Credential-Felder verstecken wenn bereits über .env gefüllt
   if (finalUsername) {
     const usernameGroup = document.querySelector('.config-group:has(#stream-username)') as HTMLElement;
     if (usernameGroup) usernameGroup.style.display = 'none';
@@ -2414,21 +2404,6 @@ function loadStreamConfig() {
     const passwordGroup = document.querySelector('.config-group:has(#stream-password)') as HTMLElement;
     if (passwordGroup) passwordGroup.style.display = 'none';
   }
-  
-  // Unified Login Info in Header anzeigen
-  if (useUnifiedLogin && unifiedUsername) {
-    const configTitle = document.querySelector('#stream-config-panel h3');
-    if (configTitle) {
-      configTitle.textContent = `Streaming Config (Unified: ${unifiedUsername})`;
-      (configTitle as HTMLElement).style.color = '#4CAF50';
-    }
-  }
-  
-  // Mount Point Feld je nach Server-Typ anzeigen/verstecken
-  updateMountPointVisibility();
-  
-  // Proxy-Status-Indikator aktualisieren
-  updateProxyStatusIndicator();
 }
 
 // Proxy-Status-Indikator aktualisieren
@@ -2463,39 +2438,38 @@ function updateProxyStatusIndicator() {
 // Stream-Konfiguration speichern
 function saveStreamConfig() {
   const urlInput = document.getElementById('stream-server-url') as HTMLInputElement;
-  const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
-  const mountInput = document.getElementById('mount-point') as HTMLInputElement;
   const usernameInput = document.getElementById('stream-username') as HTMLInputElement;
   const passwordInput = document.getElementById('stream-password') as HTMLInputElement;
   const bitrateSelect = document.getElementById('stream-bitrate') as HTMLSelectElement;
-  const formatSelect = document.getElementById('stream-format') as HTMLSelectElement;
   
-  // Neue Konfiguration sammeln
-  const newConfig: StreamConfig = {
-    serverUrl: getStreamServerUrl(), // Berechnet automatisch Proxy vs. direkte URL
-    serverType: (typeSelect?.value as 'icecast' | 'shoutcast') || streamConfig.serverType,
-    mountPoint: mountInput?.value || streamConfig.mountPoint,
-    username: usernameInput?.value || streamConfig.username,
-    password: passwordInput?.value || streamConfig.password,
+  // Neue Konfiguration sammeln (nur relevante Parameter)
+  const newConfig: Partial<StreamConfig> = {
     bitrate: parseInt(bitrateSelect?.value) || streamConfig.bitrate,
-    format: (formatSelect?.value as 'mp3' | 'aac') || streamConfig.format,
-    sampleRate: streamConfig.sampleRate // Beibehalten
   };
   
-  // Validierung der urspr�nglichen Server-URL (nicht Proxy)
-  const originalUrl = urlInput?.value || streamConfig.serverUrl;
-  if (!originalUrl || !newConfig.password) {
-    alert('Please fill in server URL and password');
-    return;
+  // Server URL nur übernehmen wenn nicht über .env gesetzt
+  if (urlInput?.value && !import.meta.env.VITE_STREAM_SERVER) {
+    // Hier würde normalerweise die Server URL gesetzt werden
+    // Aber da wir getStreamServerUrl() verwenden, überlassen wir das der Funktion
   }
   
-  if (newConfig.serverType === 'icecast' && !newConfig.mountPoint) {
-    alert('Mount point is required for Icecast');
+  // Username/Password nur übernehmen wenn nicht über .env gesetzt
+  if (usernameInput?.value && !import.meta.env.VITE_STREAM_USERNAME) {
+    newConfig.username = usernameInput.value;
+  }
+  
+  if (passwordInput?.value && !import.meta.env.VITE_STREAM_PASSWORD) {
+    newConfig.password = passwordInput.value;
+  }
+  
+  // Validierung
+  if (!streamConfig.password && !newConfig.password) {
+    alert('Please fill in password');
     return;
   }
   
   // Konfiguration aktualisieren
-  streamConfig = newConfig;
+  streamConfig = { ...streamConfig, ...newConfig };
   
   // In localStorage speichern
   try {
@@ -2517,24 +2491,14 @@ function saveStreamConfig() {
   }
 }
 
-// Mount Point Sichtbarkeit je nach Server-Typ
-function updateMountPointVisibility() {
-  const typeSelect = document.getElementById('stream-server-type') as HTMLSelectElement;
-  const mountGroup = document.querySelector('.mount-point-group') as HTMLElement;
+// Library Initialization
+function initializeLibrary() {
+  console.log('🎵 Initializing Music Library...');
   
-  if (typeSelect && mountGroup) {
-    if (typeSelect.value === 'shoutcast') {
-      mountGroup.style.display = 'none';
-    } else {
-      mountGroup.style.display = 'block';
-    }
-  }
-}
-
   // Tab Navigation
   initializeTabs();
   
-  // Search Funktionalit�t
+  // Search Funktionalität
   initializeSearch();
   
   // Queue Drag & Drop (permanent initialisieren)
@@ -2545,7 +2509,7 @@ function updateMountPointVisibility() {
   
   // Rating-Event-Listeners initialisieren
   initializeRatingListeners();
-});
+}
 
 // Musikbibliothek initialisieren
 async function initializeMusicLibrary() {
@@ -4275,45 +4239,122 @@ function removeFromQueue(index: number) {
 // Globale Funktion f�r HTML onclick
 (window as any).removeFromQueue = removeFromQueue;
 
-// OpenSubsonic Login initialisieren
+// OpenSubsonic Login initialisieren - Dynamic field visibility
 function initializeOpenSubsonicLogin() {
+  console.log('🔐 Initializing dynamic login form...');
+  
   const loginBtn = document.getElementById('OpenSubsonic-login-btn') as HTMLButtonElement;
+  const loginForm = document.getElementById('OpenSubsonic-login') as HTMLElement;
+  const djControls = document.getElementById('dj-controls') as HTMLElement;
+  
+  // OpenSubsonic fields
   const usernameInput = document.getElementById('OpenSubsonic-username') as HTMLInputElement;
   const passwordInput = document.getElementById('OpenSubsonic-password') as HTMLInputElement;
   const serverInput = document.getElementById('OpenSubsonic-server') as HTMLInputElement;
-  const loginForm = document.getElementById('OpenSubsonic-login') as HTMLElement;
-  const djControls = document.getElementById('dj-controls') as HTMLElement;
-  // Note: searchContainer no longer exists - removed with tab system
   
-  // Umgebungsvariablen aus Vite abrufen
-  const envUrl = import.meta.env.VITE_OpenSubsonic_URL;
-  const envUsername = import.meta.env.VITE_OpenSubsonic_USERNAME;
-  const envPassword = import.meta.env.VITE_OpenSubsonic_PASSWORD;
+  // Stream fields
+  const streamServerInput = document.getElementById('stream-server-url') as HTMLInputElement;
+  const streamUsernameInput = document.getElementById('stream-username') as HTMLInputElement;
+  const streamPasswordInput = document.getElementById('stream-password') as HTMLInputElement;
   
-  // Unified Login Konfiguration
+  // Get all possible credentials from environment
+  const envUrl = import.meta.env.VITE_OPENSUBSONIC_URL;
+  const envUsername = import.meta.env.VITE_OPENSUBSONIC_USERNAME;
+  const envPassword = import.meta.env.VITE_OPENSUBSONIC_PASSWORD;
+  
+  // Unified Login Configuration
   const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
   const unifiedUsername = import.meta.env.VITE_UNIFIED_USERNAME;
   const unifiedPassword = import.meta.env.VITE_UNIFIED_PASSWORD;
   
-  // Bestimme finale Credentials (Unified hat Vorrang)
+  // Streaming credentials
+  const streamUsername = import.meta.env.VITE_STREAM_USERNAME;
+  const streamPassword = import.meta.env.VITE_STREAM_PASSWORD;
+  const streamServer = import.meta.env.VITE_STREAM_SERVER;
+  
+  // Determine final credentials (Unified has priority)
   const finalUsername = useUnifiedLogin ? unifiedUsername : envUsername;
   const finalPassword = useUnifiedLogin ? unifiedPassword : envPassword;
+  const finalStreamUsername = useUnifiedLogin ? unifiedUsername : streamUsername;
+  const finalStreamPassword = useUnifiedLogin ? unifiedPassword : streamPassword;
   
-  // Interne Login-Funktion definieren
+  // Pre-fill available values
+  if (serverInput && envUrl) serverInput.value = envUrl;
+  if (usernameInput && finalUsername) usernameInput.value = finalUsername;
+  if (passwordInput && finalPassword) passwordInput.value = finalPassword;
+  if (streamServerInput && streamServer) streamServerInput.value = streamServer;
+  if (streamUsernameInput && finalStreamUsername) streamUsernameInput.value = finalStreamUsername;
+  if (streamPasswordInput && finalStreamPassword) streamPasswordInput.value = finalStreamPassword;
+  
+  // Dynamic form visibility
+  const openSubsonicSection = document.getElementById('opensubsonic-section') as HTMLElement;
+  const streamSection = document.getElementById('stream-section') as HTMLElement;
+  
+  // Check what credentials are missing
+  const missingFields: string[] = [];
+  const availableFields: string[] = [];
+  
+  // OpenSubsonic status
+  const openSubsonicComplete = envUrl && finalUsername && finalPassword;
+  if (!openSubsonicComplete) {
+    if (!envUrl) missingFields.push('OpenSubsonic Server');
+    if (!finalUsername) missingFields.push('OpenSubsonic Username');
+    if (!finalPassword) missingFields.push('OpenSubsonic Password');
+  } else {
+    availableFields.push('OpenSubsonic Complete');
+  }
+  
+  // Stream status
+  const streamComplete = streamServer && finalStreamUsername && finalStreamPassword;
+  if (!streamComplete) {
+    if (!streamServer) missingFields.push('Stream Server');
+    if (!finalStreamUsername) missingFields.push('Stream Username');
+    if (!finalStreamPassword) missingFields.push('Stream Password');
+  } else {
+    availableFields.push('Stream Complete');
+  }
+  
+  // Hide sections that are completely configured
+  if (openSubsonicComplete) {
+    openSubsonicSection.style.display = 'none';
+  }
+  
+  if (streamComplete) {
+    streamSection.style.display = 'none';
+  }
+  
+  // If unified login is used and credentials are shared, show info
+  if (useUnifiedLogin && unifiedUsername) {
+    const unifiedInfo = document.createElement('div');
+    unifiedInfo.style.cssText = `
+      background: rgba(76, 175, 80, 0.1);
+      border: 1px solid #4CAF50;
+      border-radius: 4px;
+      padding: 8px;
+      margin-bottom: 12px;
+      color: #4CAF50;
+      font-size: 11px;
+      text-align: center;
+    `;
+    unifiedInfo.innerHTML = `🔐 Unified Login: ${unifiedUsername} (shared credentials)`;
+    loginForm.querySelector('.login-form')?.prepend(unifiedInfo);
+  }
+  
+  // Internal login function
   const performLogin = async (serverUrl: string, username: string, password: string) => {
     if (!username || !password) {
-      console.log('? Please enter username and password');
+      console.log('❌ Please enter username and password');
       return;
     }
     
     try {
-      console.log('?? Connecting to OpenSubsonic...');
+      console.log('🔄 Connecting to OpenSubsonic...');
       if (loginBtn) {
         loginBtn.disabled = true;
         loginBtn.textContent = 'Connecting...';
       }
       
-      // Erstelle OpenSubsonic Client mit Credentials
+      // Create OpenSubsonic Client with credentials
       openSubsonicClient = new SubsonicApiClient({
         serverUrl: serverUrl,
         username: username,
@@ -4323,14 +4364,28 @@ function initializeOpenSubsonicLogin() {
       const authenticated = await openSubsonicClient.authenticate();
       
       if (authenticated) {
-        console.log("? OpenSubsonic connected successfully!");
+        console.log("✅ OpenSubsonic connected successfully!");
         
-        // Verstecke Login-Form, zeige DJ-Controls
+        // Update stream configuration with stream credentials
+        const streamUrl = streamServerInput.value.trim() || streamServer;
+        const streamUser = streamUsernameInput.value.trim() || finalStreamUsername;
+        const streamPass = streamPasswordInput.value.trim() || finalStreamPassword;
+        
+        if (streamUrl && streamUser && streamPass) {
+          console.log('🔄 Configuring stream settings...');
+          streamConfig.serverUrl = streamUrl;
+          streamConfig.username = streamUser;
+          streamConfig.password = streamPass;
+          console.log('✅ Stream configuration updated');
+        } else {
+          console.log('⚠️ Stream credentials incomplete - streaming will not be available');
+        }
+        
+        // Hide login form, show DJ controls
         loginForm.style.display = 'none';
         djControls.style.display = 'flex';
-        // Note: searchContainer no longer exists - search is now integrated in LibraryBrowser
         
-        // Initialisiere Musikbibliothek
+        // Initialize music library
         console.log("🎵 About to call initializeMusicLibrary...");
         await initializeMusicLibrary();
         console.log("🎵 Finished calling initializeMusicLibrary");
@@ -4339,58 +4394,34 @@ function initializeOpenSubsonicLogin() {
         console.log("  - libraryBrowser exists:", !!libraryBrowser);
         console.log("  - browse-content element:", !!document.getElementById('browse-content'));
         console.log("  - openSubsonicClient exists:", !!openSubsonicClient);
+        console.log("  - streamConfig:", streamConfig);
         
       } else {
-        console.log('? Login failed - Wrong username or password');
+        console.log('❌ Login failed - Wrong username or password');
         if (loginBtn) {
           loginBtn.textContent = 'Login Failed';
           setTimeout(() => {
-            loginBtn.textContent = 'Login';
+            loginBtn.textContent = 'Connect';
             loginBtn.disabled = false;
           }, 2000);
         }
       }
       
     } catch (error) {
-      console.error("? OpenSubsonic connection error:", error);
+      console.error("❌ OpenSubsonic connection error:", error);
       if (loginBtn) {
         loginBtn.textContent = 'Connection Error';
         setTimeout(() => {
-          loginBtn.textContent = 'Login';
+          loginBtn.textContent = 'Connect';
           loginBtn.disabled = false;
         }, 2000);
       }
     }
   };
   
-  // Felder verstecken wenn Werte verf�gbar sind (Unified oder Individual)
-  if (envUrl) {
-    const serverGroup = document.querySelector('.form-group:has(#OpenSubsonic-server)') as HTMLElement;
-    if (serverGroup) serverGroup.style.display = 'none';
-  }
-  
-  if (finalUsername) {
-    const usernameGroup = document.querySelector('.form-group:has(#OpenSubsonic-username)') as HTMLElement;
-    if (usernameGroup) usernameGroup.style.display = 'none';
-  }
-  
-  if (finalPassword) {
-    const passwordGroup = document.querySelector('.form-group:has(#OpenSubsonic-password)') as HTMLElement;
-    if (passwordGroup) passwordGroup.style.display = 'none';
-  }
-  
-  // Unified Login Info anzeigen
-  if (useUnifiedLogin && unifiedUsername) {
-    const loginTitle = loginForm.querySelector('h3');
-    if (loginTitle) {
-      loginTitle.textContent = `Login (Unified: ${unifiedUsername})`;
-      loginTitle.style.color = '#4CAF50';
-    }
-  }
-  
-  // Auto-Login wenn alle Credentials verf�gbar sind
+  // Auto-login if all OpenSubsonic credentials are available
   if (envUrl && finalUsername && finalPassword) {
-    console.log(`?? Auto-login with ${useUnifiedLogin ? 'unified' : 'individual'} credentials...`);
+    console.log(`🔄 Auto-login with ${useUnifiedLogin ? 'unified' : 'individual'} credentials...`);
     performLogin(envUrl, finalUsername, finalPassword);
     return;
   }
@@ -4398,15 +4429,33 @@ function initializeOpenSubsonicLogin() {
   const performLoginFromForm = async () => {
     const username = usernameInput.value.trim() || finalUsername;
     const password = passwordInput.value.trim() || finalPassword;
-    const serverUrl = serverInput.value.trim() || envUrl || "https://musik.radio-endstation.de";
+    const serverUrl = serverInput.value.trim() || envUrl;
+    
+    if (!serverUrl) {
+      console.log('❌ Please enter server URL');
+      if (loginBtn) {
+        loginBtn.textContent = 'Server URL Required';
+        setTimeout(() => {
+          loginBtn.textContent = 'Connect';
+          loginBtn.disabled = false;
+        }, 2000);
+      }
+      return;
+    }
     
     await performLogin(serverUrl, username, password);
   };
   
   loginBtn?.addEventListener('click', performLoginFromForm);
   
-  // Enter-Taste in Passwort-Feld
+  // Enter key in password fields
   passwordInput?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      performLoginFromForm();
+    }
+  });
+  
+  streamPasswordInput?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       performLoginFromForm();
     }
@@ -6125,9 +6174,9 @@ class LibraryBrowser {
         const artistsHtml = results.artist.map(artist => `
           <div class="artist-item clickable" data-artist-id="${artist.id}">
             <div class="artist-image">
-              <img src="${artist.coverArt ? openSubsonicClient.getCoverArtUrl(artist.coverArt, 300) : 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 fill=%22%23666%22%3E%3Crect width=%22200%22 height=%22200%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%22100%22 y=%22100%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'}" 
+              <img src="${artist.coverArt ? openSubsonicClient.getCoverArtUrl(artist.coverArt, 300) : 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 viewBox=%220 0 200 200%22%3E%3Ccircle cx=%22100%22 cy=%22100%22 r=%22100%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%22100%22 y=%22110%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2240%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'}" 
                    alt="${escapeHtml(artist.name)}" 
-                   onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 fill=%22%23666%22%3E%3Crect width=%22200%22 height=%22200%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%22100%22 y=%22100%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+                   onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 viewBox=%220 0 200 200%22%3E%3Ccircle cx=%22100%22 cy=%22100%22 r=%22100%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%22100%22 y=%22110%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2240%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
             </div>
             <div class="artist-info">
               <h4 class="artist-name">${escapeHtml(artist.name)}</h4>
@@ -7221,3 +7270,5 @@ function clearWaveformBlinking(side: 'a' | 'b' | 'c' | 'd') {
     waveformContainer.classList.remove('waveform-blink-slow', 'waveform-blink-medium', 'waveform-blink-fast', 'waveform-blink-rapid', 'waveform-blink-critical');
   }
 }
+
+});

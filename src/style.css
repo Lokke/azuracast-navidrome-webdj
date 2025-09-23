@@ -1659,8 +1659,32 @@ body {
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* Form Groups for Login Sections */
+.login-form .form-group {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.login-form .form-group h4 {
+  color: #00ff88;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 8px 0;
+  border-bottom: 1px solid #333;
+  padding-bottom: 4px;
+}
+
+.login-form .form-group.hidden {
+  display: none;
 }
 
 /* Login Input Container - wie tilted-search-container */
@@ -1752,6 +1776,7 @@ body {
   position: relative;
   height: fit-content;
   min-height: 160px; /* Gleiche Höhe wie Player */
+  overflow: visible; /* Allow config panel to be visible */
 }
 
 /* Microphone Section - Kompakter */
@@ -2237,20 +2262,24 @@ body {
   font-size: 20px;
 }
 
-/* Stream Configuration Panel */
+/* Stream Configuration Panel - Top Level Overlay */
 .stream-config-panel {
-  position: absolute;
-  top: 100%;
+  position: fixed;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   background: linear-gradient(135deg, #2a2a2a, #3a3a3a);
   border: 2px solid #00ff88;
   border-radius: 12px;
   padding: 1.5rem;
   width: 350px;
-  box-shadow: 0 8px 25px rgba(0, 255, 136, 0.2);
-  z-index: 1000;
-  margin-top: 1rem;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 
+    0 8px 25px rgba(0, 255, 136, 0.2),
+    0 0 0 9999px rgba(0, 0, 0, 0.5);
+  z-index: 99999;
   display: none; /* Standardmäßig versteckt */
 }
 
@@ -3529,22 +3558,133 @@ body {
   font-size: 0.8em;
 }
 
-.artist-item {
-  background: #333;
-  border: 1px solid #555;
-  border-radius: 6px;
-  padding: 1rem;
-  margin-bottom: 0.5rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* Browse Section Artist Cards - Clean circular design */
+.horizontal-scroll .artist-item {
+  min-width: 120px !important;
+  max-width: 120px !important;
+  flex-shrink: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 12px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  box-sizing: content-box !important; /* Override global box-sizing */
 }
 
-.artist-item:hover {
-  background: #404040;
-  border-color: #00ff88;
+.horizontal-scroll .artist-item:hover {
+  background: transparent !important;
+  border: none !important;
+  transform: translateY(-4px) !important;
+}
+
+/* Also apply to artist-card for Random Artists section */
+.horizontal-scroll .artist-card {
+  min-width: 120px !important;
+  max-width: 120px !important;
+  flex-shrink: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 12px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  box-sizing: content-box !important; /* Override global box-sizing */
+}
+
+.horizontal-scroll .artist-card:hover {
+  background: transparent !important;
+  border: none !important;
+  transform: translateY(-4px) !important;
+}
+
+.horizontal-scroll .artist-item .artist-image,
+.horizontal-scroll .artist-card .artist-image {
+  width: 100px !important;
+  height: 100px !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  margin: 0 0 8px 0 !important;
+  position: relative !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.2s ease !important;
+  box-sizing: content-box !important; /* Override global box-sizing for perfect circle */
+}
+
+.horizontal-scroll .artist-item:hover .artist-image,
+.horizontal-scroll .artist-card:hover .artist-image {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4) !important;
+  transform: scale(1.05) !important;
+}
+
+.horizontal-scroll .artist-item .artist-image img,
+.horizontal-scroll .artist-card .artist-image img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  display: block !important;
+  border: none !important;
+  border-radius: 0 !important;
+  transition: all 0.2s ease !important;
+  box-sizing: content-box !important; /* Override global box-sizing */
+}
+
+.horizontal-scroll .artist-item .artist-info {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important; /* Ensure info is visible */
+  box-sizing: content-box !important;
+}
+
+.horizontal-scroll .artist-item .artist-name,
+.horizontal-scroll .artist-card .artist-name {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+  line-height: 1.3 !important;
+  display: block !important; /* Force visibility */
+  box-sizing: content-box !important;
+}
+
+.horizontal-scroll .artist-item:hover .artist-name,
+.horizontal-scroll .artist-card:hover .artist-name {
+  color: #ffffff !important;
+}
+
+.horizontal-scroll .artist-item .artist-album-count,
+.horizontal-scroll .artist-card .artist-type {
+  font-size: 10px !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  margin: 2px 0 0 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block !important; /* Force visibility */
+  box-sizing: content-box !important;
+}
+
+.horizontal-scroll .artist-item:hover .artist-album-count,
+.horizontal-scroll .artist-card:hover .artist-type {
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
 .artist-name {
