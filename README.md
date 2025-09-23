@@ -1,6 +1,7 @@
 ﻿# SubCaster
 
 Web interface for radio moderators. Provides access to music from OpenSubsonic-compatible servers (Navidrome, Gonic, Ampache, Astiga, LMS, Nextcloud Music, ownCloud Music, Supysonic) with live streaming to AzuraCast.
+<img width="1846" height="999" alt="Screenshot 2025-09-24 002355" src="https://github.com/user-attachments/assets/b3c522a6-95bc-417a-9f3c-15ff7dfa8fd9" />
 
 ## Features
 
@@ -10,7 +11,6 @@ Web interface for radio moderators. Provides access to music from OpenSubsonic-c
 - Direct streaming to AzuraCast
 - Smart metadata transmission
 - Browser-based interface
-<img width="1846" height="999" alt="Screenshot 2025-09-24 002355" src="https://github.com/user-attachments/assets/b3c522a6-95bc-417a-9f3c-15ff7dfa8fd9" />
 
 ## License
 
@@ -84,3 +84,4 @@ npm run dev
 
 
 Open interface at http://localhost:5173
+
