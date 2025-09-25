@@ -103,6 +103,51 @@ let currentStreamMetadata: OpenSubsonicSong | null = null; // Currently displaye
 
 let bridgeSocket: WebSocket | null = null;
 
+// Initialize WebRTC Bridge WebSocket connection
+function initializeBridgeSocket() {
+  const useBridge = import.meta.env.VITE_USE_BRIDGE === 'true';
+  const bridgeUrl = import.meta.env.VITE_WEBRTC_BRIDGE || 'ws://localhost:3001/stream';
+  
+  if (!useBridge) {
+    console.log('🌉 Bridge disabled (VITE_USE_BRIDGE=false)');
+    return;
+  }
+  
+  console.log(`🌉 Initializing WebRTC Bridge connection to: ${bridgeUrl}`);
+  
+  try {
+    bridgeSocket = new WebSocket(bridgeUrl);
+    
+    bridgeSocket.onopen = () => {
+      console.log('✅ WebRTC Bridge connected successfully!');
+      console.log(`🌉 Ready to stream audio to: ${bridgeUrl}`);
+    };
+    
+    bridgeSocket.onclose = (event) => {
+      console.log(`🌉 WebRTC Bridge disconnected: ${event.code} ${event.reason}`);
+      bridgeSocket = null;
+      
+      // Auto-reconnect after 5 seconds
+      setTimeout(() => {
+        console.log('🌉 Attempting to reconnect to WebRTC Bridge...');
+        initializeBridgeSocket();
+      }, 5000);
+    };
+    
+    bridgeSocket.onerror = (error) => {
+      console.error('❌ WebRTC Bridge connection error:', error);
+      console.error('❌ Make sure the bridge server is running on the specified port');
+    };
+    
+    bridgeSocket.onmessage = (event) => {
+      console.log('📩 WebRTC Bridge message:', event.data);
+    };
+    
+  } catch (error) {
+    console.error('❌ Failed to create WebRTC Bridge connection:', error);
+  }
+}
+
 // Send metadata to SubCaster Stream
 function sendMetadataToAzuraCast(song: OpenSubsonicSong) {
   if (bridgeSocket?.readyState === WebSocket.OPEN) {
@@ -277,7 +322,7 @@ function clearPlayerDeck(side: 'a' | 'b' | 'c' | 'd') {
   // Reset any loading indicators
   const loadingIndicator = document.getElementById(`waveform-loading-${side}`);
   if (loadingIndicator) {
-    loadingIndicator.remove();
+    loadingIndicator.classList.remove('visible');
   }
   
   console.log(`✅ Player ${side.toUpperCase()} deck cleared completely`);
@@ -1384,6 +1429,12 @@ function resetWaveform(side: 'a' | 'b' | 'c' | 'd') {
     wavesurfer.seekTo(0);
     console.log(`Waveform reset for ${side} player`);
   }
+  
+  // Hide loading indicator if it's visible
+  const loadingElement = document.getElementById(`waveform-loading-${side}`);
+  if (loadingElement) {
+    loadingElement.classList.remove('visible');
+  }
 }
 
 // Completely clear WaveSurfer (for eject)
@@ -1407,6 +1458,12 @@ function clearWaveform(side: 'a' | 'b' | 'c' | 'd') {
       }
     }
     
+    // Hide loading indicator
+    const loadingElement = document.getElementById(`waveform-loading-${side}`);
+    if (loadingElement) {
+      loadingElement.classList.remove('visible');
+    }
+    
     console.log(`🗑️ Waveform completely cleared for ${side} player`);
   }
 }
@@ -1426,23 +1483,11 @@ function loadWaveform(side: 'a' | 'b' | 'c' | 'd', audioUrl: string, trackDurati
   const wavesurfer = waveSurfers[side]!;
   const container = document.getElementById(`waveform-${side}`);
   
-  // Add loading indicator
-  if (container) {
-    container.style.position = 'relative';
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.id = `waveform-loading-${side}`;
-    loadingIndicator.style.cssText = `
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #00ff88;
-      font-size: 12px;
-      z-index: 10;
-      pointer-events: none;
-    `;
+  // Show the existing loading indicator and update it
+  const loadingIndicator = document.getElementById(`waveform-loading-${side}`);
+  if (loadingIndicator) {
+    loadingIndicator.classList.add('visible');
     loadingIndicator.textContent = 'Loading waveform...';
-    container.appendChild(loadingIndicator);
   }
 
   // Progressive loading events
@@ -1469,10 +1514,10 @@ function loadWaveform(side: 'a' | 'b' | 'c' | 'd', audioUrl: string, trackDurati
   wavesurfer.on('ready', () => {
     console.log(`✅ Waveform ready for ${side} player - progress reset to 0`);
     
-    // Remove loading indicator
+    // Hide loading indicator
     const loadingElement = document.getElementById(`waveform-loading-${side}`);
     if (loadingElement) {
-      loadingElement.remove();
+      loadingElement.classList.remove('visible');
     }
     
     // Ensure full opacity
@@ -1488,10 +1533,10 @@ function loadWaveform(side: 'a' | 'b' | 'c' | 'd', audioUrl: string, trackDurati
   wavesurfer.on('error', (error) => {
     console.error(`❌ Waveform error for ${side} player:`, error);
     
-    // Remove loading indicator on error
+    // Hide loading indicator on error
     const loadingElement = document.getElementById(`waveform-loading-${side}`);
     if (loadingElement) {
-      loadingElement.remove();
+      loadingElement.classList.remove('visible');
     }
     
     // Show temporary error state (2 seconds)
@@ -1949,6 +1994,23 @@ function setMicrophoneEnabled(enabled: boolean, volume: number = 1) {
   console.log(`?? Microphone ${enabled ? 'enabled' : 'disabled'} with volume ${Math.round(volume * 100)}%`);
 }
 
+// MediaRecorder f�r Streaming stoppen
+function stopStreamRecorder() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    console.log('🎵 Stopping MediaRecorder...');
+    try {
+      mediaRecorder.stop();
+      console.log('✅ MediaRecorder stopped successfully');
+    } catch (error) {
+      console.error('❌ Error stopping MediaRecorder:', error);
+    }
+  }
+  
+  // Clear stream chunks
+  streamChunks = [];
+  console.log('🗑️ Stream chunks cleared');
+}
+
 // MediaRecorder f�r Streaming einrichten
 async function initializeStreamRecorder() {
   if (!audioContext || !streamGainNode) {
@@ -1957,7 +2019,7 @@ async function initializeStreamRecorder() {
   }
   
   try {
-    // MediaStreamDestination erstellen f�r Stream-Aufnahme
+    // MediaStreamDestination erstellen für Stream-Aufnahme
     const destination = audioContext.createMediaStreamDestination();
     streamGainNode.connect(destination); // Verwende streamGainNode statt masterGainNode
     
@@ -1965,14 +2027,14 @@ async function initializeStreamRecorder() {
     let options: MediaRecorderOptions;
     
     if (streamConfig.format === 'mp3') {
-      // MP3 wird nicht direkt von MediaRecorder unterst�tzt
+      // MP3 wird nicht direkt von MediaRecorder unterstützt
       // Fallback auf AAC in MP4 Container oder WebM/Opus
       options = {
-        mimeType: 'audio/mp4',  // AAC in MP4 - n�her an MP3
+        mimeType: 'audio/mp4',  // AAC in MP4 - näher an MP3
         audioBitsPerSecond: streamConfig.bitrate * 1000
       };
       
-      // Fallback falls MP4 nicht unterst�tzt wird
+      // Fallback falls MP4 nicht unterstützt wird
       if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
         options = {
           mimeType: 'audio/webm;codecs=opus',
@@ -1989,7 +2051,7 @@ async function initializeStreamRecorder() {
     
     mediaRecorder = new MediaRecorder(destination.stream, options);
     
-    // Event Handlers f�r MediaRecorder
+    // Event Handlers für MediaRecorder
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         streamChunks.push(event.data);
@@ -2026,27 +2088,48 @@ async function initializeStreamRecorder() {
 // HTTP-Verbindung zu Icecast/Shoutcast Server
 let streamConnection: XMLHttpRequest | null = null;
 
+// Helper function to get readable XMLHttpRequest ready state
+function getReadyStateText(state: number): string {
+  switch (state) {
+    case 0: return 'UNSENT';
+    case 1: return 'OPENED';
+    case 2: return 'HEADERS_RECEIVED';
+    case 3: return 'LOADING';
+    case 4: return 'DONE';
+    default: return 'UNKNOWN';
+  }
+}
+
 function connectToStreamingServer() {
   return new Promise<boolean>((resolve) => {
     try {
+      console.log('🔗 Creating new XMLHttpRequest for streaming connection...');
       streamConnection = new XMLHttpRequest();
       
       // Verwende die bereits konfigurierte Stream-URL (mit Proxy-Logik)
       let streamUrl = streamConfig.serverUrl;
-      
-      // F�r Icecast Mount Point anh�ngen, au�er bei Proxy (bereits enthalten)
+
+      // Für Icecast Mount Point anhängen, außer bei Proxy (bereits enthalten)
       const useProxy = import.meta.env.VITE_USE_PROXY === 'true';
       if (!useProxy && streamConfig.serverType === 'icecast' && streamConfig.mountPoint) {
         streamUrl += streamConfig.mountPoint;
+        console.log(`📍 Added mount point to URL: ${streamConfig.mountPoint}`);
       }
       
-      console.log(`Connecting to ${streamConfig.serverType} server: ${streamUrl}`);
-      console.log(`Using proxy: ${useProxy}`);
+      console.log(`🌐 Final streaming URL: ${streamUrl}`);
+      console.log(`🔧 Server type: ${streamConfig.serverType}`);
+      console.log(`🚪 Using proxy: ${useProxy}`);
+      console.log(`🔑 Auth method: ${streamConfig.serverType === 'icecast' ? 'Basic (username:password)' : 'Basic (:password)'}`);
+      
+      // Set timeout
+      streamConnection.timeout = 10000; // 10 seconds timeout
+      console.log('⏰ Connection timeout set to 10 seconds');
       
       // HTTP PUT Request f�r Streaming
+      console.log('📤 Opening PUT request...');
       streamConnection.open('PUT', streamUrl, true);
       
-      // Headers f�r Icecast/Shoutcast
+      // Headers für Icecast/Shoutcast
       if (streamConfig.serverType === 'icecast') {
         // Icecast Headers
         streamConnection.setRequestHeader('Authorization', 
@@ -2069,37 +2152,70 @@ function connectToStreamingServer() {
       }
       
       streamConnection.onreadystatechange = () => {
+        console.log(`📡 XMLHttpRequest state changed: ${streamConnection!.readyState} (${getReadyStateText(streamConnection!.readyState)})`);
+        
         if (streamConnection!.readyState === XMLHttpRequest.DONE) {
+          console.log(`📊 Final response - Status: ${streamConnection!.status} ${streamConnection!.statusText}`);
+          console.log(`📊 Response headers: ${streamConnection!.getAllResponseHeaders()}`);
+          
           if (streamConnection!.status === 200 || streamConnection!.status === 201) {
-            console.log('Successfully connected to streaming server');
+            console.log('✅ Successfully connected to streaming server');
+            console.log('📡 Connection established and ready for audio streaming');
             resolve(true);
           } else {
-            console.error(`Failed to connect: ${streamConnection!.status} ${streamConnection!.statusText}`);
+            console.error(`❌ Failed to connect - HTTP ${streamConnection!.status}: ${streamConnection!.statusText}`);
+            console.error(`❌ This could indicate:`);
+            console.error(`   - Wrong credentials (username/password)`);
+            console.error(`   - Wrong mount point or server URL`);
+            console.error(`   - Server not accepting connections`);
+            console.error(`   - CORS restrictions (if not using proxy)`);
             resolve(false);
           }
         }
       };
       
-      streamConnection.onerror = () => {
-        console.error('Connection error to streaming server (likely CORS issue)');
+      streamConnection.onerror = (event) => {
+        console.error('❌ XMLHttpRequest error event:', event);
+        console.error('❌ Connection error to streaming server');
+        console.error('❌ Possible causes:');
+        console.error('   - Network connectivity issues');
+        console.error('   - CORS policy blocking the request (if not using proxy)');
+        console.error('   - Server not reachable');
+        console.error('   - Firewall blocking the connection');
         resolve(false);
       };
       
       streamConnection.ontimeout = () => {
-        console.error('Connection timeout to streaming server');
+        console.error('⏰ Connection timeout to streaming server (10 seconds exceeded)');
+        console.error('❌ This usually indicates:');
+        console.error('   - Server is not responding');
+        console.error('   - Network issues');
+        console.error('   - Wrong server URL or port');
         resolve(false);
       };
       
-      // Verbindung initialisieren (leerer Body f�r Initial-Request)
+      // Verbindung initialisieren (leerer Body für Initial-Request)
       try {
+        console.log('📤 Sending connection request to streaming server...');
         streamConnection.send();
+        console.log('📤 Connection request sent, waiting for response...');
       } catch (e) {
-        console.error('Failed to send request (CORS restriction):', e);
+        console.error('❌ Failed to send request - likely CORS restriction:', e);
+        console.error('❌ This error indicates the browser blocked the request');
+        console.error('❌ Solutions:');
+        console.error('   - Enable VITE_USE_PROXY=true in environment');
+        console.error('   - Configure CORS on the streaming server');
+        console.error('   - Use HTTPS if server requires it');
         resolve(false);
       }
       
     } catch (error) {
-      console.error('Failed to connect to streaming server:', error);
+      console.error('❌ Unexpected error in connectToStreamingServer:', error);
+      console.error('❌ Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       resolve(false);
     }
   });
@@ -2112,7 +2228,7 @@ function sendAudioChunkToServer(audioChunk: Blob) {
     return;
   }
   
-  // Neuer Request f�r jeden Chunk (Shoutcast/Icecast Protokoll)
+  // Neuer Request für jeden Chunk (Shoutcast/Icecast Protokoll)
   const chunkRequest = new XMLHttpRequest();
   const streamUrl = streamConfig.serverType === 'shoutcast' && !streamConfig.mountPoint 
     ? streamConfig.serverUrl 
@@ -2150,34 +2266,60 @@ async function startLiveStream() {
 // Direktes Liquidsoap Harbor Streaming (ohne Bridge)
 async function startDirectStream(): Promise<boolean> {
   try {
-    console.log('Starting direct Liquidsoap Harbor stream...');
+    console.log('🏴‍☠️ STARTING HARBOR STREAMING SYSTEM...');
+    console.log('🏴‍☠️ This system uses /api/stream proxy endpoint (no CORS issues!)');
     
     // 1. Audio Mixing System initialisieren
+    console.log('🎵 Checking audio mixing system...');
     if (!audioContext || !streamGainNode) {
+      console.log('🎵 Audio context not ready, initializing...');
       const mixingReady = await initializeAudioMixing();
       if (!mixingReady) {
+        console.error('❌ Failed to initialize audio mixing system');
         throw new Error('Failed to initialize audio mixing');
       }
+      console.log('✅ Audio mixing system initialized');
+    } else {
+      console.log('✅ Audio mixing system already ready');
     }
     
-    // 2. MediaStreamDestination f�r direktes Streaming
+    // 2. MediaStreamDestination für direktes Streaming
+    console.log('🎧 Creating MediaStreamDestination...');
     if (!audioContext || !streamGainNode) {
+      console.error('❌ Audio context or stream gain node not ready');
       throw new Error('Audio context or stream gain node not ready');
     }
     
     const destination = audioContext.createMediaStreamDestination();
-    streamGainNode.connect(destination); // Verwende streamGainNode f�r Stream-Output
+    streamGainNode.connect(destination); // Verwende streamGainNode für Stream-Output
+    console.log('✅ MediaStreamDestination created and connected');
     
-    // 3. MediaRecorder f�r ICY-kompatible Daten mit optimierten Einstellungen
-    const recorder = new MediaRecorder(destination.stream, {
+    // 3. MediaRecorder für ICY-kompatible Daten mit optimierten Einstellungen
+    console.log('🎙️ Setting up MediaRecorder with WebM/Opus...');
+    const recordingOptions = {
       mimeType: 'audio/webm;codecs=opus',
       audioBitsPerSecond: streamConfig.bitrate * 1000,
-      // Opus-spezifische Optimierungen f�r bessere Qualit�t
+      // Opus-spezifische Optimierungen für bessere Qualität
       bitsPerSecond: streamConfig.bitrate * 1000
-    });
+    };
     
-    // 4. Direkte HTTP-POST Verbindung zu Harbor (�ber unified server API)
+    console.log('🎙️ MediaRecorder options:', recordingOptions);
+    
+    if (!MediaRecorder.isTypeSupported(recordingOptions.mimeType)) {
+      console.warn('⚠️ WebM/Opus not supported, trying fallback...');
+      recordingOptions.mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported(recordingOptions.mimeType)) {
+        console.error('❌ No suitable MediaRecorder format supported');
+        throw new Error('MediaRecorder format not supported');
+      }
+    }
+    
+    const recorder = new MediaRecorder(destination.stream, recordingOptions);
+    console.log('✅ MediaRecorder created successfully');
+    
+    // 4. Direkte HTTP-POST Verbindung zu Harbor (über unified server API)
     const harborUrl = `/api/stream`;
+    console.log(`🌐 Harbor streaming endpoint: ${harborUrl}`);
     
     // Verwende Credentials (Unified oder Individual aus .env)
     const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
@@ -2186,20 +2328,35 @@ async function startDirectStream(): Promise<boolean> {
     const individualUsername = import.meta.env.VITE_STREAM_USERNAME;
     const individualPassword = import.meta.env.VITE_STREAM_PASSWORD;
     
+    console.log('🔐 Credential configuration:');
+    console.log(`🔐 Use unified login: ${useUnifiedLogin}`);
+    console.log(`🔐 Unified username: ${unifiedUsername ? '[SET]' : '[NOT SET]'}`);
+    console.log(`🔐 Unified password: ${unifiedPassword ? '[SET]' : '[NOT SET]'}`);
+    console.log(`🔐 Individual username: ${individualUsername ? '[SET]' : '[NOT SET]'}`);
+    console.log(`🔐 Individual password: ${individualPassword ? '[SET]' : '[NOT SET]'}`);
+    
     const username = useUnifiedLogin ? unifiedUsername : individualUsername;
     const password = useUnifiedLogin ? unifiedPassword : individualPassword;
     
+    console.log(`🔐 Selected credentials: ${useUnifiedLogin ? 'unified' : 'individual'}`);
+    console.log(`🔐 Final username: "${username}"`);
+    console.log(`🔐 Final password: ${password ? '[SET]' : '[NOT SET]'}`);
+    
     if (!username || !password) {
-      // Don't show error message if no credentials are set - this is expected on first run
-      console.log('⚠️ Stream credentials not configured - streaming will not be available');
+      console.error('❌ Stream credentials not configured!');
+      console.error('❌ Please set the following environment variables:');
+      if (useUnifiedLogin) {
+        console.error('   - VITE_UNIFIED_USERNAME');
+        console.error('   - VITE_UNIFIED_PASSWORD');
+      } else {
+        console.error('   - VITE_STREAM_USERNAME');
+        console.error('   - VITE_STREAM_PASSWORD');
+      }
       return false;
     }
     
     const credentials = btoa(`${username}:${password}`);
-    console.log(`?? Using ${useUnifiedLogin ? 'unified' : 'individual'} credentials for streaming`);
-    console.log(`?? Raw env values: username="${username}", password="${password}"`);
-    console.log(`?? Combined credentials: "${username}:${password}"`);
-    console.log(`?? Base64 encoded: ${credentials}`);
+    console.log(`🔐 Base64 credentials: ${credentials}`);
     
     let isConnected = false;
     let chunkQueue: Blob[] = [];
@@ -2207,34 +2364,67 @@ async function startDirectStream(): Promise<boolean> {
     // Funktion zum Senden von Audio-Chunks
     const sendAudioChunk = async (audioBlob: Blob) => {
       try {
+        console.log(`📦 Sending audio chunk: ${audioBlob.size} bytes`);
+        
+        const requestHeaders = {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'audio/webm',
+          'Ice-Public': '0',
+          'Ice-Name': 'SubCaster Live Stream',
+          'Ice-Description': 'Live broadcast from SubCaster',
+          'User-Agent': 'SubCaster/1.0'
+        };
+        
+        console.log('📦 Request headers:', requestHeaders);
+        
         const response = await fetch(harborUrl, {
           method: 'POST',
-          headers: {
-            'Authorization': `Basic ${credentials}`,
-            'Content-Type': 'audio/webm',
-            'Ice-Public': '0',
-            'Ice-Name': 'SubCaster Live Stream',
-            'Ice-Description': 'Live broadcast from SubCaster',
-            'User-Agent': 'SubCaster/1.0'
-          },
+          headers: requestHeaders,
           body: audioBlob,
           keepalive: true
         });
         
+        console.log(`📡 Harbor response: ${response.status} ${response.statusText}`);
+        console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+        
         if (response.ok) {
           if (!isConnected) {
             isConnected = true;
-            console.log('? Direct Harbor connection established (via CORS proxy)');
-            showStatusMessage('? Connected to Liquidsoap Harbor (direct)', 'success');
+            console.log('✅ Harbor connection established successfully!');
+            console.log('🏴‍☠️ Audio streaming to Harbor active');
+            if (typeof showStatusMessage === 'function') {
+              showStatusMessage('✅ Connected to Liquidsoap Harbor (proxy)', 'success');
+            }
           }
         } else {
-          console.error('Harbor rejected chunk:', response.status, response.statusText);
+          console.error(`❌ Harbor rejected chunk: ${response.status} ${response.statusText}`);
+          
+          // Try to get response text for more details
+          try {
+            const responseText = await response.text();
+            console.error(`❌ Response body: ${responseText}`);
+          } catch (e) {
+            console.error('❌ Could not read response body');
+          }
+          
           if (response.status === 401) {
-            throw new Error('Authentication failed');
+            console.error('❌ Authentication failed - check username/password');
+            throw new Error('Authentication failed - check credentials');
+          } else if (response.status === 404) {
+            console.error('❌ Harbor endpoint not found - check proxy configuration');
+            throw new Error('Harbor endpoint not found');
+          } else if (response.status === 503) {
+            console.error('❌ Harbor service unavailable - check if Liquidsoap is running');
+            throw new Error('Harbor service unavailable');
+          } else {
+            throw new Error(`Harbor error: ${response.status} ${response.statusText}`);
           }
         }
       } catch (error) {
-        console.error('Failed to send audio chunk:', error);
+        console.error('❌ Failed to send audio chunk:', error);
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          console.error('❌ Network error - check if proxy server is running');
+        }
         throw error;
       }
     };
@@ -2261,21 +2451,37 @@ async function startDirectStream(): Promise<boolean> {
     };
     
     // 6. Mikrofon einrichten
-    await setupMicrophone();
+    console.log('🎤 Setting up microphone...');
+    try {
+      await setupMicrophone();
+      console.log('✅ Microphone setup completed');
+    } catch (error) {
+      console.warn('⚠️ Microphone setup failed (optional):', error);
+    }
     
     // 7. Recording starten
+    console.log('🎙️ Starting MediaRecorder with 1-second chunks...');
     recorder.start(1000); // 1-Sekunden-Chunks
     
     mediaRecorder = recorder;
     isStreaming = true;
     
-    console.log('Direct Harbor stream started successfully');
+    console.log('✅ HARBOR STREAMING STARTED SUCCESSFULLY!');
+    console.log('🏴‍☠️ Audio chunks will be sent to /api/stream every second');
     return true;
     
   } catch (error) {
-    console.error('Failed to start direct stream:', error);
+    console.error('❌ HARBOR STREAMING FAILED:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    showStatusMessage(`? Direct stream failed: ${errorMessage}`, 'error');
+    console.error('❌ Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    
+    if (typeof showStatusMessage === 'function') {
+      showStatusMessage(`❌ Harbor streaming failed: ${errorMessage}`, 'error');
+    }
     return false;
   }
 }
@@ -4565,6 +4771,9 @@ function initializeOpenSubsonicLogin() {
         // Initialize Live Streaming functionality (after DJ controls are visible)
         initializeLiveStreaming();
         
+        // Initialize WebRTC Bridge WebSocket connection
+        initializeBridgeSocket();
+        
         // Initialize music library
         console.log("🎵 About to call initializeMusicLibrary...");
         await initializeMusicLibrary();
@@ -5952,21 +6161,95 @@ function toggleLiveStreaming() {
 }
 
 // Start Live Streaming
-function startLiveStreaming() {
+async function startLiveStreaming() {
   const streamLiveButton = document.getElementById('stream-live-status') as HTMLButtonElement;
   if (!streamLiveButton) return;
   
-  isLiveStreaming = true;
-  liveStreamStartTime = Date.now(); // Track when stream started
-  streamLiveButton.classList.add('live');
+  console.log('🔴 ATTEMPTING TO START LIVE STREAMING...');
+  console.log(`📡 Stream Config - Server: ${streamConfig.serverUrl}`);
+  console.log(`📡 Stream Config - Type: ${streamConfig.serverType}`);
+  console.log(`📡 Stream Config - Mount: ${streamConfig.mountPoint}`);
+  console.log(`📡 Stream Config - Username: ${streamConfig.username || 'source'}`);
+  console.log(`📡 Stream Config - Password: ${streamConfig.password ? '[SET]' : '[NOT SET]'}`);
+  console.log(`📡 Stream Config - Bitrate: ${streamConfig.bitrate}`);
+  console.log(`📡 Using Proxy: ${import.meta.env.VITE_USE_PROXY === 'true'}`);
   
-  // 🔥 Funken-Effekt für die ersten 10 Sekunden
-  streamLiveButton.classList.add('sparks-effect');
-  setTimeout(() => {
-    streamLiveButton.classList.remove('sparks-effect');
-  }, 10000);
+  // Zeige Loading Status
+  streamLiveButton.textContent = 'Connecting...';
+  streamLiveButton.classList.add('connecting');
   
-  console.log('🔴 LIVE STREAMING STARTED - SPARKS FOR 10 SECONDS!');
+  try {
+    // Check if WebRTC Bridge is available
+    if (bridgeSocket?.readyState === WebSocket.OPEN) {
+      console.log('🌉 Using WebRTC Bridge for streaming');
+      console.log(`🌉 Bridge endpoint: ${import.meta.env.VITE_WEBRTC_BRIDGE}`);
+      
+      // Initialize the WebRTC MediaRecorder system
+      if (!await initializeStreamRecorder()) {
+        console.error('❌ Failed to initialize WebRTC stream recorder');
+        streamLiveButton.classList.remove('connecting');
+        streamLiveButton.textContent = 'Recorder Error';
+        setTimeout(() => {
+          streamLiveButton.textContent = 'STREAM';
+        }, 3000);
+        return;
+      }
+      
+      console.log('✅ WebRTC Bridge streaming started!');
+      console.log('🔴 LIVE STREAMING STARTED - SPARKS FOR 10 SECONDS!');
+      
+      isLiveStreaming = true;
+      liveStreamStartTime = Date.now();
+      streamLiveButton.classList.remove('connecting');
+      streamLiveButton.classList.add('live');
+      streamLiveButton.textContent = 'LIVE';
+      
+      // 🔥 Funken-Effekt für die ersten 10 Sekunden
+      streamLiveButton.classList.add('sparks-effect');
+      setTimeout(() => {
+        streamLiveButton.classList.remove('sparks-effect');
+      }, 10000);
+      
+    } else {
+      console.log('🏴‍☠️ WebRTC Bridge not available, trying Harbor streaming...');
+      const connected = await startDirectStream();
+      
+      if (connected) {
+        console.log('✅ Harbor streaming connection successful!');
+        console.log('🔴 LIVE STREAMING STARTED - SPARKS FOR 10 SECONDS!');
+        
+        isLiveStreaming = true;
+        liveStreamStartTime = Date.now();
+        streamLiveButton.classList.remove('connecting');
+        streamLiveButton.classList.add('live');
+        streamLiveButton.textContent = 'LIVE';
+        
+        // 🔥 Funken-Effekt für die ersten 10 Sekunden
+        streamLiveButton.classList.add('sparks-effect');
+        setTimeout(() => {
+          streamLiveButton.classList.remove('sparks-effect');
+        }, 10000);
+      } else {
+        console.error('❌ Harbor streaming also failed');
+        streamLiveButton.classList.remove('connecting');
+        streamLiveButton.textContent = 'Connection Failed';
+        setTimeout(() => {
+          streamLiveButton.textContent = 'STREAM';
+        }, 3000);
+        return;
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Error during streaming connection:', error);
+    streamLiveButton.classList.remove('connecting');
+    streamLiveButton.textContent = 'Error';
+    
+    // Reset nach 3 Sekunden
+    setTimeout(() => {
+      streamLiveButton.textContent = 'STREAM';
+    }, 3000);
+  }
 }
 
 // GLOBALE FUNKTION: Alle Disconnect-Effekte sofort stoppen
@@ -6337,12 +6620,42 @@ function cleanupExplosionSystem() {
 }
 
 // Stop Live Streaming (only after successful disconnect countdown)
-function stopLiveStreaming() {
+async function stopLiveStreaming() {
   const streamLiveButton = document.getElementById('stream-live-status') as HTMLButtonElement;
   if (!streamLiveButton) return;
   
+  console.log('⏹️ STOPPING LIVE STREAMING...');
+  
+  // Stop Harbor streaming (moderne Methode)
+  console.log('🏴‍☠️ Stopping Harbor streaming...');
+  try {
+    await stopLiveStream();
+    console.log('✅ Harbor streaming stopped successfully');
+  } catch (error) {
+    console.error('❌ Error stopping Harbor streaming:', error);
+  }
+  
+  // Fallback: Stop legacy audio stream recorder
+  if (typeof stopStreamRecorder === 'function') {
+    console.log('🎵 Stopping legacy stream recorder...');
+    stopStreamRecorder();
+  }
+  
+  // Fallback: Close legacy streaming connection
+  if (streamConnection) {
+    console.log('🔌 Closing legacy streaming server connection...');
+    try {
+      streamConnection.abort();
+      streamConnection = null;
+      console.log('✅ Legacy streaming connection closed successfully');
+    } catch (error) {
+      console.error('❌ Error closing legacy streaming connection:', error);
+    }
+  }
+  
   isLiveStreaming = false;
-  streamLiveButton.classList.remove('live');
+  streamLiveButton.classList.remove('live', 'connecting');
+  streamLiveButton.textContent = 'STREAM';
   
   // 🛑 SOFORTIGE EFFEKT-BEREINIGUNG!
   clearAllDisconnectEffects();

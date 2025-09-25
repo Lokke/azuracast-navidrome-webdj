@@ -16,9 +16,9 @@ let unifiedServer = null;
 function createMainWindow() {
   const win = new BrowserWindow({
     title: 'SubCaster',
-    width: 1400,
+    width: 1600,
     height: 900,
-    minWidth: 1200,
+    minWidth: 1600,
     minHeight: 700,
     webPreferences: {
       nodeIntegration: false,

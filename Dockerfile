@@ -77,7 +77,7 @@ RUN chmod +x start-services.sh
 RUN mkdir -p /app/config && chown subcaster:nodejs /app/config
 
 # Expose ports
-EXPOSE 5173 8082
+EXPOSE 5173
 
 # Switch to non-root user
 USER subcaster

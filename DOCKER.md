@@ -80,8 +80,8 @@ docker-compose down
 # Install dependencies
 npm install
 
-# Start CORS proxy
-node cors-proxy-fixed.js
+# Start unified server (handles CORS proxy + web serving)
+npm run start:unified
 
 # Start dev server (in another terminal)
 npm run dev
@@ -98,8 +98,7 @@ npx http-server dist -p 5173 --cors
 
 ## Ports
 
-- **5173**: Web interface (SubCaster application)
-- **8082**: CORS proxy for streaming
+- **5173**: Web interface (SubCaster application) and integrated CORS proxy
 
 ## Usage
 
@@ -119,7 +118,6 @@ docker logs SubCaster
 
 # Check if ports are available
 netstat -tulpn | grep :5173
-netstat -tulpn | grep :8082
 ```
 
 ### Streaming connection issues
