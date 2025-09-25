@@ -1777,6 +1777,7 @@ body {
 
 /* Professional Center Mixer Panel - Player-identisch */
 .center-mixer-panel {
+  position: relative; /* Add for dropdown positioning */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1812,6 +1813,132 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 0.25rem; /* Reduziert von 0.5rem */
+}
+
+/* Station Selection Dropdown (triggered by STREAM button) */
+.station-dropdown-overlay {
+  position: absolute;
+  top: 35px; /* Position below status indicators */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: none;
+  margin-top: 8px;
+}
+
+.station-dropdown-overlay.show {
+  display: block;
+}
+
+.station-dropdown-menu {
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+  border: 2px solid #555;
+  border-radius: 12px;
+  box-shadow: 
+    0 8px 25px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  min-width: 250px;
+  max-height: 350px;
+  overflow-y: auto;
+  transform: perspective(600px) rotateX(-2deg);
+  transform-origin: top center;
+}
+
+.dropdown-loading {
+  padding: 15px;
+  text-align: center;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.station-dropdown-item {
+  padding: 15px 20px;
+  cursor: pointer;
+  border-bottom: 1px solid #333;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  transform: perspective(600px) rotateX(-1deg);
+}
+
+.station-dropdown-item:last-child {
+  border-bottom: none;
+  border-radius: 0 0 10px 10px;
+}
+
+.station-dropdown-item:first-child {
+  border-radius: 10px 10px 0 0;
+}
+
+.station-dropdown-item:hover {
+  background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%);
+  transform: perspective(600px) rotateX(0deg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.station-dropdown-item.selected {
+  background: linear-gradient(135deg, #0066cc 0%, #004499 100%);
+  color: #fff;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 8px rgba(0, 102, 204, 0.3);
+}
+
+/* Station Status Colors - STREAM button style */
+.station-dropdown-item.offline {
+  color: #888;
+  background: linear-gradient(135deg, #1a1a1a 0%, #111 100%);
+}
+
+.station-dropdown-item.online {
+  color: #4CAF50;
+  background: linear-gradient(135deg, #1a2a1a 0%, #0a1a0a 100%);
+}
+
+.station-dropdown-item.occupied {
+  color: #ff6b6b;
+  background: linear-gradient(135deg, #2a1a1a 0%, #1a0a0a 100%);
+  border-left: 3px solid #ff6b6b;
+}
+
+.station-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.station-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+  transition: background-color 0.3s ease;
+}
+
+.station-status-dot.online {
+  background: #4CAF50;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
+}
+
+.station-status-dot.occupied {
+  background: #ff6b6b;
+  box-shadow: 0 0 8px rgba(255, 107, 107, 0.5);
+}
+
+.station-streamer-info {
+  font-size: 11px;
+  color: #999;
+  font-style: italic;
 }
 
 .mic-button-container {

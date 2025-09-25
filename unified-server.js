@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 5173;
+const PORT = 3001;
 
 // CORS für alle Requests aktivieren
 app.use(cors({
@@ -26,7 +26,7 @@ let currentMountIndex = 0;
 
 // CORS-Proxy Routes ZUERST definieren (vor static files)
 // Audio-Proxy für OpenSubsonic Streams
-app.get('/api/OpenSubsonic-stream', async (req, res) => {
+app.get('/api/opensubsonic-stream', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
         return res.status(400).json({ error: 'Missing URL parameter' });
@@ -103,13 +103,13 @@ app.get('/api/OpenSubsonic-stream', async (req, res) => {
 });
 
 // Cover Art Proxy für OpenSubsonic
-app.get('/api/OpenSubsonic-cover', async (req, res) => {
+app.get('/api/opensubsonic-cover', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
         return res.status(400).json({ error: 'Missing URL parameter' });
     }
     
-    console.log(`🖼️ Cover Art Request: ${targetUrl}`);
+    // Reduzierte Logging - nur bei Debug oder Fehlern
     
     try {
         const fetch = (await import('node-fetch')).default;
@@ -128,7 +128,10 @@ app.get('/api/OpenSubsonic-cover', async (req, res) => {
             headers: requestHeaders
         });
         
-        console.log(`📥 Cover response: ${response.status} ${response.statusText}`);
+        // Nur Fehlermeldungen loggen, keine 200 OK Spam
+        if (response.status >= 400) {
+            console.log(`❌ Cover Art Error: ${response.status} ${response.statusText}`);
+        }
         
         // CORS-Headers hinzufügen
         res.set({
@@ -152,7 +155,6 @@ app.get('/api/OpenSubsonic-cover', async (req, res) => {
         
         // Stream weiterleiten
         response.body.pipe(res);
-        console.log(`✅ Cover Art proxied: ${response.status}`);
         
     } catch (error) {
         console.error(`❌ Cover Art Proxy Error:`, error.message);
@@ -293,7 +295,7 @@ app.use(express.static(path.join(__dirname, 'dist'), {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌐 Unified SubCaster Server läuft auf Port ${PORT}`);
     console.log(`🎯 Ziel: ${process.env.STREAM_SERVER || 'funkturm.radio-endstation.de'}:${process.env.STREAM_PORT || '8015'}`);
-    console.log(`📡 CORS Proxy: /api/OpenSubsonic-stream, /api/OpenSubsonic-cover`);
+    console.log(`📡 CORS Proxy: /api/opensubsonic-stream, /api/opensubsonic-cover`);
     console.log(`🔄 Harbor Stream: /api/stream`);
     console.log(`🔄 Mount-Points: ${MOUNT_POINTS.join(', ')}`);
 });

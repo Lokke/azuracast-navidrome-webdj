@@ -9,7 +9,7 @@
   "author": "Felix Pielok",
   "description": "Professional streaming and podcasting software with mixing capabilities",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npm run start:unified\" \"vite\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "start:all": "concurrently \"npm run start:unified\" \"npm run dev\"",
