@@ -13,8 +13,6 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-    env_file:
-      - .env.docker
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
