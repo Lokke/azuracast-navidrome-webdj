@@ -28,8 +28,8 @@ RUN apk add --no-cache curl
 # Package-Dateien kopieren für production install
 COPY --from=builder /app/package*.json ./
 
-# Nur Production-Dependencies installieren
-RUN npm ci --omit=dev && npm cache clean --force
+# Nur Production-Dependencies installieren (postinstall Scripts deaktivieren)
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # Build-Artefakte kopieren
 COPY --from=builder /app/dist ./dist
