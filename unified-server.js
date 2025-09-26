@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import net from 'net';
 import path from 'path';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,6 +18,9 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Ice-Public', 'Ice-Name', 'Ice-Description', 'User-Agent', 'Range']
 }));
+
+// JSON Body Parser for Setup-Wizard
+app.use(express.json({ limit: '10mb' }));
 
 // Harbor Connection Handler
 let harborSocket = null;
@@ -270,6 +274,90 @@ async function connectToHarbor(headers = {}) {
     });
 }
 
+// Setup Wizard - Save Configuration Endpoint
+app.post('/api/save-config', async (req, res) => {
+    try {
+        const { content, createBackup } = req.body;
+        
+        if (!content || typeof content !== 'string') {
+            return res.status(400).json({ error: 'Invalid content provided' });
+        }
+        
+        const envPath = path.join(__dirname, '.env');
+        
+        // Create backup if requested
+        if (createBackup) {
+            try {
+                const existingContent = await fs.readFile(envPath, 'utf8');
+                const backupPath = path.join(__dirname, `.env.backup.${Date.now()}`);
+                await fs.writeFile(backupPath, existingContent, 'utf8');
+                console.log(`📁 Backup created: ${backupPath}`);
+            } catch (backupError) {
+                console.warn('⚠️ Could not create backup:', backupError.message);
+                // Continue anyway - backup is optional
+            }
+        }
+        
+        // Write new configuration
+        await fs.writeFile(envPath, content, 'utf8');
+        console.log('✅ Configuration saved to .env file');
+        
+        res.json({ 
+            success: true, 
+            message: 'Configuration saved successfully',
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('❌ Error saving configuration:', error);
+        res.status(500).json({ 
+            error: 'Failed to save configuration', 
+            details: error.message 
+        });
+    }
+});
+
+// Setup Wizard - Check Configuration Status
+app.get('/api/setup-status', async (req, res) => {
+    try {
+        const envPath = path.join(__dirname, '.env');
+        
+        try {
+            const envContent = await fs.readFile(envPath, 'utf8');
+            const hasContent = envContent.trim().length > 0;
+            const hasOpenSubsonic = envContent.includes('VITE_OPENSUBSONIC_URL');
+            const hasAzuraCast = envContent.includes('VITE_AZURACAST_SERVERS');
+            const hasStreaming = envContent.includes('STREAM_SERVER');
+            
+            res.json({
+                configExists: true,
+                hasEnvFile: true,
+                hasContent,
+                services: {
+                    opensubsonic: hasOpenSubsonic,
+                    azuracast: hasAzuraCast,
+                    streaming: hasStreaming
+                },
+                lastModified: (await fs.stat(envPath)).mtime
+            });
+        } catch (fileError) {
+            res.json({
+                configExists: false,
+                hasEnvFile: false,
+                hasContent: false,
+                services: {
+                    opensubsonic: false,
+                    azuracast: false,
+                    streaming: false
+                }
+            });
+        }
+    } catch (error) {
+        console.error('❌ Error checking setup status:', error);
+        res.status(500).json({ error: 'Failed to check setup status' });
+    }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ 
@@ -293,8 +381,8 @@ app.use(express.static(path.join(__dirname, 'dist'), {
 }));
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🌐 Unified SubCaster Server läuft auf Port ${PORT}`);
-    console.log(`🎯 Ziel: ${process.env.STREAM_SERVER || 'funkturm.radio-endstation.de'}:${process.env.STREAM_PORT || '8015'}`);
+    console.log(`🌐 Unified SubCaster Server running on Port ${PORT}`);
+    console.log(`🎯 Target: ${process.env.STREAM_SERVER || 'funkturm.radio-endstation.de'}:${process.env.STREAM_PORT || '8015'}`);
     console.log(`📡 CORS Proxy: /api/opensubsonic-stream, /api/opensubsonic-cover`);
     console.log(`🔄 Harbor Stream: /api/stream`);
     console.log(`🔄 Mount-Points: ${MOUNT_POINTS.join(', ')}`);

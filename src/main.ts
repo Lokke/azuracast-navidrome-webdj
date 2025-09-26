@@ -1,6 +1,8 @@
 import "./style.css";
 import { SubsonicApiClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist } from "./opensubsonic";
 import { AzuraCastWebcaster, createAzuraCastConfig, fetchAzuraCastStations, fetchAllAzuraCastStations, type AzuraCastMetadata, type AzuraCastStation, type AzuraCastNowPlayingResponse } from "./azuracast";
+import { azuraCastWebSocket, type AzuraCastNowPlayingData } from "./azuracast-websocket";
+import { SetupWizard } from "./setup-wizard";
 import WaveSurfer from 'wavesurfer.js';
 import * as THREE from 'three';
 
@@ -52,6 +54,12 @@ function updateUserStatus(service: 'opensubsonic' | 'stream', username: string, 
 let libraryBrowser: any; // Wird später als LibraryBrowser initialisiert
 // let volumeMeterIntervals: { [key: string]: NodeJS.Timeout }; // Wird später definiert
 
+// Global flag to track if we're in setup-only mode
+let isSetupOnlyMode = false;
+
+// Queue for initialization functions that need to wait for class definitions
+let pendingInitializations: (() => void)[] = [];
+
 // AzuraCast WebDJ Integration
 let azuraCastWebcaster: AzuraCastWebcaster | null = null;
 let isStreaming = false;
@@ -85,6 +93,75 @@ let dPlayerGain: GainNode | null = null;
 let microphoneGain: GainNode | null = null;
 let crossfaderGain: { a: GainNode; b: GainNode; c: GainNode; d: GainNode } | null = null;
 let microphoneStream: MediaStream | null = null;
+
+// Audio Cleanup Function - Essential for preventing browser audio conflicts
+function cleanupAudioResources(): void {
+  console.log('🧹 Cleaning up audio resources...');
+  
+  try {
+    // Stop microphone stream and all tracks
+    if (microphoneStream) {
+      microphoneStream.getTracks().forEach(track => {
+        track.stop();
+        console.log('🎤 Microphone track stopped');
+      });
+      microphoneStream = null;
+    }
+    
+    // Close AudioContext to release audio hardware
+    if (audioContext && audioContext.state !== 'closed') {
+      audioContext.close().then(() => {
+        console.log('🔊 AudioContext closed successfully');
+      }).catch((error) => {
+        console.warn('⚠️ AudioContext close error:', error);
+      });
+      audioContext = null;
+    }
+    
+    // Reset all gain nodes
+    masterGainNode = null;
+    streamGainNode = null;
+    masterAudioDestination = null;
+    aPlayerGain = null;
+    bPlayerGain = null;
+    cPlayerGain = null;
+    dPlayerGain = null;
+    microphoneGain = null;
+    crossfaderGain = null;
+    
+    console.log('✅ Audio resources cleaned up successfully');
+  } catch (error) {
+    console.error('❌ Error during audio cleanup:', error);
+  }
+}
+
+// Register cleanup handlers
+window.addEventListener('beforeunload', (event) => {
+  console.log('🔄 Page reload/close detected - cleaning up audio resources');
+  cleanupAudioResources();
+});
+
+window.addEventListener('unload', () => {
+  console.log('🔄 Page unload - final cleanup');
+  cleanupAudioResources();
+});
+
+// Handle page visibility change more carefully
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    console.log('📱 Page hidden - keeping audio context active for continuous playback');
+    // DON'T suspend AudioContext - this would stop all players!
+    // Only reduce resource usage if no audio is playing
+  } else {
+    console.log('📱 Page visible - audio context ready');
+    // Ensure AudioContext is resumed if it was suspended
+    if (audioContext && audioContext.state === 'suspended') {
+      audioContext.resume().then(() => {
+        console.log('🔊 AudioContext resumed when page became visible');
+      });
+    }
+  }
+});
 
 // AzuraCast Station Selection
 let currentStationId: string | null = null;
@@ -314,12 +391,14 @@ async function initializeAudioMixing() {
     console.log(`   - Is Standard: ${isStandardRate ? '?' : '??'}`);
     console.log(`   - Browser optimized for: ${currentRate >= 48000 ? 'High Quality' : 'Standard Quality'}`);
     
-    // BROWSER AUDIO KOMPATIBILIT�T: AudioContext sofort suspendieren
-    // Wird nur bei Broadcast aktiviert, sodass andere Tabs normal funktionieren
-    if (audioContext.state === 'running') {
-      await audioContext.suspend();
-      console.log('?? AudioContext suspended by default - other tabs can play audio normally');
-      console.log('?? Will only activate during broadcasting to avoid interference');
+    // BROWSER AUDIO KOMPATIBILITÄT: AudioContext aktiv lassen für Player
+    // AudioContext muss aktiv bleiben, damit die Player funktionieren
+    console.log(`🎵 AudioContext active: ${audioContext.state} - Players can now use audio`);
+    
+    // Ensure AudioContext is running for players to work
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+      console.log('🎵 AudioContext resumed for player functionality');
     }
     
     // Audio Context Policy: Andere Audio-Quellen nicht beeintr�chtigen
@@ -332,7 +411,7 @@ async function initializeAudioMixing() {
     masterGainNode.gain.value = 0.99; // 99% Monitor-Volume
     masterGainNode.connect(audioContext.destination);
     
-    // Stream Gain Node f�r Live-Stream (separate Ausgabe) - PLAYER DECKS + MIKROFON
+    // Stream Gain Node for Live-Stream (separate output) - PLAYER DECKS + MICROPHONE
     streamGainNode = audioContext.createGain();
     streamGainNode.gain.value = 0.99; // 99% Stream-Volume
     
@@ -367,11 +446,11 @@ async function initializeAudioMixing() {
       crossfaderGain.d.gain.value = initialGain;
     }
     
-    // Mikrofon Gain Nodes
+    // Microphone Gain Nodes
     microphoneGain = audioContext.createGain();
     microphoneGain.gain.value = 0; // Standardm��ig stumm (wird �ber Button aktiviert)
     
-    // Mikrofon Monitor Gain (separater Schalter f�r Selbstabh�rung)
+    // Microphone Monitor Gain (separate switch for self-monitoring)
     const microphoneMonitorGain = audioContext.createGain();
     microphoneMonitorGain.gain.value = 0; // Standardm��ig aus (kein Selbsth�ren)
     
@@ -1564,8 +1643,86 @@ let autoQueueConfig = {
   isAutoPlaying: false  // Verhindert mehrfache Auto-Plays
 };
 
-document.addEventListener("DOMContentLoaded", async () => {
-  console.log("DOM fully loaded and parsed");
+// Check if configuration exists before initializing the app
+async function checkConfigurationAndInitialize() {
+  console.log("🔍 Checking configuration status...");
+  
+  // Check if we have any environment variables that indicate configuration exists
+  const hasOpenSubsonicUrl = import.meta.env.VITE_OPENSUBSONIC_URL;
+  const hasAzuraCastServers = import.meta.env.VITE_AZURACAST_SERVERS;
+  const hasStreamConfig = import.meta.env.VITE_STREAM_BITRATE;
+  
+  console.log('� Environment variables check:', {
+    hasOpenSubsonicUrl: !!hasOpenSubsonicUrl,
+    hasAzuraCastServers: !!hasAzuraCastServers,
+    hasStreamConfig: !!hasStreamConfig,
+    openSubsonicUrl: hasOpenSubsonicUrl,
+    azuraCastServers: hasAzuraCastServers
+  });
+  
+  // DEBUG: Show all VITE environment variables
+  console.log('🔍 ALL VITE environment variables:', import.meta.env);
+  
+  // Check if .env file was actually loaded by testing specific values
+  console.log('🔍 Raw environment variable values:');
+  console.log('  VITE_OPENSUBSONIC_URL:', import.meta.env.VITE_OPENSUBSONIC_URL);
+  console.log('  VITE_AZURACAST_SERVERS:', import.meta.env.VITE_AZURACAST_SERVERS);
+  console.log('  VITE_STREAM_BITRATE:', import.meta.env.VITE_STREAM_BITRATE);
+  console.log('  VITE_OPENSUBSONIC_USERNAME:', import.meta.env.VITE_OPENSUBSONIC_USERNAME);
+  
+  // If we have any configuration in environment variables, assume .env exists
+  const hasConfig = hasOpenSubsonicUrl || hasAzuraCastServers || hasStreamConfig;
+  
+  console.log('🎯 Final configuration decision: hasConfig =', hasConfig);
+  
+  if (hasConfig) {
+    console.log('✅ Configuration found in environment variables - initializing full app');
+    console.log('🚀 Calling initializeFullApp()...');
+    initializeFullApp();
+  } else {
+    console.log('❌ No configuration found in environment variables - showing setup wizard only');
+    console.log('🔧 Calling showSetupWizardOnly()...');
+    showSetupWizardOnly();
+  }
+}
+
+function showSetupWizardOnly() {
+  console.log('🔧 Showing setup wizard only - hiding main app');
+  
+  // Set global flag to prevent legacy code execution
+  isSetupOnlyMode = true;
+  
+  // Clear any previous setup completion flags since no config file exists
+  localStorage.removeItem('subcaster-setup-completed');
+  localStorage.removeItem('subcaster-setup-skipped');
+  localStorage.removeItem('subcaster-demo-active');
+  
+  // Hide the main app interface
+  const mainApp = document.querySelector('main') || document.body;
+  if (mainApp) {
+    // Hide all main app elements except setup wizard
+    const allElements = mainApp.children;
+    for (let i = 0; i < allElements.length; i++) {
+      const element = allElements[i] as HTMLElement;
+      if (element.id !== 'setup-wizard-overlay') {
+        element.style.display = 'none';
+      }
+    }
+  }
+  
+  // Show setup wizard
+  const setupWizard = new SetupWizard();
+  setupWizard.show();
+  
+  // Make setup wizard globally accessible
+  (window as any).showSetupWizard = () => {
+    console.log('🔧 Setup Wizard already active');
+    setupWizard.show();
+  };
+}
+
+function initializeFullApp() {
+  console.log("🚀 Initializing full SubCaster application...");
   
   // 1. Initialize Player Decks first (creates HTML)
   initializePlayerDecks();
@@ -1599,6 +1756,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupQueueDropZone();
     setupAlbumCoverDragDrop();
     setupAutoQueueControls();
+    setupRadioStreamSelector();
   }, 500);
   
   // 5. Initialize UI components
@@ -1614,29 +1772,108 @@ document.addEventListener("DOMContentLoaded", async () => {
   }, 1000);
   
   console.log("✅ Main initialization complete!");
-});  // Login-Formular initialisieren
-  initializeOpenSubsonicLogin();
-  
-  // Stream-Konfiguration Panel initialisieren
+}
 
+// Make initializeFullApp globally available for setup wizard
+(window as any).initializeFullApp = initializeFullApp;
+
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("DOM fully loaded and parsed");
   
-  // Initialize Media Library (nur Event Listeners, keine Daten)
-  initializeMediaLibrary();
+  // Check configuration and initialize accordingly
+  await checkConfigurationAndInitialize();
+});
+
+// END OF MAIN APPLICATION INITIALIZATION
+// THE CODE BELOW IS LEGACY AND SHOULD BE REFACTORED
+// It currently runs regardless of setup status, which causes the problem
+// TODO: Move all this code into initializeFullApp() function
   
-  // Mikrofon Toggle Funktionalit�t
+  // Microphone Toggle Functionality
   const micBtn = document.getElementById("mic-toggle") as HTMLButtonElement;
   const micVolumeSlider = document.getElementById("mic-volume") as HTMLInputElement;
-  let micActive = false;
+  let micActive = false; // Button state, but microphone is always recording
   
-  // Mikrofon Volume Control
+  // Set microphone volume to 100% by default
+  if (micVolumeSlider) {
+    micVolumeSlider.value = "100";
+    console.log("🎤 Microphone volume slider set to 100% by default");
+  }
+  
+  // Microphone Volume Control - always affects gain directly
   micVolumeSlider?.addEventListener("input", (e) => {
     const target = e.target as HTMLInputElement;
     const volume = parseInt(target.value) / 100;
     if (microphoneGain) {
+      // Apply volume based on button state
       microphoneGain.gain.value = micActive ? volume : 0;
-      console.log(`?? Microphone volume: ${Math.round(volume * 100)}%`);
+      console.log(`🎤 Microphone volume: ${Math.round(volume * 100)}% (Button: ${micActive ? 'ON' : 'OFF'})`);
     }
   });
+
+  // Microphone Device Selection
+  const micDeviceSelect = document.getElementById("mic-device-select") as HTMLSelectElement;
+  const micRefreshBtn = document.getElementById("mic-refresh-btn") as HTMLButtonElement;
+  let selectedMicDeviceId: string | null = null;
+
+  // Function to populate microphone devices
+  async function populateMicrophoneDevices(): Promise<void> {
+    try {
+      console.log('🎤 Loading available microphone devices...');
+      
+      // Request permission first to get device labels
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Get all audio input devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(device => device.kind === 'audioinput');
+      
+      // Clear existing options
+      micDeviceSelect.innerHTML = '<option value="">Select microphone...</option>';
+      
+      // Add devices to dropdown
+      audioInputs.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || `Microphone ${audioInputs.indexOf(device) + 1}`;
+        micDeviceSelect.appendChild(option);
+      });
+      
+      console.log(`🎤 Found ${audioInputs.length} microphone devices`);
+      
+      // Auto-select first device if none selected
+      if (!selectedMicDeviceId && audioInputs.length > 0) {
+        selectedMicDeviceId = audioInputs[0].deviceId;
+        micDeviceSelect.value = selectedMicDeviceId;
+      }
+      
+    } catch (error) {
+      console.error('❌ Error loading microphone devices:', error);
+      micDeviceSelect.innerHTML = '<option value="">Fehler beim Laden der Geräte</option>';
+    }
+  }
+
+  // Device selection change handler
+  micDeviceSelect.addEventListener('change', (e) => {
+    const target = e.target as HTMLSelectElement;
+    selectedMicDeviceId = target.value;
+    console.log(`🎤 Selected microphone device: ${target.options[target.selectedIndex].text}`);
+    
+    // If microphone is currently active, restart with new device
+    if (micActive) {
+      console.log('🎤 Restarting microphone with new device...');
+      setupMicrophone();
+    }
+  });
+
+  // Refresh button handler
+  micRefreshBtn.addEventListener('click', () => {
+    console.log('🎤 Refreshing microphone device list...');
+    populateMicrophoneDevices();
+  });
+
+  // Initialize microphone device list on startup
+  populateMicrophoneDevices();
 
   // AzuraCast Station Dropdown Initialization (Triggered by STREAM button)
   async function initializeStationDropdown(): Promise<void> {
@@ -1653,36 +1890,63 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Handle STREAM button click based on current state
     const handleStreamButtonClick = async () => {
+      console.log(`🔘 Stream button clicked - Current state: ${currentButtonState}, Station ID: ${currentStationId}`);
+      
       switch (currentButtonState) {
         case StreamButtonState.SELECT_STATION:
+          // Check if streaming is active - if so, block station selection
+          if (isLiveStreaming) {
+            console.log('🚫 Station selection blocked - streaming is active');
+            alert('Cannot change station while streaming is active. Please stop the stream first.');
+            return;
+          }
+          
+          console.log('📋 Opening station selection dropdown');
           // Open dropdown to select station
           isOpen = !isOpen;
           dropdownOverlay.classList.toggle('show', isOpen);
           break;
           
         case StreamButtonState.START_STREAMING:
+          // If streaming is already active, show warning instead of triggering disconnect
+          if (isLiveStreaming) {
+            console.log('� Stopping current stream to allow new stream');
+            showWarningMessage("stream is active!<br>press and hold for 5 seconds to disconnect");
+            return;
+          }
+          
+          console.log('🚀 Attempting to start streaming');
           // Start streaming to selected station
           await startStreamingToSelectedStation();
           break;
           
         case StreamButtonState.STREAMING_ACTIVE:
-          // Start disconnect countdown (existing logic)
-          startDisconnectCountdown();
+          console.log('⏹️ Stream active - use press and hold to disconnect');
+          // Show warning instead of starting countdown via click
+          showWarningMessage("stream is active!<br>press and hold for 5 seconds to disconnect");
+          break;
+          
+        default:
+          console.warn(`⚠️ Unknown button state: ${currentButtonState}`);
           break;
       }
     };
 
     // Start streaming to the currently selected station
     const startStreamingToSelectedStation = async () => {
+      console.log(`🔍 Checking streaming prerequisites - Station ID: ${currentStationId}, Shortcode: ${currentStationShortcode}, Server URL: ${currentServerUrl}`);
+      
       if (!currentStationId || !currentStationShortcode || !currentServerUrl) {
-        console.error('❌ No station selected for streaming');
+        console.error('❌ No station selected for streaming - missing prerequisites');
+        alert('Please select a station first before starting to stream.');
         return;
       }
       
       try {
-        console.log('🚀 Starting stream to selected station...');
+        console.log(`🚀 Starting stream to station: ${currentStationId} (${currentStationShortcode})`);
         currentButtonState = StreamButtonState.STREAMING_ACTIVE;
         isStreamConnected = true;
+        isLiveStreaming = true; // Set this for consistent streaming state
         updateStreamButton();
         
         // Start AzuraCast streaming with selected station
@@ -1690,6 +1954,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         
       } catch (error) {
         console.error('❌ Failed to start streaming:', error);
+        alert(`Failed to start streaming: ${error instanceof Error ? error.message : String(error)}`);
         currentButtonState = StreamButtonState.START_STREAMING;
         isStreamConnected = false;
         updateStreamButton();
@@ -1706,12 +1971,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Update STREAM button based on current state and selected station
     const updateStreamButton = (selectedStation?: any) => {
+      console.log(`🔄 Updating stream button - State: ${currentButtonState}, Station: ${selectedStation?.name || 'none'}`);
       streamButton.classList.remove('occupied', 'connected', 'disconnected');
+      const resetButton = document.getElementById('stream-reset-button') as HTMLButtonElement;
       
       switch (currentButtonState) {
         case StreamButtonState.SELECT_STATION:
           streamButton.classList.add('disconnected');
           streamUsernameDisplay.textContent = 'Select Station';
+          if (resetButton) resetButton.style.display = 'none';
           break;
           
         case StreamButtonState.START_STREAMING:
@@ -1722,15 +1990,26 @@ document.addEventListener("DOMContentLoaded", async () => {
           } else {
             // Station available for streaming
             streamButton.classList.add('disconnected');
-            streamUsernameDisplay.textContent = `Start: ${selectedStation?.name || 'Unknown'}`;
+            streamUsernameDisplay.textContent = selectedStation?.name || 'Unknown';
           }
+          if (resetButton) resetButton.style.display = 'block';
           break;
           
         case StreamButtonState.STREAMING_ACTIVE:
           streamButton.classList.add('connected');
-          streamUsernameDisplay.textContent = `Live: ${selectedStation?.name || 'Streaming'}`;
+          streamUsernameDisplay.textContent = selectedStation?.name || 'Streaming';
+          if (resetButton) resetButton.style.display = 'block';
+          break;
+          
+        default:
+          console.warn(`⚠️ Unknown button state: ${currentButtonState}`);
+          streamButton.classList.add('disconnected');
+          streamUsernameDisplay.textContent = 'Select Station';
+          if (resetButton) resetButton.style.display = 'none';
           break;
       }
+      
+      console.log(`✅ Button updated - Text: "${streamUsernameDisplay.textContent}", Classes: ${streamButton.className}`);
     };
 
     // Create station dropdown item
@@ -1791,6 +2070,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         currentStationId = station.id.toString();
         currentStationShortcode = station.shortcode;
         currentServerUrl = fullStationData?.serverUrl;
+        currentButtonState = StreamButtonState.START_STREAMING;
         
         // Update button appearance
         updateStreamButton(station);
@@ -1806,10 +2086,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         console.log(`🎯 Selected station: ${station.name} (ID: ${station.id}, shortcode: ${station.shortcode})`);
         console.log(`📡 Station configured: ${station.listen_url}`);
         
-        // Close dropdown and update button state
+        // Close dropdown
         isOpen = false;
         dropdownOverlay.classList.remove('show');
-        currentButtonState = StreamButtonState.START_STREAMING;
       });
 
       return item;
@@ -1879,8 +2158,46 @@ document.addEventListener("DOMContentLoaded", async () => {
     streamButton.addEventListener('click', handleStreamButtonClick);
     document.addEventListener('click', closeDropdown);
     
+    // Reset button handler
+    const resetButton = document.getElementById('stream-reset-button') as HTMLButtonElement;
+    if (resetButton) {
+      resetButton.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent triggering stream button click
+        
+        // Block reset during live streaming
+        if (isLiveStreaming) {
+          console.log('🚫 Station reset blocked - live streaming is active');
+          alert('Cannot reset station selection while live streaming is active. Please stop the stream first.');
+          return;
+        }
+        
+        // Reset station selection
+        currentStationId = null;
+        currentStationShortcode = null;
+        currentServerUrl = null;
+        currentButtonState = StreamButtonState.SELECT_STATION;
+        
+        // Clear dropdown selection
+        dropdownMenu.querySelectorAll('.station-dropdown-item').forEach(i => i.classList.remove('selected'));
+        
+        // Update button appearance
+        updateStreamButton();
+        
+        // Hide reset button
+        resetButton.style.display = 'none';
+        
+        console.log('🔄 Station selection reset');
+      });
+    }
+    
     // Initialize button state
     updateStreamButton();
+    
+    // Make updateStreamButton globally available for reset after streaming
+    (window as any).__updateStreamButton = updateStreamButton;
+    
+    // Make streaming function globally available
+    (window as any).__startAzuraCastStreaming = startAzuraCastStreaming;
   }
 
   // AzuraCast WebDJ Streaming Functions
@@ -1902,7 +2219,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       const config = createAzuraCastConfig(
         currentStationId || undefined, 
         currentStationShortcode || undefined,
-        currentServerUrl || undefined
+        currentServerUrl || undefined,
+        streamConfig.username,
+        streamConfig.password
       );
       azuraCastWebcaster = new AzuraCastWebcaster(config);
 
@@ -1914,6 +2233,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       
       if (connected) {
         isStreaming = true;
+        isLiveStreaming = true; // Keep both streaming states in sync
         
         // Update UI
         const streamBtn = document.getElementById('stream-live-status') as HTMLButtonElement;
@@ -2005,30 +2325,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   micBtn?.addEventListener("click", async () => {
     micActive = !micActive;
     
-    if (micActive) {
-      // Mikrofon einschalten und Audio-Mixing initialisieren falls n�tig
+    // Initialize microphone if not already done
+    if (!microphoneStream) {
+      // Audio-Mixing initialisieren falls nötig
       if (!audioContext) {
         await initializeAudioMixing();
       }
       
-      // Mikrofon einrichten
+      // Ensure AudioContext is running
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+        console.log('🎤 AudioContext resumed for microphone activation');
+      }
+      
+      // Mikrofon einrichten (nur einmal, läuft dann kontinuierlich)
       const micReady = await setupMicrophone();
-      if (micReady) {
-        // Volume basierend auf Slider setzen
-        const volume = parseInt(micVolumeSlider?.value || "70") / 100;
-        setMicrophoneEnabled(true, volume);
-        micBtn.classList.add("active");
-        micBtn.innerHTML = '<span class="material-icons">mic</span> MIKROFON AN';
-        console.log("?? Mikrofon aktiviert - pulsiert rot");
-      } else {
+      if (!micReady) {
         micActive = false;
         alert('Microphone access denied or not available');
+        return;
       }
+    }
+    
+    // Button controls volume, not stream
+    if (micActive) {
+      // Volume basierend auf Slider setzen
+      const volume = parseInt(micVolumeSlider?.value || "100") / 100;
+      setMicrophoneEnabled(true, volume);
+      micBtn.classList.add("active");
+      micBtn.innerHTML = '<span class="material-icons">mic</span> MICROPHONE ON';
+      console.log(`🎤 Microphone volume enabled: ${Math.round(volume * 100)}%`);
     } else {
+      // Mute microphone but keep stream running
       setMicrophoneEnabled(false);
       micBtn.classList.remove("active");
-      micBtn.innerHTML = '<span class="material-icons">mic</span> MIKROFON';
-      console.log("Mikrofon deaktiviert");
+      micBtn.innerHTML = '<span class="material-icons">mic</span> MICROPHONE';
+      console.log("🎤 Microphone muted (stream still active)");
     }
   });
 
@@ -2036,14 +2368,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initializeStationDropdown();
 
   // Stream Live Button Event Listener - AzuraCast WebDJ Integration
+  // NOTE: This handler is now handled by the station dropdown logic in initializeStationDropdown()
+  // to ensure proper station selection before streaming
   const streamLiveBtn = document.getElementById('stream-live-status') as HTMLButtonElement;
-  streamLiveBtn?.addEventListener("click", async () => {
-    if (!isStreaming) {
-      await startAzuraCastStreaming();
-    } else {
-      await stopAzuraCastStreaming();
-    }
-  });
+  if (streamLiveBtn) {
+    console.log('🔄 Stream button found - using station dropdown handler instead of direct streaming');
+  }
   
 // Audio-Mixing-System initialisieren
 // Audio-Quellen zu Mixing-System hinzuf�gen
@@ -2106,46 +2436,60 @@ function showCORSErrorMessage() {
   }, 10000);
 }
 
-// Mikrofon zum Mixing-System hinzuf�gen
+// Mikrofon zum Mixing-System hinzufügen
 async function setupMicrophone() {
   if (!audioContext || !microphoneGain) return false;
   
   try {
-    // DYNAMISCHE SAMPLE RATE: Verwende AudioContext Sample Rate f�r Kompatibilit�t
+    // Clean up any existing microphone stream first
+    if (microphoneStream) {
+      microphoneStream.getTracks().forEach(track => {
+        track.stop();
+        console.log('🎤 Previous microphone track stopped');
+      });
+      microphoneStream = null;
+    }
+    
+    // DYNAMISCHE SAMPLE RATE: Verwende AudioContext Sample Rate für Kompatibilität
     const contextSampleRate = audioContext.sampleRate;
-    console.log(`?? Setting up microphone with dynamic sample rate: ${contextSampleRate} Hz`);
+    console.log(`🎤 Setting up fresh microphone with dynamic sample rate: ${contextSampleRate} Hz`);
     
     // Mikrofon-Konfiguration f�r DJ-Anwendung (ALLE Audio-Effekte deaktiviert f�r beste Verst�ndlichkeit)
-    microphoneStream = await navigator.mediaDevices.getUserMedia({ 
-      audio: {
-        // Basis-Audio-Einstellungen - ALLE Effekte AUS f�r nat�rliche Stimme
-        echoCancellation: false,          // Echo-Cancel AUS - verschlechtert oft DJ-Mikrofone
-        noiseSuppression: false,          // Noise-Suppress AUS - kann Stimme verzerren
-        autoGainControl: false,           // AGC aus f�r manuelle Lautst�rke-Kontrolle
+    const audioConstraints: MediaTrackConstraints = {
+      // Device Selection - use selected device if available
+      ...(selectedMicDeviceId && { deviceId: { exact: selectedMicDeviceId } }),
+      
+      // Basis-Audio-Einstellungen - ALLE Effekte AUS f�r nat�rliche Stimme
+      echoCancellation: false,          // Echo-Cancel AUS - verschlechtert oft DJ-Mikrofone
+      noiseSuppression: false,          // Noise-Suppress AUS - kann Stimme verzerren
+      autoGainControl: false,           // AGC aus f�r manuelle Lautst�rke-Kontrolle
         
-        // DYNAMISCHE Sample Rate - passt sich an AudioContext an
-        sampleRate: { 
+      // DYNAMISCHE Sample Rate - passt sich an AudioContext an
+      sampleRate: { 
           ideal: contextSampleRate,       // Verwende AudioContext Sample Rate
           min: 8000,                      // Minimum f�r Fallback
           max: 192000                     // Maximum f�r High-End Mikrofone
-        },
-        sampleSize: { ideal: 16 },        // 16-bit Audio
-        channelCount: { ideal: 1 },       // Mono f�r geringere Bandbreite
+      },
+      sampleSize: { ideal: 16 },        // 16-bit Audio
+      channelCount: { ideal: 1 },       // Mono für geringere Bandbreite
         
-        // Browser-spezifische Verbesserungen - ALLE AUS f�r nat�rliche Stimme
-        // @ts-ignore - Browser-spezifische Eigenschaften
-        googEchoCancellation: false,      // Google Echo-Cancel AUS
-        // @ts-ignore
-        googAutoGainControl: false,       // Google AGC AUS
-        // @ts-ignore
-        googNoiseSuppression: false,      // Google Noise-Suppress AUS
-        // @ts-ignore
-        googHighpassFilter: false,        // Highpass-Filter AUS
-        // @ts-ignore
-        googTypingNoiseDetection: false,  // Typing-Detection AUS
-        // @ts-ignore
-        googAudioMirroring: false
-      } 
+      // Browser-spezifische Verbesserungen - ALLE AUS für natürliche Stimme
+      // @ts-ignore - Browser-spezifische Eigenschaften
+      googEchoCancellation: false,      // Google Echo-Cancel AUS
+      // @ts-ignore
+      googAutoGainControl: false,       // Google AGC AUS
+      // @ts-ignore
+      googNoiseSuppression: false,      // Google Noise-Suppress AUS
+      // @ts-ignore
+      googHighpassFilter: false,        // Highpass-Filter AUS
+      // @ts-ignore
+      googTypingNoiseDetection: false,  // Typing-Detection AUS
+      // @ts-ignore
+      googAudioMirroring: false
+    };
+    
+    microphoneStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: audioConstraints
     });
     
     // Mikrofon-Track Sample Rate Analyse
@@ -2183,17 +2527,84 @@ async function setupMicrophone() {
     // MediaStreamAudioSourceNode erstellen
     const micSourceNode = audioContext.createMediaStreamSource(microphoneStream);
     
-    // Optional: Kompressor f�r bessere Mikrofon-Qualit�t hinzuf�gen
-    const compressor = audioContext.createDynamicsCompressor();
-    compressor.threshold.setValueAtTime(-24, audioContext.currentTime);
-    compressor.knee.setValueAtTime(30, audioContext.currentTime);
-    compressor.ratio.setValueAtTime(12, audioContext.currentTime);
-    compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
-    compressor.release.setValueAtTime(0.25, audioContext.currentTime);
+    // AnalyserNode für Volume Meter erstellen
+    const micAnalyser = audioContext.createAnalyser();
+    micAnalyser.fftSize = 256;
+    micAnalyser.smoothingTimeConstant = 0.3;
     
-    // Audio-Kette: Mikrofon -> Kompressor -> Gain
-    micSourceNode.connect(compressor);
-    compressor.connect(microphoneGain);
+    // Analyser global speichern für Volume Meter
+    (window as any).micAnalyser = micAnalyser;
+    
+    // 🎙️ PROFESSIONELLE BROADCAST AUDIO-PROCESSING CHAIN 🎙️
+    console.log('🔧 Setting up professional microphone processing chain...');
+    
+    // 1. HIGH-PASS FILTER - Entfernt Rumpeln und Low-End-Probleme
+    const highPassFilter = audioContext.createBiquadFilter();
+    highPassFilter.type = 'highpass';
+    highPassFilter.frequency.setValueAtTime(85, audioContext.currentTime); // 85Hz cutoff für Stimme
+    highPassFilter.Q.setValueAtTime(0.7, audioContext.currentTime);
+    console.log('🔧 High-pass filter: 85Hz cutoff');
+    
+    // 2. PREAMP/INPUT GAIN - Boost vor Kompressor
+    const preAmp = audioContext.createGain();
+    preAmp.gain.setValueAtTime(2.5, audioContext.currentTime); // +8dB Input Gain
+    console.log('🔧 PreAmp: +8dB input gain');
+    
+    // 3. KOMPRESSOR - Aggressiv für Broadcast-Lautheit
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-18, audioContext.currentTime);  // -18dB threshold (aggressiver)
+    compressor.knee.setValueAtTime(15, audioContext.currentTime);        // 15dB knee (sanfter Übergang)
+    compressor.ratio.setValueAtTime(8, audioContext.currentTime);        // 8:1 ratio (stark komprimiert)
+    compressor.attack.setValueAtTime(0.001, audioContext.currentTime);   // 1ms attack (sehr schnell)
+    compressor.release.setValueAtTime(0.1, audioContext.currentTime);    // 100ms release (schnell)
+    console.log('🔧 Compressor: -18dB threshold, 8:1 ratio, fast attack');
+    
+    // 4. EQ - SPEECH OPTIMIZATION (Präsenz-Boost)
+    const eqLowMid = audioContext.createBiquadFilter();
+    eqLowMid.type = 'peaking';
+    eqLowMid.frequency.setValueAtTime(200, audioContext.currentTime);    // 200Hz
+    eqLowMid.Q.setValueAtTime(1.0, audioContext.currentTime);
+    eqLowMid.gain.setValueAtTime(-2, audioContext.currentTime);          // -2dB (reduziert Wummern)
+    
+    const eqPresence = audioContext.createBiquadFilter();
+    eqPresence.type = 'peaking';
+    eqPresence.frequency.setValueAtTime(2500, audioContext.currentTime);  // 2.5kHz Präsenz
+    eqPresence.Q.setValueAtTime(1.2, audioContext.currentTime);
+    eqPresence.gain.setValueAtTime(4, audioContext.currentTime);          // +4dB Boost für Klarheit
+    
+    const eqBrilliance = audioContext.createBiquadFilter();
+    eqBrilliance.type = 'peaking';
+    eqBrilliance.frequency.setValueAtTime(8000, audioContext.currentTime); // 8kHz Brillanz
+    eqBrilliance.Q.setValueAtTime(0.8, audioContext.currentTime);
+    eqBrilliance.gain.setValueAtTime(2, audioContext.currentTime);          // +2dB für Luftigkeit
+    console.log('🔧 EQ: Low-mid cut (-2dB@200Hz), Presence boost (+4dB@2.5kHz), Brilliance (+2dB@8kHz)');
+    
+    // 5. LIMITER - Verhindert Clipping
+    const limiter = audioContext.createDynamicsCompressor();
+    limiter.threshold.setValueAtTime(-3, audioContext.currentTime);      // -3dB threshold (sehr hoch)
+    limiter.knee.setValueAtTime(0, audioContext.currentTime);            // Hard knee (0dB)
+    limiter.ratio.setValueAtTime(20, audioContext.currentTime);          // 20:1 ratio (Brickwall)
+    limiter.attack.setValueAtTime(0.0001, audioContext.currentTime);     // 0.1ms attack (instant)
+    limiter.release.setValueAtTime(0.05, audioContext.currentTime);      // 50ms release (schnell)
+    console.log('🔧 Limiter: -3dB threshold, 20:1 ratio, brickwall limiting');
+    
+    // 6. OUTPUT GAIN - Finale Lautstärke-Kontrolle
+    const outputGain = audioContext.createGain();
+    outputGain.gain.setValueAtTime(1.8, audioContext.currentTime);       // +5dB Output für Broadcast-Level
+    console.log('🔧 Output gain: +5dB final boost');
+    
+    // 🎵 PROFESSIONELLE AUDIO-KETTE AUFBAUEN 🎵
+    // Mikrofon -> Analyser -> High-Pass -> PreAmp -> Kompressor -> EQ -> Limiter -> Output -> Final Gain
+    micSourceNode.connect(micAnalyser);
+    micAnalyser.connect(highPassFilter);
+    highPassFilter.connect(preAmp);
+    preAmp.connect(compressor);
+    compressor.connect(eqLowMid);
+    eqLowMid.connect(eqPresence);
+    eqPresence.connect(eqBrilliance);
+    eqBrilliance.connect(limiter);
+    limiter.connect(outputGain);
+    outputGain.connect(microphoneGain);
     
     console.log(`?? Microphone connected with enhanced audio processing (${contextSampleRate}Hz, compression, dynamic compatibility)`);
     return true;
@@ -2245,12 +2656,19 @@ function setCrossfaderPosition(position: number) {
   console.log(`🎚️ Crossfader position: ${position}, A: ${aGain.toFixed(2)}, B: ${bGain.toFixed(2)}, C: ${cGain.toFixed(2)}, D: ${dGain.toFixed(2)}`);
 }
 
-// Mikrofon ein-/ausschalten
+// Mikrofon Lautstärke steuern (Stream bleibt immer aktiv)
 function setMicrophoneEnabled(enabled: boolean, volume: number = 1) {
   if (!microphoneGain) return;
   
-  microphoneGain.gain.value = enabled ? volume : 0;
-  console.log(`?? Microphone ${enabled ? 'enabled' : 'disabled'} with volume ${Math.round(volume * 100)}%`);
+  if (enabled) {
+    microphoneGain.gain.value = volume;
+    console.log(`🎤 Microphone volume set to ${Math.round(volume * 100)}%`);
+  } else {
+    // Mute but keep stream alive for consistent behavior
+    microphoneGain.gain.value = 0;
+    console.log(`🎤 Microphone muted (stream still recording)`);
+    // Note: Stream stays active for consistent meter display and instant activation
+  }
 }
 
 
@@ -3799,6 +4217,389 @@ function prepareDecksOnActivation(deckPair: ('a' | 'b' | 'c' | 'd')[]) {
   console.log(`📋 No active tracks in deck pair [${deckPair.join(', ').toUpperCase()}], waiting for manual start`);
 }
 
+// Update radio stream display with station info
+function updateRadioStreamDisplay(deck: string, station: any) {
+  console.log(`📻 Updating radio display for deck ${deck.toUpperCase()}:`, {
+    stationName: station.name,
+    isLive: station.live?.is_live,
+    streamerName: station.live?.streamer_name,
+    nowPlaying: station.now_playing?.song
+  });
+  
+  // Use the waveform display elements (zweckentfremden für Radio-Streams)
+  const titleElement = document.getElementById(`track-title-${deck}`) as HTMLElement;
+  const artistElement = document.getElementById(`track-artist-${deck}`) as HTMLElement;
+  const albumCoverElement = document.getElementById(`album-cover-${deck}`) as HTMLElement;
+  
+  console.log(`📻 Found elements for deck ${deck}:`, {
+    titleElement: !!titleElement,
+    artistElement: !!artistElement,
+    albumCoverElement: !!albumCoverElement
+  });
+  
+  // Get live and now playing info
+  const isLive = station.live?.is_live;
+  const streamerName = station.live?.streamer_name;
+  const nowPlaying = station.now_playing?.song;
+  
+  // Update waveform title field with current track or station name
+  if (titleElement) {
+    if (nowPlaying?.title) {
+      titleElement.textContent = nowPlaying.title;
+    } else {
+      titleElement.textContent = `📻 ${station.name}`;
+    }
+  }
+  
+  // Update waveform artist field with artist or streamer info
+  if (artistElement) {
+    if (nowPlaying?.artist) {
+      artistElement.textContent = nowPlaying.artist;
+    } else if (isLive && streamerName) {
+      artistElement.textContent = `🔴 Live: ${streamerName}`;
+    } else {
+      artistElement.textContent = `${station.name} - Live Radio`;
+    }
+  }
+  
+  // Update waveform album cover with current track art
+  if (albumCoverElement) {
+    if (nowPlaying?.art) {
+      albumCoverElement.innerHTML = `<img src="${nowPlaying.art}" alt="Album Cover" style="width: 100%; height: 100%; object-fit: cover;">`;
+    } else {
+      // Default radio icon when no cover available
+      albumCoverElement.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(255,255,255,0.1); border-radius: 8px;">
+          <span class="material-icons" style="font-size: 48px; color: rgba(255,255,255,0.7);">radio</span>
+        </div>
+      `;
+    }
+  }
+}
+
+// Update radio stream display from WebSocket data
+function updateRadioStreamFromWebSocket(deck: string, station: any, data: AzuraCastNowPlayingData) {
+  console.log(`📻 WebSocket update for deck ${deck.toUpperCase()}:`, data);
+  
+  // Use the waveform display elements (zweckentfremden für Radio-Stream Updates)
+  const titleElement = document.getElementById(`track-title-${deck}`) as HTMLElement;
+  const artistElement = document.getElementById(`track-artist-${deck}`) as HTMLElement;
+  const albumCoverElement = document.getElementById(`album-cover-${deck}`) as HTMLElement;
+  
+  console.log(`📻 WebSocket elements found for deck ${deck}:`, {
+    titleElement: !!titleElement,
+    artistElement: !!artistElement,
+    albumCoverElement: !!albumCoverElement,
+    titleElementId: `track-title-${deck}`,
+    artistElementId: `track-artist-${deck}`,
+    albumElementId: `album-cover-${deck}`
+  });
+  
+  // Update waveform title with real-time track info
+  if (titleElement) {
+    const newTitle = data.now_playing?.song?.title || `📻 ${station.name}`;
+    console.log(`📻 Setting title for deck ${deck}: "${newTitle}"`);
+    titleElement.textContent = newTitle;
+  } else {
+    console.error(`❌ Title element not found: track-title-${deck}`);
+  }
+  
+  // Update waveform artist with real-time artist or streamer info
+  if (artistElement) {
+    let newArtist = '';
+    if (data.now_playing?.song?.artist) {
+      newArtist = data.now_playing.song.artist;
+    } else if (data.live?.is_live && data.live?.streamer_name) {
+      newArtist = `🔴 Live: ${data.live.streamer_name}`;
+    } else {
+      newArtist = `${station.name} - Live Radio`;
+    }
+    console.log(`📻 Setting artist for deck ${deck}: "${newArtist}"`);
+    artistElement.textContent = newArtist;
+  } else {
+    console.error(`❌ Artist element not found: track-artist-${deck}`);
+  }
+  
+  // Update waveform album cover automatically when it changes
+  if (albumCoverElement) {
+    const newCoverUrl = data.now_playing?.song?.art;
+    const currentCover = albumCoverElement.querySelector('img');
+    const currentSrc = currentCover?.src;
+    
+    if (newCoverUrl && currentSrc !== newCoverUrl) {
+      console.log(`🖼️ Updating album cover for deck ${deck.toUpperCase()}: ${newCoverUrl}`);
+      
+      // Add smooth transition for cover changes
+      albumCoverElement.style.opacity = '0.5';
+      setTimeout(() => {
+        albumCoverElement.innerHTML = `<img src="${newCoverUrl}" alt="Album Cover" style="width: 100%; height: 100%; object-fit: cover;">`;
+        albumCoverElement.style.opacity = '1';
+      }, 200);
+    } else if (!newCoverUrl && currentCover) {
+      // Switch back to radio icon when no cover available
+      albumCoverElement.style.opacity = '0.5';
+      setTimeout(() => {
+        albumCoverElement.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(255,255,255,0.1); border-radius: 8px;">
+            <span class="material-icons" style="font-size: 48px; color: rgba(255,255,255,0.7);">radio</span>
+          </div>
+        `;
+        albumCoverElement.style.opacity = '1';
+      }, 200);
+    }
+  }
+  
+  // Update stored radio track info for consistency
+  const radioTrack = (window as any)[`radioTrack_${deck}`];
+  if (radioTrack && data.now_playing?.song) {
+    radioTrack.title = data.now_playing.song.title;
+    radioTrack.artist = data.now_playing.song.artist;
+    radioTrack.coverArt = data.now_playing.song.art;
+  }
+}
+
+// Setup Radio Stream Selector
+function setupRadioStreamSelector() {
+  const radioBtn = document.getElementById('radio-stream-btn') as HTMLButtonElement;
+  const dropdown = document.getElementById('radio-stream-dropdown') as HTMLDivElement;
+  const loadingDiv = document.getElementById('radio-stream-loading') as HTMLDivElement;
+  const streamList = document.getElementById('radio-stream-list') as HTMLDivElement;
+  
+  if (!radioBtn || !dropdown || !loadingDiv || !streamList) {
+    console.warn('Radio stream elements not found');
+    return;
+  }
+  
+  let isDropdownOpen = false;
+  let radioStations: any[] = [];
+  
+  // Toggle dropdown
+  const toggleDropdown = async () => {
+    if (isDropdownOpen) {
+      dropdown.classList.remove('show');
+      radioBtn.classList.remove('active');
+      isDropdownOpen = false;
+    } else {
+      dropdown.classList.add('show');
+      radioBtn.classList.add('active');
+      isDropdownOpen = true;
+      
+      // Load radio stations if not already loaded
+      if (radioStations.length === 0) {
+        await loadRadioStations();
+      }
+    }
+  };
+  
+  // Load radio stations from AzuraCast
+  const loadRadioStations = async () => {
+    try {
+      loadingDiv.style.display = 'block';
+      streamList.style.display = 'none';
+      
+      console.log('📻 Loading radio stations...');
+      
+      // Get AzuraCast servers from environment
+      const serverUrls = import.meta.env.VITE_AZURACAST_SERVERS?.split(',').map((url: string) => url.trim()) || [];
+      
+      if (serverUrls.length === 0) {
+        throw new Error('No AzuraCast servers configured');
+      }
+      
+      // Import and use the AzuraCast client
+      const { fetchAllAzuraCastStations } = await import('./azuracast');
+      const allServersData = await fetchAllAzuraCastStations(serverUrls);
+      
+      // Flatten all stations with server info
+      radioStations = [];
+      allServersData.forEach(serverData => {
+        serverData.stations.forEach(stationResponse => {
+          // Each station response has a 'station' property with the actual station data
+          const station = stationResponse.station || stationResponse;
+          radioStations.push({
+            ...station,
+            serverUrl: serverData.serverUrl,
+            // Add live info from the response
+            live: stationResponse.live || station.live,
+            now_playing: stationResponse.now_playing || station.now_playing
+          });
+        });
+      });
+      
+      console.log(`📻 Loaded ${radioStations.length} radio stations from ${allServersData.length} servers`);
+      
+      // Populate dropdown
+      populateRadioDropdown(radioStations);
+      
+      loadingDiv.style.display = 'none';
+      streamList.style.display = 'block';
+      
+    } catch (error) {
+      console.error('❌ Error loading radio stations:', error);
+      loadingDiv.innerHTML = `
+        <span class="material-icons">error</span>
+        Error loading stations
+      `;
+    }
+  };
+  
+  // Populate dropdown with stations
+  const populateRadioDropdown = (stations: any[]) => {
+    streamList.innerHTML = '';
+    
+    stations.forEach(station => {
+      const stationItem = document.createElement('div');
+      const isLive = station.live?.is_live;
+      const streamerName = station.live?.streamer_name;
+      const nowPlaying = station.now_playing?.song;
+      
+      // Add live class for styling
+      stationItem.className = `radio-stream-item ${isLive ? 'live-stream' : ''}`;
+      
+      // Create description text
+      let description = station.description || 'Radio Stream';
+      if (isLive && streamerName) {
+        description = `🔴 LIVE: ${streamerName}`;
+      } else if (nowPlaying) {
+        description = `🎵 ${nowPlaying.artist} - ${nowPlaying.title}`;
+      }
+      
+      stationItem.innerHTML = `
+        <div class="radio-stream-info">
+          <div class="radio-stream-name">
+            ${isLive ? '<span class="live-indicator">●</span>' : ''}
+            ${station.name}
+          </div>
+          <div class="radio-stream-description">${description}</div>
+        </div>
+        <div class="radio-stream-deck-buttons">
+          <button class="radio-deck-btn" data-deck="a" data-station-id="${station.id}" data-server-url="${station.serverUrl}" data-shortcode="${station.shortcode}">A</button>
+          <button class="radio-deck-btn" data-deck="b" data-station-id="${station.id}" data-server-url="${station.serverUrl}" data-shortcode="${station.shortcode}">B</button>
+          <button class="radio-deck-btn" data-deck="c" data-station-id="${station.id}" data-server-url="${station.serverUrl}" data-shortcode="${station.shortcode}">C</button>
+          <button class="radio-deck-btn" data-deck="d" data-station-id="${station.id}" data-server-url="${station.serverUrl}" data-shortcode="${station.shortcode}">D</button>
+        </div>
+      `;
+      
+      streamList.appendChild(stationItem);
+    });
+    
+    // Add event listeners for deck buttons
+    streamList.addEventListener('click', (e) => {
+      const target = e.target as HTMLButtonElement;
+      if (target.classList.contains('radio-deck-btn')) {
+        const deck = target.dataset.deck;
+        const stationId = target.dataset.stationId;
+        const serverUrl = target.dataset.serverUrl;
+        const shortcode = target.dataset.shortcode;
+        const station = stations.find(s => s.id == stationId && s.serverUrl === serverUrl && s.shortcode === shortcode);
+        
+        if (deck && station) {
+          loadRadioStreamToDeck(deck, station);
+          toggleDropdown(); // Close dropdown after selection
+        }
+      }
+    });
+  };
+  
+  // Load radio stream to specified deck
+  const loadRadioStreamToDeck = async (deck: string, station: any) => {
+    try {
+      console.log(`📻 Loading ${station.name} to Deck ${deck.toUpperCase()}`);
+      
+      // Get the audio element for the deck
+      const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
+      const titleElement = document.getElementById(`title-${deck}`) as HTMLSpanElement;
+      const artistElement = document.getElementById(`artist-${deck}`) as HTMLSpanElement;
+      const albumCoverElement = document.getElementById(`album-cover-${deck}`) as HTMLImageElement;
+      
+      if (!audio) {
+        console.error(`❌ Audio element for deck ${deck} not found`);
+        return;
+      }
+      
+      // Always use standard AzuraCast listen URL format (more reliable for CORS)
+      const streamUrl = `${station.serverUrl}/listen/${station.shortcode}/radio.mp3`;
+      
+      console.log(`📻 Stream URL: ${streamUrl}`);
+      
+      // Create a deck-compatible track object for the radio stream
+      const radioTrack = {
+        id: `radio-${station.id}`,
+        title: station.name,
+        artist: 'Live Radio Stream',
+        album: station.description || station.name,
+        duration: 0, // Live streams have no duration
+        genre: station.genre || 'Radio',
+        year: new Date().getFullYear(),
+        track: 0,
+        discNumber: 0,
+        coverArt: station.now_playing?.song?.art || null,
+        suffix: 'mp3',
+        bitRate: station.bitrate || 128,
+        path: streamUrl,
+        isStream: true,
+        isRadio: true,
+        stationId: station.id,
+        shortcode: station.shortcode,
+        serverUrl: station.serverUrl
+      };
+      
+      // Store radio track info for this deck
+      (window as any)[`radioTrack_${deck}`] = radioTrack;
+      
+      // Load the stream
+      audio.src = streamUrl;
+      audio.crossOrigin = 'anonymous'; // Allow CORS for radio streams
+      audio.load();
+      
+      // Update initial display
+      updateRadioStreamDisplay(deck, station);
+      
+      // Subscribe to WebSocket updates for this station
+      azuraCastWebSocket.subscribe(station.serverUrl, station.shortcode, (data: AzuraCastNowPlayingData) => {
+        updateRadioStreamFromWebSocket(deck, station, data);
+      });
+      
+      // Update file info display
+      const fileInfo = document.querySelector(`#file-info-${deck} .file-path-display`);
+      if (fileInfo) {
+        fileInfo.textContent = `📻 ${station.name}`;
+      }
+      
+      console.log(`✅ Radio stream loaded to Deck ${deck.toUpperCase()}`);
+      
+      // Find and show visual feedback on the clicked button
+      const deckButton = document.querySelector(`[data-deck="${deck}"][data-station-id="${station.id}"]`) as HTMLButtonElement;
+      if (deckButton) {
+        deckButton.style.background = 'rgba(100, 255, 218, 0.3)';
+        deckButton.style.borderColor = '#64FFDA';
+        deckButton.style.color = '#64FFDA';
+        
+        setTimeout(() => {
+          deckButton.style.background = '';
+          deckButton.style.borderColor = '';
+          deckButton.style.color = '';
+        }, 2000);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error loading radio stream to deck ${deck}:`, error);
+    }
+  };
+  
+  // Event listeners
+  radioBtn.addEventListener('click', toggleDropdown);
+  
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (isDropdownOpen && !radioBtn.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
+      toggleDropdown();
+    }
+  });
+  
+  console.log('📻 Radio stream selector initialized');
+}
+
 // Handle Auto-Queue Logic when a track ends
 function handleAutoQueue(finishedDeck: 'a' | 'b' | 'c' | 'd') {
   console.log(`🎯 Auto-Queue triggered: Deck ${finishedDeck.toUpperCase()} finished`);
@@ -4056,88 +4857,59 @@ function initializeOpenSubsonicLogin() {
   const loginForm = document.getElementById('OpenSubsonic-login') as HTMLElement;
   const djControls = document.getElementById('dj-controls') as HTMLElement;
   
-  // OpenSubsonic fields
+  // Get environment configuration
+  const envOpenSubsonicUrl = import.meta.env.VITE_OPENSUBSONIC_URL;
+  const envAzuraCastServers = import.meta.env.VITE_AZURACAST_SERVERS;
+  const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
+  
+  // Get UI elements
+  const unifiedLoginSection = document.getElementById('unified-login-section') as HTMLElement;
+  const individualLoginSections = document.getElementById('individual-login-sections') as HTMLElement;
+  const unifiedUsernameInput = document.getElementById('unified-username') as HTMLInputElement;
+  const unifiedPasswordInput = document.getElementById('unified-password') as HTMLInputElement;
+  const opensubsonicUrlValue = document.getElementById('opensubsonic-url-value') as HTMLElement;
+  const azuracastUrlValue = document.getElementById('azuracast-url-value') as HTMLElement;
+  
+  // Individual form elements
+  const serverInput = document.getElementById('OpenSubsonic-server') as HTMLInputElement;
   const usernameInput = document.getElementById('OpenSubsonic-username') as HTMLInputElement;
   const passwordInput = document.getElementById('OpenSubsonic-password') as HTMLInputElement;
-  const serverInput = document.getElementById('OpenSubsonic-server') as HTMLInputElement;
-  
-  // Stream fields
   const streamServerInput = document.getElementById('stream-server-url') as HTMLInputElement;
   const streamUsernameInput = document.getElementById('stream-username') as HTMLInputElement;
   const streamPasswordInput = document.getElementById('stream-password') as HTMLInputElement;
   
-  // Get all possible credentials from environment
-  const envUrl = import.meta.env.VITE_OPENSUBSONIC_URL;
-  const envUsername = import.meta.env.VITE_OPENSUBSONIC_USERNAME;
-  const envPassword = import.meta.env.VITE_OPENSUBSONIC_PASSWORD;
+  console.log(`🔧 Login Mode: ${useUnifiedLogin ? 'Unified' : 'Individual'}`);
   
-  // Unified Login Configuration
-  const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
-  const unifiedUsername = import.meta.env.VITE_UNIFIED_USERNAME;
-  const unifiedPassword = import.meta.env.VITE_UNIFIED_PASSWORD;
-  
-  // Streaming credentials
-  const streamUsername = import.meta.env.VITE_STREAM_USERNAME;
-  const streamPassword = import.meta.env.VITE_STREAM_PASSWORD;
-  const streamServer = import.meta.env.VITE_STREAM_SERVER;
-  
-  // Determine final credentials (Unified has priority)
-  const finalUsername = useUnifiedLogin ? unifiedUsername : envUsername;
-  const finalPassword = useUnifiedLogin ? unifiedPassword : envPassword;
-  const finalStreamUsername = useUnifiedLogin ? unifiedUsername : streamUsername;
-  const finalStreamPassword = useUnifiedLogin ? unifiedPassword : streamPassword;
-  
-  // Pre-fill available values
-  if (serverInput && envUrl) serverInput.value = envUrl;
-  if (usernameInput && finalUsername) usernameInput.value = finalUsername;
-  if (passwordInput && finalPassword) passwordInput.value = finalPassword;
-  if (streamServerInput && streamServer) streamServerInput.value = streamServer;
-  if (streamUsernameInput && finalStreamUsername) streamUsernameInput.value = finalStreamUsername;
-  if (streamPasswordInput && finalStreamPassword) streamPasswordInput.value = finalStreamPassword;
-  
-  // Dynamic form visibility
-  const openSubsonicSection = document.getElementById('opensubsonic-section') as HTMLElement;
-  const streamSection = document.getElementById('stream-section') as HTMLElement;
-  
-  // Check what credentials are missing
-  const missingFields: string[] = [];
-  const availableFields: string[] = [];
-  
-  // OpenSubsonic status
-  const openSubsonicComplete = envUrl && finalUsername && finalPassword;
-  if (!openSubsonicComplete) {
-    if (!envUrl) missingFields.push('OpenSubsonic Server');
-    if (!finalUsername) missingFields.push('OpenSubsonic Username');
-    if (!finalPassword) missingFields.push('OpenSubsonic Password');
+  if (useUnifiedLogin) {
+    // Show unified login interface
+    if (unifiedLoginSection) unifiedLoginSection.style.display = 'block';
+    if (individualLoginSections) individualLoginSections.style.display = 'none';
+    
+    // Display pre-configured URLs (read-only)
+    if (opensubsonicUrlValue && envOpenSubsonicUrl) {
+      opensubsonicUrlValue.textContent = envOpenSubsonicUrl;
+    }
+    if (azuracastUrlValue && envAzuraCastServers) {
+      azuracastUrlValue.textContent = envAzuraCastServers;
+    }
+    
+    console.log('✅ Unified login interface activated');
   } else {
-    availableFields.push('OpenSubsonic Complete');
+    // Show individual login interface
+    if (unifiedLoginSection) unifiedLoginSection.style.display = 'none';
+    if (individualLoginSections) individualLoginSections.style.display = 'block';
+    
+    // Pre-fill URLs if available (but keep them editable)
+    if (serverInput && envOpenSubsonicUrl) serverInput.value = envOpenSubsonicUrl;
+    if (streamServerInput && envAzuraCastServers) streamServerInput.value = envAzuraCastServers;
+    
+    console.log('✅ Individual login interface activated');
   }
   
-  // Hide sections that are completely configured
-  if (openSubsonicComplete) {
-    openSubsonicSection.style.display = 'none';
-  }
-  
-  // Stream section is no longer needed (streaming functionality removed)
-  if (streamSection) {
-    streamSection.style.display = 'none';
-  }
-  
-  // If unified login is used and credentials are shared, show info
-  if (useUnifiedLogin && unifiedUsername) {
-    const unifiedInfo = document.createElement('div');
-    unifiedInfo.style.cssText = `
-      background: rgba(76, 175, 80, 0.1);
-      border: 1px solid #4CAF50;
-      border-radius: 4px;
-      padding: 8px;
-      margin-bottom: 12px;
-      color: #4CAF50;
-      font-size: 11px;
-      text-align: center;
-    `;
-    unifiedInfo.innerHTML = `🔐 Unified Login: ${unifiedUsername} (shared credentials)`;
-    loginForm.querySelector('.login-form')?.prepend(unifiedInfo);
+  // Clean up any existing unified info
+  const existingUnifiedInfo = loginForm.querySelector('.unified-login-info');
+  if (existingUnifiedInfo) {
+    existingUnifiedInfo.remove();
   }
   
   // Internal login function
@@ -4173,9 +4945,16 @@ function initializeOpenSubsonicLogin() {
         // Update OpenSubsonic user status
         updateUserStatus('opensubsonic', username, true);
         
-        // Update stream configuration with stream credentials
-        // Stream functionality has been removed - no longer processing stream credentials
-        console.log('ℹ️ Stream configuration skipped (streaming functionality removed)');
+        // Configure streaming with unified or individual credentials
+        if (useUnifiedLogin && envAzuraCastServers) {
+          // Unified login: use the same credentials for streaming
+          streamConfig.username = username;
+          streamConfig.password = password;
+          console.log(`🎙️ Stream configuration updated with unified credentials for: ${username}`);
+          updateUserStatus('stream', username, true);
+        } else {
+          console.log('ℹ️ Stream configuration: Individual login mode or no AzuraCast servers configured');
+        }
         
         // Hide login form, show DJ controls
         loginForm.style.display = 'none';
@@ -4184,7 +4963,34 @@ function initializeOpenSubsonicLogin() {
         // Initialize Live Streaming functionality (after DJ controls are visible)
         initializeLiveStreaming();
         
-
+        // Auto-initialize microphone after successful login
+        console.log("🎤 Auto-initializing microphone...");
+        try {
+          if (!audioContext) {
+            await initializeAudioMixing();
+          }
+          
+          if (audioContext && audioContext.state === 'suspended') {
+            await audioContext.resume();
+          }
+          
+          const micReady = await setupMicrophone();
+          if (micReady) {
+            console.log("🎤 Microphone auto-initialized successfully (muted by default)");
+            // Microphone is now always recording but muted by default
+            setMicrophoneEnabled(false); // Start muted
+            
+            // Start microphone volume meter immediately
+            setTimeout(() => {
+              if (typeof startVolumeMeter === 'function') {
+                startVolumeMeter('mic');
+                console.log("🎤 Microphone volume meter started");
+              }
+            }, 100);
+          }
+        } catch (error) {
+          console.warn("⚠️ Microphone auto-initialization failed:", error);
+        }
         
         // Initialize music library
         console.log("🎵 About to call initializeMusicLibrary...");
@@ -4236,32 +5042,72 @@ function initializeOpenSubsonicLogin() {
     }
   };
   
-  // Auto-login if all OpenSubsonic credentials are available
-  if (envUrl && finalUsername && finalPassword) {
-    console.log(`🔄 Auto-login with ${useUnifiedLogin ? 'unified' : 'individual'} credentials...`);
-    autoLoginInProgress = true;
-    performLogin(envUrl, finalUsername, finalPassword);
-    return;
-  }
-  
+  // Define login handler based on mode
   const performLoginFromForm = async () => {
-    const username = usernameInput.value.trim() || finalUsername;
-    const password = passwordInput.value.trim() || finalPassword;
-    const serverUrl = serverInput.value.trim() || envUrl;
-    
-    if (!serverUrl) {
-      console.log('❌ Please enter server URL');
-      if (loginBtn) {
-        loginBtn.textContent = 'Server URL Required';
-        setTimeout(() => {
-          loginBtn.textContent = 'Connect';
-          loginBtn.disabled = false;
-        }, 2000);
+    if (useUnifiedLogin) {
+      // Unified login: get credentials from unified form, URLs from environment
+      const username = unifiedUsernameInput?.value.trim();
+      const password = unifiedPasswordInput?.value.trim();
+      const serverUrl = envOpenSubsonicUrl;
+      
+      if (!username || !password) {
+        console.log('❌ Please enter username and password');
+        if (loginBtn) {
+          loginBtn.textContent = 'Credentials Required';
+          setTimeout(() => {
+            loginBtn.textContent = 'Connect';
+            loginBtn.disabled = false;
+          }, 2000);
+        }
+        return;
       }
-      return;
+      
+      if (!serverUrl) {
+        console.log('❌ OpenSubsonic server URL not configured');
+        if (loginBtn) {
+          loginBtn.textContent = 'Server Not Configured';
+          setTimeout(() => {
+            loginBtn.textContent = 'Connect';
+            loginBtn.disabled = false;
+          }, 2000);
+        }
+        return;
+      }
+      
+      await performLogin(serverUrl, username, password);
+      
+    } else {
+      // Individual login: get all values from individual form
+      const username = usernameInput?.value.trim();
+      const password = passwordInput?.value.trim();
+      const serverUrl = serverInput?.value.trim();
+      
+      if (!serverUrl) {
+        console.log('❌ Please enter server URL');
+        if (loginBtn) {
+          loginBtn.textContent = 'Server URL Required';
+          setTimeout(() => {
+            loginBtn.textContent = 'Connect';
+            loginBtn.disabled = false;
+          }, 2000);
+        }
+        return;
+      }
+      
+      if (!username || !password) {
+        console.log('❌ Please enter username and password');
+        if (loginBtn) {
+          loginBtn.textContent = 'Credentials Required';
+          setTimeout(() => {
+            loginBtn.textContent = 'Connect';
+            loginBtn.disabled = false;
+          }, 2000);
+        }
+        return;
+      }
+      
+      await performLogin(serverUrl, username, password);
     }
-    
-    await performLogin(serverUrl, username, password);
   };
   
   loginBtn?.addEventListener('click', performLoginFromForm);
@@ -4672,6 +5518,20 @@ function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, 
   
   // PLAYER STATE: Track loaded but not playing yet
   setPlayerState(side, song, false);
+  
+  // Cleanup radio stream if one was loaded before
+  const radioTrack = (window as any)[`radioTrack_${side}`];
+  if (radioTrack) {
+    console.log(`📻 Cleaning up radio stream for deck ${side.toUpperCase()}`);
+    
+    // Unsubscribe from WebSocket updates
+    if (radioTrack.shortcode && radioTrack.serverUrl) {
+      azuraCastWebSocket.unsubscribeAll(radioTrack.serverUrl, radioTrack.shortcode);
+    }
+    
+    // Remove radio track reference
+    delete (window as any)[`radioTrack_${side}`];
+  }
   
   // Store song data for drag & drop functionality
   deckSongs[side] = song;
@@ -5345,27 +6205,41 @@ function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic') {
   
   if (!meterElement || !audioContext) return;
   
-  // AnalyserNode f�r Audio-Level-Messung erstellen
+  // AnalyserNode für Audio-Level-Messung
   let analyser: AnalyserNode;
-  let gainNode: GainNode | null = null;
   
-  if (side === 'a') {
-    gainNode = aPlayerGain;
-  } else if (side === 'b') {
-    gainNode = bPlayerGain;
-  } else if (side === 'mic') {
-    gainNode = microphoneGain;
-  }
-  
-  if (!gainNode) return;
-  
-  try {
+  if (side === 'mic') {
+    // Verwende den bereits erstellten micAnalyser für bessere Performance
+    analyser = (window as any).micAnalyser;
+    if (!analyser) {
+      console.warn('🎤 Microphone analyser not available yet');
+      return;
+    }
+  } else {
+    // Für Player: erstelle neue Analyser
+    let gainNode: GainNode | null = null;
+    
+    if (side === 'a') {
+      gainNode = aPlayerGain;
+    } else if (side === 'b') {
+      gainNode = bPlayerGain;
+    } else if (side === 'c') {
+      gainNode = cPlayerGain;
+    } else if (side === 'd') {
+      gainNode = dPlayerGain;
+    }
+    
+    if (!gainNode) return;
+    
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.8;
     
-    // Verbinde Gain Node mit Analyser (ohne Audio-Flow zu st�ren)
+    // Verbinde Gain Node mit Analyser (ohne Audio-Flow zu stören)
     gainNode.connect(analyser);
+  }
+  
+  try {
     
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
@@ -5488,31 +6362,103 @@ function initializeLiveStreaming() {
   if (streamLiveButton) {
     console.log('🔴 Live streaming button found and event listeners added');
     
-    // Remove the old click listener and add new mousedown/mouseup listeners
-    streamLiveButton.addEventListener('mousedown', (e) => {
+    // Add click listener for normal clicks (station selection and streaming start)
+    // Note: This handles single clicks, while mousedown/mouseup handle press-and-hold disconnect
+    streamLiveButton.addEventListener('click', async (e) => {
+      const timestamp = Date.now();
       e.preventDefault();
-      console.log('🔴 Live streaming button pressed down');
+      console.log(`🔘 [${timestamp}] CLICK EVENT - Current state: ${currentButtonState}, Station ID: ${currentStationId}, isLiveStreaming: ${isLiveStreaming}`);
       
-      const isConnected = streamLiveButton.classList.contains('connected');
+      switch (currentButtonState) {
+        case StreamButtonState.SELECT_STATION:
+          // Check if streaming is active - if so, block station selection
+          if (isLiveStreaming) {
+            console.log('🚫 Station selection blocked - streaming is active');
+            alert('Cannot change station while streaming is active. Please stop the stream first.');
+            return;
+          }
+          
+          console.log('📋 Opening station selection dropdown');
+          // This should be handled by the dropdown logic - let it bubble up
+          break;
+          
+        case StreamButtonState.START_STREAMING:
+          // If streaming is already active, show warning instead of triggering disconnect
+          if (isLiveStreaming) {
+            console.log(`🔴 [${timestamp}] CLICK blocked - stream is already active`);
+            showWarningMessage("stream is active!<br>press and hold for 5 seconds to disconnect");
+            return;
+          }
+          
+          console.log(`🚀 [${timestamp}] Starting streaming via CLICK event`);
+          // Start streaming directly
+          await startLiveStreaming();
+          break;
+          
+        case StreamButtonState.STREAMING_ACTIVE:
+          console.log(`⏹️ [${timestamp}] CLICK on active stream - showing press-and-hold message`);
+          // Show warning instead of starting countdown via click
+          showWarningMessage("stream is active!<br>press and hold for 5 seconds to disconnect");
+          break;
+          
+        default:
+          console.warn(`⚠️ Unknown button state: ${currentButtonState}`);
+      }
+    });
+
+    // Add mousedown/mouseup listeners for press-and-hold disconnect functionality
+    streamLiveButton.addEventListener('mousedown', (e) => {
+      const timestamp = Date.now();
+      e.preventDefault();
+      console.log(`🔴 [${timestamp}] MOUSEDOWN EVENT - Current state: ${currentButtonState}, isLiveStreaming: ${isLiveStreaming}`);
       
-      if (!isConnected) {
-        console.log('❌ Cannot start live streaming - not connected to stream server');
+      // Only handle mousedown for DISCONNECT when streaming is active
+      if (currentButtonState !== StreamButtonState.STREAMING_ACTIVE) {
+        console.log(`📋 [${timestamp}] MOUSEDOWN ignored - not in streaming mode`);
         return;
       }
       
-      handleStreamButtonPress();
+      // Only start disconnect countdown when streaming is active
+      if (isLiveStreaming) {
+        console.log(`⏹️ [${timestamp}] Starting disconnect countdown (MOUSEDOWN - press and hold)`);
+        startDisconnectCountdown();
+      }
     });
     
     streamLiveButton.addEventListener('mouseup', (e) => {
+      const timestamp = Date.now();
       e.preventDefault();
-      console.log('🔴 Live streaming button released');
-      handleStreamButtonRelease();
+      console.log(`🔴 [${timestamp}] MOUSEUP EVENT - Current state: ${currentButtonState}, isLiveStreaming: ${isLiveStreaming}`);
+      
+      // Only handle mouseup for DISCONNECT when streaming is active
+      if (currentButtonState !== StreamButtonState.STREAMING_ACTIVE) {
+        console.log(`📋 [${timestamp}] MOUSEUP ignored - not in streaming mode`);
+        return;
+      }
+      
+      // Stop disconnect countdown if streaming is active
+      if (isLiveStreaming) {
+        console.log(`⏹️ [${timestamp}] Stopping disconnect countdown (MOUSEUP - mouse released)`);
+        handleStreamButtonRelease();
+      }
     });
     
     streamLiveButton.addEventListener('mouseleave', (e) => {
+      const timestamp = Date.now();
       e.preventDefault();
-      console.log('🔴 Live streaming button mouse left');
-      handleStreamButtonRelease();
+      console.log(`🔴 [${timestamp}] MOUSELEAVE EVENT - Current state: ${currentButtonState}, isLiveStreaming: ${isLiveStreaming}`);
+      
+      // Only handle mouseleave for DISCONNECT when streaming is active
+      if (currentButtonState !== StreamButtonState.STREAMING_ACTIVE) {
+        console.log(`📋 [${timestamp}] MOUSELEAVE ignored - not in streaming mode`);
+        return;
+      }
+      
+      // Stop disconnect countdown if streaming is active
+      if (isLiveStreaming) {
+        console.log(`⏹️ [${timestamp}] Stopping disconnect countdown (MOUSELEAVE - mouse left)`);
+        handleStreamButtonRelease();
+      }
     });
     
     // Prevent context menu
@@ -5524,26 +6470,36 @@ function initializeLiveStreaming() {
   }
 }
 
-// Handle stream button press (mousedown)
+// Handle stream button press (mousedown) - Only for disconnect countdown
 function handleStreamButtonPress() {
-  if (!isLiveStreaming) {
-    // Start Live Streaming instantly
-    startLiveStreaming();
-  } else {
-    // Start disconnect countdown for live streaming
-    startDisconnectCountdown();
+  console.log(`🔘 handleStreamButtonPress - Current state: ${currentButtonState}, Station ID: ${currentStationId}`);
+  
+  // Only handle disconnect countdown when streaming is active
+  if (!isLiveStreaming || currentButtonState !== StreamButtonState.STREAMING_ACTIVE) {
+    console.log('🔘 Not streaming or wrong state - press ignored');
+    return;
   }
+  
+  // Start disconnect countdown for live streaming
+  console.log('⏹️ Starting disconnect countdown (streaming is active)');
+  startDisconnectCountdown();
 }
 
 // Handle stream button release (mouseup/mouseleave)
 function handleStreamButtonRelease() {
+  const timestamp = Date.now();
+  console.log(`⏹️ [${timestamp}] handleStreamButtonRelease() CALLED - isDisconnecting: ${isDisconnecting}, isLiveStreaming: ${isLiveStreaming}`);
+  
   if (isDisconnecting) {
     // Stop countdown and show warning only if already connected
+    console.log(`🛑 [${timestamp}] Stopping disconnect countdown`);
     stopDisconnectCountdown();
     if (isLiveStreaming) {
       // Only show warning if stream has been live for more than 1 second
       const streamDuration = Date.now() - liveStreamStartTime;
+      console.log(`⏰ [${timestamp}] Stream duration: ${streamDuration}ms`);
       if (streamDuration > 1000) {
+        console.log(`⚠️ [${timestamp}] Showing safety warning`);
         showWarningMessage("safety mechanism active!<br>press and hold for 5 seconds to disconnect");
       }
     }
@@ -5577,24 +6533,43 @@ function toggleLiveStreaming() {
   }
 }
 
-// Start Live Streaming (UI effects only - no actual streaming)
+// Start Live Streaming with actual AzuraCast connection
 async function startLiveStreaming() {
+  const timestamp = Date.now();
+  console.log(`🚀 [${timestamp}] startLiveStreaming() CALLED - Entry point`);
+  
   const streamLiveButton = document.getElementById('stream-live-status') as HTMLButtonElement;
-  if (!streamLiveButton) return;
+  if (!streamLiveButton) {
+    console.error(`❌ [${timestamp}] startLiveStreaming() - button not found`);
+    return;
+  }
   
-  console.log('🔴 STARTING LIVE STREAMING UI EFFECTS (no actual streaming)...');
+  // Check prerequisites
+  if (!currentStationId || !currentStationShortcode || !currentServerUrl) {
+    console.error(`❌ [${timestamp}] startLiveStreaming() - prerequisites missing - Station ID: ${currentStationId}, Shortcode: ${currentStationShortcode}, Server: ${currentServerUrl}`);
+    alert('Please select a station first before starting to stream.');
+    return;
+  }
   
-  // Zeige Loading Status
-  streamLiveButton.textContent = 'Connecting...';
-  streamLiveButton.classList.add('connecting');
+  console.log(`🔴 STARTING LIVE STREAMING to station: ${currentStationId} (${currentStationShortcode})`);
   
-  // Simulate connection delay
-  setTimeout(() => {
-    console.log('✅ Live streaming UI effects activated!');
-    console.log('🔴 LIVE STREAMING VISUAL MODE - SPARKS FOR 10 SECONDS!');
+  try {
+    // Show loading status
+    streamLiveButton.textContent = 'Connecting...';
+    streamLiveButton.classList.add('connecting');
     
+    // Start the actual AzuraCast streaming
+    const startStreamingFunc = (window as any).__startAzuraCastStreaming;
+    if (!startStreamingFunc) {
+      throw new Error('AzuraCast streaming function not available');
+    }
+    await startStreamingFunc();
+    
+    // Update streaming state and UI
     isLiveStreaming = true;
     liveStreamStartTime = Date.now();
+    currentButtonState = StreamButtonState.STREAMING_ACTIVE;
+    
     streamLiveButton.classList.remove('connecting');
     streamLiveButton.classList.add('live');
     streamLiveButton.textContent = 'LIVE';
@@ -5604,7 +6579,18 @@ async function startLiveStreaming() {
     setTimeout(() => {
       streamLiveButton.classList.remove('sparks-effect');
     }, 10000);
-  }, 500); // Short delay to simulate connection
+    
+    console.log('✅ LIVE STREAMING STARTED SUCCESSFULLY!');
+    
+  } catch (error) {
+    console.error('❌ Failed to start live streaming:', error);
+    alert(`Failed to start streaming: ${error instanceof Error ? error.message : String(error)}`);
+    
+    // Reset UI on error
+    streamLiveButton.classList.remove('connecting', 'live');
+    streamLiveButton.textContent = currentStationShortcode || 'ERROR';
+    currentButtonState = StreamButtonState.START_STREAMING;
+  }
 }
 
 // GLOBALE FUNKTION: Alle Disconnect-Effekte sofort stoppen
@@ -5975,31 +6961,65 @@ function cleanupExplosionSystem() {
 }
 
 // Stop Live Streaming (only after successful disconnect countdown)
-async function stopLiveStreaming() {
+function stopLiveStreaming() {
+  const timestamp = Date.now();
+  console.log(`⏹️ [${timestamp}] stopLiveStreaming() CALLED - WHO CALLED ME?`);
+  console.trace(`📍 [${timestamp}] STACK TRACE for stopLiveStreaming()`);
+  
   const streamLiveButton = document.getElementById('stream-live-status') as HTMLButtonElement;
   const streamUsernameDisplay = document.getElementById('stream-username-display') as HTMLSpanElement;
-  if (!streamLiveButton) return;
+  if (!streamLiveButton) {
+    console.error(`❌ [${timestamp}] stopLiveStreaming() - button not found`);
+    return;
+  }
   
-  console.log('⏹️ STOPPING LIVE STREAMING UI EFFECTS...');
+  console.log(`⏹️ [${timestamp}] STOPPING LIVE STREAMING UI EFFECTS...`);
+  
+  // 🔌 WICHTIG: AzuraCast-Verbindung trennen!
+  console.log(`🔌 [${timestamp}] Disconnecting from AzuraCast...`);
+  if (azuraCastWebcaster) {
+    try {
+      azuraCastWebcaster.disconnect();
+      console.log(`✅ [${timestamp}] AzuraCast webcaster disconnected successfully`);
+    } catch (error) {
+      console.error(`❌ [${timestamp}] Error disconnecting AzuraCast:`, error);
+    }
+    azuraCastWebcaster = null;
+  } else {
+    console.warn(`⚠️ [${timestamp}] No AzuraCast webcaster to disconnect`);
+  }
   
   isLiveStreaming = false;
+  isStreaming = false; // Auch den allgemeinen Streaming-Status zurücksetzen
   streamLiveButton.classList.remove('live', 'connecting');
   streamLiveButton.textContent = 'STREAM';
   
   // Reset button state to station selection after disconnect
   currentButtonState = StreamButtonState.SELECT_STATION;
-  currentStationId = null;
+  currentStationId = null;  
   currentStationShortcode = null;
   currentServerUrl = null;
   
-  // Update button appearance for station selection state
-  streamLiveButton.classList.remove('occupied', 'connected');
-  streamLiveButton.classList.add('disconnected');
-  if (streamUsernameDisplay) {
-    streamUsernameDisplay.textContent = 'Select Station';
+  // Hide reset button since no station is selected
+  const resetButton = document.getElementById('stream-reset-button') as HTMLButtonElement;
+  if (resetButton) {
+    resetButton.style.display = 'none';
   }
   
-  // 🛑 SOFORTIGE EFFEKT-BEREINIGUNG!
+  // Update button appearance using the proper update function
+  const updateStreamButton = (window as any).__updateStreamButton;
+  if (typeof updateStreamButton === 'function') {
+    console.log('🔄 Calling global updateStreamButton to reset UI');
+    updateStreamButton();
+  } else {
+    // Fallback: manual button update
+    console.log('🔄 Using fallback UI update');
+    streamLiveButton.classList.remove('occupied', 'connected');
+    streamLiveButton.classList.add('disconnected');
+    if (streamUsernameDisplay) {
+      streamUsernameDisplay.textContent = 'Select Station';
+    }
+  }  // 🛑 SOFORTIGE EFFEKT-BEREINIGUNG!
   clearAllDisconnectEffects();
   
   console.log('⏹️ LIVE STREAMING UI EFFECTS STOPPED - ALL EFFECTS CLEANED UP!');
@@ -6039,14 +7059,24 @@ function showWarningMessage(message: string) {
 
 // Start disconnect countdown
 function startDisconnectCountdown() {
-  if (isDisconnecting) return;
+  const timestamp = Date.now();
+  console.log(`⏰ [${timestamp}] startDisconnectCountdown() CALLED - isDisconnecting: ${isDisconnecting}`);
+  
+  if (isDisconnecting) {
+    console.log(`⚠️ [${timestamp}] Already disconnecting - ignoring startDisconnectCountdown()`);
+    return;
+  }
   
   const overlay = document.getElementById('disconnect-timer-overlay');
   const timerDisplay = document.getElementById('digital-timer-display');
   
-  if (!overlay || !timerDisplay) return;
+  if (!overlay || !timerDisplay) {
+    console.error(`❌ [${timestamp}] Missing overlay or timer display elements`);
+    return;
+  }
   
   // WICHTIG: Erst alles vorbereiten, dann Timer starten!
+  console.log(`🔥 [${timestamp}] Starting disconnect countdown`);
   isDisconnecting = true;
   overlay.classList.add('active');
   
@@ -6100,15 +7130,21 @@ function startDisconnectCountdown() {
 
 // Stop disconnect countdown
 function stopDisconnectCountdown() {
+  const timestamp = Date.now();
+  console.log(`🛑 [${timestamp}] stopDisconnectCountdown() CALLED - isDisconnecting: ${isDisconnecting}, has timer: ${!!disconnectTimer}`);
+  
   if (disconnectTimer) {
+    console.log(`⏰ [${timestamp}] Clearing disconnect timer`);
     clearInterval(disconnectTimer);
     disconnectTimer = null;
   }
   
+  console.log(`🔄 [${timestamp}] Setting isDisconnecting = false`);
   isDisconnecting = false;
   
   const overlay = document.getElementById('disconnect-timer-overlay');
   if (overlay) {
+    console.log(`🎭 [${timestamp}] Hiding disconnect overlay`);
     overlay.classList.remove('active');
     // Remove all timer effects
     overlay.className = 'disconnect-timer-overlay';
@@ -6215,10 +7251,19 @@ function applyProgressiveTimerEffects(overlay: HTMLElement, seconds: number) {
 
 // Initialize Media Library with Unified Browser
 function initializeMediaLibrary() {
+  console.log("🎵 LIBRARY DEBUG: initializeMediaLibrary() called");
+  
   // Check if auto-login credentials are available
   const envUrl = import.meta.env.VITE_OPENSUBSONIC_URL;
   const envUsername = import.meta.env.VITE_OPENSUBSONIC_USERNAME;
   const envPassword = import.meta.env.VITE_OPENSUBSONIC_PASSWORD;
+  
+  console.log("🎵 LIBRARY DEBUG: Environment variables:", {
+    envUrl: !!envUrl,
+    envUsername: !!envUsername,
+    envPassword: !!envPassword,
+    actualUrl: envUrl
+  });
   
   // Unified Login Configuration
   const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
@@ -6229,17 +7274,50 @@ function initializeMediaLibrary() {
   const finalUsername = useUnifiedLogin ? unifiedUsername : envUsername;
   const finalPassword = useUnifiedLogin ? unifiedPassword : envPassword;
   
+  console.log("🎵 LIBRARY DEBUG: Final credentials:", {
+    finalUsername: !!finalUsername,
+    finalPassword: !!finalPassword,
+    useUnifiedLogin
+  });
+  
   // If credentials are available, delay showing login hint to allow auto-login to complete
   if (envUrl && finalUsername && finalPassword) {
-    console.log("🔄 Auto-login credentials detected, delaying library initialization...");
-    // Give auto-login time to complete before showing login hint as fallback
-    setTimeout(() => {
-      // Only show login hint if still not logged in after auto-login attempt
-      if (!isOpenSubsonicLoggedIn && !autoLoginInProgress) {
-        showLoginHintForLibrary();
+    console.log("🔄 Auto-login credentials detected, waiting for auto-login...");
+    
+    // Wait for auto-login with multiple checks
+    let checkCount = 0;
+    const maxChecks = 10; // Max 5 seconds
+    
+    const checkAutoLogin = () => {
+      checkCount++;
+      console.log(`🎵 LIBRARY DEBUG: Auto-login check ${checkCount}/${maxChecks}:`, {
+        isOpenSubsonicLoggedIn,
+        autoLoginInProgress,
+        libraryBrowser: !!libraryBrowser
+      });
+      
+      if (isOpenSubsonicLoggedIn) {
+        console.log("🎵 LIBRARY DEBUG: Auto-login successful!");
+        // Login successful, library should already be initialized
+        return;
       }
-    }, 1500);
+      
+      if (!autoLoginInProgress && checkCount >= maxChecks) {
+        console.log("🎵 LIBRARY DEBUG: Auto-login timeout, showing login hint");
+        showLoginHintForLibrary();
+        return;
+      }
+      
+      if (autoLoginInProgress || checkCount < maxChecks) {
+        // Still in progress or not enough time passed, check again
+        setTimeout(checkAutoLogin, 500);
+      }
+    };
+    
+    // Start checking after a short delay
+    setTimeout(checkAutoLogin, 500);
   } else {
+    console.log("🎵 LIBRARY DEBUG: No credentials available, showing login hint immediately");
     // No credentials available, show login hint immediately
     showLoginHintForLibrary();
   }
@@ -6269,38 +7347,52 @@ function showLoginHintForLibrary() {
 
 // Aktiviere Media Library nach erfolgreichem Login
 function enableLibraryAfterLogin() {
-  console.log("🔓 enableLibraryAfterLogin called!");
-  console.log("📡 openSubsonicClient available:", !!openSubsonicClient);
+  console.log("🔓 LIBRARY DEBUG: enableLibraryAfterLogin called!");
+  console.log("📡 LIBRARY DEBUG: openSubsonicClient available:", !!openSubsonicClient);
   
   const browseContent = document.getElementById('browse-content');
-  console.log("📦 browse-content element found:", !!browseContent);
+  console.log("📦 LIBRARY DEBUG: browse-content element found:", !!browseContent);
   
   if (!browseContent) {
-    console.error("❌ browse-content element not found!");
+    console.error("❌ LIBRARY DEBUG: browse-content element not found!");
     return;
   }
   
   // Initialize and show the library browser with content
-  try {
-    console.log("🚀 Creating new LibraryBrowser...");
-    
-    // Add a small delay to ensure all dependencies are loaded
-    setTimeout(() => {
-      try {
-        libraryBrowser = new LibraryBrowser();
-        console.log("✅ LibraryBrowser created successfully");
-      } catch (delayedError) {
-        console.error("❌ Error initializing LibraryBrowser after delay:", delayedError);
-        // Fallback: show login hint if LibraryBrowser fails to initialize
-        showLoginHintForLibrary();
-      }
-    }, 100);
-    
-  } catch (error) {
-    console.error("❌ Error initializing LibraryBrowser:", error);
-    // Fallback: show login hint if LibraryBrowser fails to initialize
-    showLoginHintForLibrary();
-  }
+  // Queue the initialization to run after all classes are defined
+  const initLibraryBrowser = () => {
+    try {
+      console.log("🚀 LIBRARY DEBUG: Creating new LibraryBrowser...");
+      console.log("🚀 LIBRARY DEBUG: pendingInitializations queue length:", pendingInitializations.length);
+      libraryBrowser = new LibraryBrowser();
+      console.log("✅ LIBRARY DEBUG: LibraryBrowser created successfully");
+    } catch (error) {
+      console.error("❌ LIBRARY DEBUG: Error initializing LibraryBrowser:", error);
+      showLoginHintForLibrary();
+    }
+  };
+  
+  // Add to pending initializations queue and trigger immediate execution
+  console.log("🔄 LIBRARY DEBUG: Adding initLibraryBrowser to pending queue");
+  pendingInitializations.push(initLibraryBrowser);
+  console.log("🔄 LIBRARY DEBUG: Queue length after adding:", pendingInitializations.length);
+  
+  // Trigger execution immediately since we know we're logged in
+  setTimeout(() => {
+    console.log("🚀 LIBRARY DEBUG: Executing pending initializations immediately");
+    if (pendingInitializations.length > 0) {
+      const initFns = [...pendingInitializations]; // Copy the array
+      pendingInitializations = []; // Clear the queue
+      initFns.forEach((initFn, index) => {
+        try {
+          initFn();
+          console.log(`✅ Immediate pending initialization ${index + 1} completed`);
+        } catch (error) {
+          console.error(`❌ Immediate pending initialization ${index + 1} failed:`, error);
+        }
+      });
+    }
+  }, 50); // Very short delay to ensure DOM is ready
 }
 
 // Load content for Browse tab
@@ -8274,3 +9366,48 @@ function initializeAllAudioEventListeners() {
 (window as any).debugDragDrop = debugDragDrop;
 (window as any).testDropZones = testDropZones;
 (window as any).testAlbumCoverDrag = testAlbumCoverDrag;
+
+// Execute all pending initializations - with retry mechanism for race conditions
+let initializationAttempts = 0;
+const MAX_INIT_ATTEMPTS = 5;
+
+function executePendingInitializations() {
+  initializationAttempts++;
+  console.log(`🚀 Executing ${pendingInitializations.length} pending initializations (attempt ${initializationAttempts})...`);
+  
+  if (pendingInitializations.length === 0 && initializationAttempts < MAX_INIT_ATTEMPTS) {
+    // No pending initializations yet, might be race condition - try again
+    console.log(`⏳ No pending initializations found, retrying in 500ms...`);
+    setTimeout(executePendingInitializations, 500);
+    return;
+  }
+  
+  pendingInitializations.forEach((initFn, index) => {
+    try {
+      initFn();
+      console.log(`✅ Pending initialization ${index + 1} completed`);
+    } catch (error) {
+      console.error(`❌ Pending initialization ${index + 1} failed:`, error);
+    }
+  });
+  pendingInitializations = []; // Clear the queue
+}
+
+// Start the initialization process
+setTimeout(executePendingInitializations, 100);
+
+// =====================================
+// SETUP WIZARD INITIALIZATION
+// =====================================
+
+// Add keyboard shortcut to show setup (Ctrl+Shift+S) - always available
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+    e.preventDefault();
+    console.log('🔧 Setup Wizard triggered by keyboard shortcut (Ctrl+Shift+S)');
+    const setupWizard = new SetupWizard();
+    setupWizard.show();
+  }
+});
+
+console.log('🎧 SubCaster initialized successfully!');

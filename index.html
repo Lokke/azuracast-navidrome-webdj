@@ -5,15 +5,212 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SubCaster</title>
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   </head>
   <body>
+    <!-- Setup Wizard Modal -->
+    <div class="setup-wizard-overlay hidden" id="setup-wizard-overlay">
+      <div class="setup-wizard-modal">
+        <div class="setup-wizard-header">
+          <h2>🎧 SubCaster Setup Wizard</h2>
+          <p>Welcome! How would you like to set up SubCaster?</p>
+          
+          <!-- Demo vs Custom Setup Choice -->
+          <div class="setup-choice" id="setup-choice">
+            <div class="setup-choice-option" id="setup-demo-option">
+              <h3>🚀 Start Demo Mode</h3>
+              <p>Try SubCaster immediately with pre-configured demo data</p>
+              <button class="setup-btn setup-btn-primary" id="setup-demo-btn">Start Demo</button>
+            </div>
+            
+            <div class="setup-choice-divider">OR</div>
+            
+            <div class="setup-choice-option" id="setup-custom-option">
+              <h3>⚙️ Configure Custom Servers</h3>
+              <p>I have my own OpenSubsonic/Navidrome or AzuraCast server</p>
+              <button class="setup-btn setup-btn-secondary" id="setup-custom-btn">Start Configuration</button>
+            </div>
+          </div>
+          
+          <div class="setup-progress" id="setup-progress" style="display: none;">
+            <div class="setup-step active" data-step="1">1</div>
+            <div class="setup-step" data-step="2">2</div>
+            <div class="setup-step" data-step="3">3</div>
+            <div class="setup-step" data-step="4">4</div>
+          </div>
+        </div>
+
+        <div class="setup-wizard-content">
+          <!-- Step 1: OpenSubsonic Configuration -->
+          <div class="setup-step-content active" data-step="1">
+            <h3>🎵 Music Library (OpenSubsonic)</h3>
+            <p>Configure access to your music collection:</p>
+            
+            <div class="setup-form-group">
+              <label for="setup-opensubsonic-url">Server URL: *</label>
+              <input type="text" id="setup-opensubsonic-url" placeholder="https://music.yourdomain.com" required />
+              <small>The URL to your OpenSubsonic/Navidrome/Airsonic server</small>
+            </div>
+            
+            <!-- Unified Login Option -->
+            <div class="setup-unified-login">
+              <div class="setup-form-group">
+                <input type="checkbox" id="setup-use-unified-login" />
+                <label for="setup-use-unified-login">🔗 Use same login for OpenSubsonic and AzuraCast</label>
+                <small>Enable this if both services use identical username/password</small>
+              </div>
+              
+              <div class="setup-unified-credentials" id="setup-unified-credentials" style="display: none;">
+                <div class="setup-form-group">
+                  <label for="setup-unified-username">Unified Username:</label>
+                  <input type="text" id="setup-unified-username" placeholder="shared-username" />
+                </div>
+                
+                <div class="setup-form-group">
+                  <label for="setup-unified-password">Unified Password:</label>
+                  <input type="password" id="setup-unified-password" placeholder="shared-password" />
+                </div>
+              </div>
+            </div>
+            
+            <div class="setup-individual-credentials" id="setup-individual-credentials">
+              <div class="setup-form-group">
+                <label for="setup-opensubsonic-username">Username (optional):</label>
+                <input type="text" id="setup-opensubsonic-username" placeholder="your-username" />
+              </div>
+              
+              <div class="setup-form-group">
+                <label for="setup-opensubsonic-password">Password (optional):</label>
+                <input type="password" id="setup-opensubsonic-password" placeholder="your-password" />
+              </div>
+            </div>
+
+            <div class="setup-optional">
+              <input type="checkbox" id="setup-skip-opensubsonic" />
+              <label for="setup-skip-opensubsonic">Configure later (not recommended)</label>
+            </div>
+          </div>
+
+          <!-- Step 2: AzuraCast Configuration -->
+          <div class="setup-step-content" data-step="2">
+            <h3>📡 Radio Server (AzuraCast)</h3>
+            <p>Connect to your AzuraCast radio server:</p>
+            
+            <div class="setup-form-group">
+              <label for="setup-azuracast-servers">Server URLs (separate multiple with comma): *</label>
+              <input type="text" id="setup-azuracast-servers" placeholder="https://radio.yourdomain.com,https://backup.yourdomain.com" required />
+              <small>Comma-separated list of your AzuraCast servers</small>
+            </div>
+            
+            <div class="setup-form-group">
+              <label for="setup-azuracast-station-id">Station ID:</label>
+              <input type="number" id="setup-azuracast-station-id" placeholder="1" value="1" />
+              <small>Your station ID (usually 1 for the first station)</small>
+            </div>
+            
+            <div class="setup-individual-azuracast-credentials" id="setup-individual-azuracast-credentials">
+              <div class="setup-form-group">
+                <label for="setup-azuracast-username">DJ Username (optional):</label>
+                <input type="text" id="setup-azuracast-username" placeholder="dj-username" />
+              </div>
+              
+              <div class="setup-form-group">
+                <label for="setup-azuracast-password">DJ Password (optional):</label>
+                <input type="password" id="setup-azuracast-password" placeholder="dj-password" />
+              </div>
+            </div>
+
+            <div class="setup-optional">
+              <input type="checkbox" id="setup-skip-azuracast" />
+              <label for="setup-skip-azuracast">Configure later</label>
+            </div>
+          </div>
+
+          <!-- Step 3: Streaming Configuration -->
+          <div class="setup-step-content" data-step="3">
+            <h3>🎙️ Live Streaming Settings</h3>
+            <p>Audio quality and streaming parameters:</p>
+            
+            <div class="setup-form-group">
+              <label for="setup-stream-bitrate">Stream Bitrate (kbps):</label>
+              <select id="setup-stream-bitrate">
+                <option value="96">96 kbps (low, less bandwidth usage)</option>
+                <option value="128" selected>128 kbps (standard, recommended)</option>
+                <option value="192">192 kbps (high, more bandwidth)</option>
+                <option value="320">320 kbps (very high, much bandwidth)</option>
+              </select>
+            </div>
+            
+            <div class="setup-form-group">
+              <label for="setup-sample-rate">Sample Rate (Hz):</label>
+              <select id="setup-sample-rate">
+                <option value="22050">22050 Hz (low)</option>
+                <option value="44100" selected>44100 Hz (CD quality, recommended)</option>
+                <option value="48000">48000 Hz (high)</option>
+              </select>
+            </div>
+
+            <div class="setup-form-group">
+              <label for="setup-stream-server">Stream Server:</label>
+              <input type="text" id="setup-stream-server" placeholder="radio.yourdomain.com" />
+              <small>Hostname of the streaming server (without http://)</small>
+            </div>
+            
+            <div class="setup-form-group">
+              <label for="setup-stream-port">Stream Port:</label>
+              <input type="number" id="setup-stream-port" placeholder="8000" value="8000" />
+            </div>
+            
+            <div class="setup-form-group">
+              <label for="setup-stream-username">Stream Username:</label>
+              <input type="text" id="setup-stream-username" placeholder="dj-stream" />
+            </div>
+            
+            <div class="setup-form-group">
+              <label for="setup-stream-password">Stream Password:</label>
+              <input type="password" id="setup-stream-password" placeholder="stream-password" />
+            </div>
+          </div>
+
+          <!-- Step 4: Summary & Save -->
+          <div class="setup-step-content" data-step="4">
+            <h3>✅ Configuration Summary</h3>
+            <p>Review your settings before saving:</p>
+            
+            <div class="setup-summary" id="setup-summary">
+              <!-- Will be populated by JavaScript -->
+            </div>
+
+            <div class="setup-save-options">
+              <div class="setup-form-group">
+                <input type="checkbox" id="setup-save-to-file" checked />
+                <label for="setup-save-to-file">Save configuration to .env file</label>
+                <small>Recommended: Saves all settings permanently</small>
+              </div>
+
+              <div class="setup-form-group">
+                <input type="checkbox" id="setup-create-backup" checked />
+                <label for="setup-create-backup">Create backup of current .env</label>
+                <small>Safety copy in case something goes wrong</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setup-wizard-footer">
+          <button class="setup-btn setup-btn-secondary" id="setup-back-btn" disabled>Back</button>
+          <button class="setup-btn setup-btn-primary" id="setup-next-btn">Next</button>
+          <button class="setup-btn setup-btn-success" id="setup-finish-btn" style="display: none;">Complete Setup</button>
+          <button class="setup-btn setup-btn-ghost" id="setup-skip-btn">Skip Setup</button>
+        </div>
+      </div>
+    </div>
+
     <div id="app">
       <!-- Disconnect Timer Display - Above all decks -->
       <div class="disconnect-timer-overlay" id="disconnect-timer-overlay">
         <div class="timer-display-container">
           <div class="timer-warning-message" id="timer-warning-message">
-            HALTEN SIE DIE TASTE 3 SEKUNDEN GEDRÜCKT ZUM TRENNEN
+            HOLD BUTTON FOR 3 SECONDS TO DISCONNECT
           </div>
           <div class="digital-timer-display" id="digital-timer-display">
             3.00000
@@ -43,31 +240,58 @@
           <!-- Login Form Overlay -->
           <div class="OpenSubsonic-login" id="OpenSubsonic-login">
             <div class="login-form">
-              <!-- OpenSubsonic Section -->
-              <div class="form-group" id="opensubsonic-section">
-                <h4>OpenSubsonic (Music Library)</h4>
+              <!-- Unified Login Section (when VITE_USE_UNIFIED_LOGIN=true) -->
+              <div class="form-group" id="unified-login-section" style="display: none;">
+                <h4>🔗 Unified Login</h4>
+                <p class="unified-login-description">Same credentials for Music Library and Streaming</p>
                 <div class="login-input-container">
-                  <input type="text" id="OpenSubsonic-server" placeholder="OpenSubsonic Server URL">
+                  <input type="text" id="unified-username" placeholder="Username">
                 </div>
                 <div class="login-input-container">
-                  <input type="text" id="OpenSubsonic-username" placeholder="OpenSubsonic Username">
+                  <input type="password" id="unified-password" placeholder="Password">
                 </div>
-                <div class="login-input-container">
-                  <input type="password" id="OpenSubsonic-password" placeholder="OpenSubsonic Password">
+                
+                <!-- Read-only URL displays -->
+                <div class="url-display-section">
+                  <div class="url-display" id="opensubsonic-url-display">
+                    <label>Music Library:</label>
+                    <span class="url-value" id="opensubsonic-url-value">-</span>
+                  </div>
+                  <div class="url-display" id="azuracast-url-display">
+                    <label>Stream Server:</label>
+                    <span class="url-value" id="azuracast-url-value">-</span>
+                  </div>
                 </div>
               </div>
-              
-              <!-- Stream Section -->
-              <div class="form-group" id="stream-section">
-                <h4>Stream Server (AzuraCast/Icecast)</h4>
-                <div class="login-input-container">
-                  <input type="text" id="stream-server-url" placeholder="Stream Server URL">
+
+              <!-- Individual Login Sections (when VITE_USE_UNIFIED_LOGIN=false) -->
+              <div class="individual-login-sections" id="individual-login-sections">
+                <!-- OpenSubsonic Section -->
+                <div class="form-group" id="opensubsonic-section">
+                  <h4>OpenSubsonic (Music Library)</h4>
+                  <div class="login-input-container">
+                    <input type="text" id="OpenSubsonic-server" placeholder="OpenSubsonic Server URL">
+                  </div>
+                  <div class="login-input-container">
+                    <input type="text" id="OpenSubsonic-username" placeholder="OpenSubsonic Username">
+                  </div>
+                  <div class="login-input-container">
+                    <input type="password" id="OpenSubsonic-password" placeholder="OpenSubsonic Password">
+                  </div>
                 </div>
-                <div class="login-input-container">
-                  <input type="text" id="stream-username" placeholder="Stream Username">
-                </div>
-                <div class="login-input-container">
-                  <input type="password" id="stream-password" placeholder="Stream Password">
+                
+                <!-- Stream Section -->
+                <div class="form-group" id="stream-section">
+                  <h4>Stream Server (AzuraCast/Icecast)</h4>
+                  <div class="login-input-container">
+                    <input type="text" id="stream-server-url" placeholder="Stream Server URL">
+                  </div>
+                  <div class="login-input-container">
+                    <input type="text" id="stream-username" placeholder="Stream Username">
+                  </div>
+                  <div class="login-input-container">
+                    <input type="password" id="stream-password" placeholder="Stream Password">
+                  </div>
                 </div>
               </div>
             </div>
@@ -94,11 +318,16 @@
                 </div>
                 
                 <!-- Combined Stream Status & Live Indicator - Clickable -->
-                <button class="stream-live-indicator" id="stream-live-status">
-                  <span class="material-icons stream-icon">dns</span>
-                  <span class="stream-username" id="stream-username-display">-</span>
-                  <div class="live-dot"></div>
-                </button>
+                <div class="stream-button-container">
+                  <button class="stream-live-indicator disconnected" id="stream-live-status">
+                    <span class="material-icons stream-icon">dns</span>
+                    <span class="stream-username" id="stream-username-display">Select Station</span>
+                    <div class="live-dot"></div>
+                  </button>
+                  <button class="stream-reset-button" id="stream-reset-button" style="display: none;" title="Clear station selection">
+                    <span class="material-icons">close</span>
+                  </button>
+                </div>
               </div>
               
               <!-- Station Selection Dropdown (triggered by STREAM button) -->
@@ -106,7 +335,7 @@
                 <div class="station-dropdown-menu" id="station-dropdown-menu">
                   <div class="dropdown-loading">
                     <span class="material-icons">radio</span>
-                    <span>Lade Stationen...</span>
+                    <span>Loading stations...</span>
                   </div>
                 </div>
               </div>
@@ -115,7 +344,7 @@
               <div class="microphone-section">
                 <!-- Mic Volume Control -->
                 <div class="mic-volume-control">
-                  <input type="range" min="0" max="100" value="70" id="mic-volume" class="mixer-vertical-slider mic-slider">
+                  <input type="range" min="0" max="100" value="100" id="mic-volume" class="mixer-vertical-slider mic-slider">
                   <label class="control-label">LEVEL</label>
                 </div>
                 
@@ -123,7 +352,7 @@
                 <div class="mic-button-container">
                   <button class="mic-btn-pro" id="mic-toggle">
                     <span class="material-icons mic-icon">mic</span>
-                    <span class="mic-label">MIKROFON</span>
+                    <span class="mic-label">MICROPHONE</span>
                   </button>
                 </div>
                 
@@ -143,6 +372,16 @@
                   </div>
                   <label class="control-label">METER</label>
                 </div>
+              </div>
+              
+              <!-- Microphone Device Selection -->
+              <div class="mic-device-selector">
+                <select id="mic-device-select" class="mic-device-dropdown">
+                  <option value="">Select microphone...</option>
+                </select>
+                <button id="mic-refresh-btn" class="mic-refresh-button" title="Refresh microphone list">
+                  <span class="material-icons">refresh</span>
+                </button>
               </div>
               
               <!-- Crossfader Section -->
@@ -198,6 +437,21 @@
               <button class="auto-queue-btn" id="auto-queue-cd" title="Auto-Play between Deck C and D">
                 C+D
               </button>
+              <div class="radio-stream-selector">
+                <button class="radio-stream-btn" id="radio-stream-btn" title="Load Radio Stream to Deck">
+                  <span class="material-icons">radio</span>
+                </button>
+                <div class="radio-stream-dropdown" id="radio-stream-dropdown">
+                  <div class="radio-stream-header">Select Radio Stream</div>
+                  <div class="radio-stream-loading" id="radio-stream-loading">
+                    <span class="material-icons spinning">refresh</span>
+                    Loading stations...
+                  </div>
+                  <div class="radio-stream-list" id="radio-stream-list">
+                    <!-- Radio streams will be populated here -->
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           

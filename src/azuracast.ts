@@ -96,9 +96,12 @@ export class AzuraCastWebcaster {
       const serverUrl = this.config.serverUrl || this.config.servers[0];
       const wsUrl = `${serverUrl.replace('https://', 'wss://').replace('http://', 'ws://')}/webdj/${stationIdentifier}/`;
       
-      console.log(`🔗 Connecting to AzuraCast WebDJ: ${wsUrl}`);
+      const timestamp = Date.now();
+      console.log(`🔗 [${timestamp}] Connecting to AzuraCast WebDJ: ${wsUrl}`);
+      console.log(`🔐 [${timestamp}] Using credentials - User: ${this.config.username}, Password: ${this.config.password ? '[SET]' : '[NOT SET]'}`);
       
       this.socket = new WebSocket(wsUrl, "webcast");
+      console.log(`📡 [${timestamp}] WebSocket created with protocol: webcast`);
 
       // Setup MediaRecorder for audio streaming
       this.mediaRecorder = new MediaRecorder(audioStream, {
@@ -113,7 +116,8 @@ export class AzuraCastWebcaster {
         }
 
         this.socket.onopen = () => {
-          console.log('🎯 AzuraCast WebSocket connected');
+          const timestamp = Date.now();
+          console.log(`🎯 [${timestamp}] AzuraCast WebSocket connected`);
           
           // Send hello message (AzuraCast protocol)
           const hello = {
@@ -122,6 +126,7 @@ export class AzuraCastWebcaster {
             password: this.config.password
           };
 
+          console.log(`📤 [${timestamp}] Sending hello message:`, hello);
           this.socket?.send(JSON.stringify({
             type: "hello",
             data: hello
@@ -155,8 +160,26 @@ export class AzuraCastWebcaster {
           reject(error);
         };
 
-        this.socket.onclose = () => {
-          console.log('🔌 AzuraCast WebSocket disconnected');
+        this.socket.onmessage = (event) => {
+          const timestamp = Date.now();
+          console.log(`📨 [${timestamp}] WebSocket message received:`, event.data);
+          try {
+            const data = JSON.parse(event.data);
+            console.log(`📊 [${timestamp}] Parsed message:`, data);
+          } catch (e) {
+            console.log(`📄 [${timestamp}] Raw text message:`, event.data);
+          }
+        };
+
+        this.socket.onclose = (event) => {
+          const timestamp = Date.now();
+          console.log(`🔌 [${timestamp}] AzuraCast WebSocket disconnected - WHO TRIGGERED THIS?`);
+          console.log(`🔍 [${timestamp}] Close event details:`, {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean
+          });
+          console.trace(`📍 [${timestamp}] STACK TRACE for WebSocket onclose`);
           this.isConnected = false;
           this.stopRecording();
         };
@@ -258,20 +281,31 @@ export class AzuraCastWebcaster {
  * @param overrideStationShortcode - Optional station shortcode for WebDJ URL
  * @param selectedServerUrl - Optional server URL for selected station
  */
-export function createAzuraCastConfig(overrideStationId?: string, overrideStationShortcode?: string, selectedServerUrl?: string): AzuraCastConfig {
+export function createAzuraCastConfig(overrideStationId?: string, overrideStationShortcode?: string, selectedServerUrl?: string, dynamicUsername?: string, dynamicPassword?: string): AzuraCastConfig {
+  const timestamp = Date.now();
   const serversEnv = import.meta.env.VITE_AZURACAST_SERVERS || 'https://localhost';
   const servers = serversEnv.split(',').map((url: string) => url.trim());
   
-  return {
+  const config = {
     servers,
     serverUrl: selectedServerUrl || servers[0], // Default to first server
     stationId: overrideStationId || import.meta.env.VITE_AZURACAST_STATION_ID || '1',
     stationShortcode: overrideStationShortcode,
-    username: import.meta.env.VITE_AZURACAST_DJ_USERNAME || 'webdj',
-    password: import.meta.env.VITE_AZURACAST_DJ_PASSWORD || 'webdj123',
+    username: dynamicUsername || import.meta.env.VITE_AZURACAST_DJ_USERNAME || 'webdj',
+    password: dynamicPassword || import.meta.env.VITE_AZURACAST_DJ_PASSWORD || 'webdj123',
     bitrate: parseInt(import.meta.env.VITE_STREAM_BITRATE || '128'),
     sampleRate: parseInt(import.meta.env.VITE_STREAM_SAMPLE_RATE || '44100')
   };
+  
+  console.log(`🔧 [${timestamp}] AzuraCast Config created:`);
+  console.log(`   - Server: ${config.serverUrl}`);
+  console.log(`   - Station ID: ${config.stationId}`);
+  console.log(`   - Station Shortcode: ${config.stationShortcode}`);
+  console.log(`   - Username: ${config.username}`);
+  console.log(`   - Password: ${config.password ? '[SET - ' + config.password.length + ' chars]' : '[NOT SET]'}`);
+  console.log(`   - Bitrate: ${config.bitrate}`);
+  
+  return config;
 }
 
 /**
