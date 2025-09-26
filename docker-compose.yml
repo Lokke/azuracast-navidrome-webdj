@@ -9,7 +9,7 @@ services:
         NODE_VERSION: "24.8.0"
     container_name: subcaster
     ports:
-      - "3001:3001"
+      - "3002:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
