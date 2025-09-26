@@ -8,6 +8,14 @@ import * as THREE from 'three';
 
 console.log("SubCaster loaded!");
 
+// Global runtime configuration
+let runtimeConfig: Record<string, string> = {};
+
+// Helper function to get config value (runtime config takes precedence)
+function getConfigValue(key: string): string | undefined {
+  return runtimeConfig[key] || import.meta.env[key];
+}
+
 // User status update function
 function updateUserStatus(service: 'opensubsonic' | 'stream', username: string, connected: boolean) {
   if (service === 'opensubsonic') {
@@ -1698,9 +1706,27 @@ async function checkConfigurationAndInitialize() {
     console.log('📡 Server setup status:', setupStatus);
     
     if (setupStatus.configExists && setupStatus.hasContent) {
-      console.log('✅ Server configuration found - initializing full app');
-      console.log('🚀 Calling initializeFullApp()...');
-      initializeFullApp();
+      console.log('✅ Server configuration found - loading runtime config');
+      
+      // Load runtime configuration from server
+      const configResponse = await fetch('/api/config');
+      const configData = await configResponse.json();
+      
+      if (configData.success && configData.config) {
+        console.log('📡 Runtime config loaded:', configData.config);
+        
+        // Store runtime config globally
+        runtimeConfig = configData.config;
+        (window as any).runtimeConfig = configData.config;
+        (window as any).getConfigValue = getConfigValue;
+        
+        console.log('🔄 Runtime configuration stored globally');
+        console.log('🚀 Calling initializeFullApp()...');
+        initializeFullApp();
+      } else {
+        console.log('❌ Failed to load runtime config - showing setup wizard');
+        showSetupWizardOnly();
+      }
     } else {
       console.log('❌ No server configuration found - showing setup wizard');
       console.log('🔧 Calling showSetupWizardOnly()...');
@@ -4883,7 +4909,7 @@ function initializeOpenSubsonicLogin() {
   const djControls = document.getElementById('dj-controls') as HTMLElement;
   
   // Get environment configuration
-  const envOpenSubsonicUrl = import.meta.env.VITE_OPENSUBSONIC_URL;
+  const envOpenSubsonicUrl = getConfigValue('VITE_OPENSUBSONIC_URL');
   const envAzuraCastServers = import.meta.env.VITE_AZURACAST_SERVERS;
   const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
   
@@ -7457,7 +7483,7 @@ function initializeMediaLibrary() {
   console.log("🎵 LIBRARY DEBUG: initializeMediaLibrary() called");
   
   // Check if auto-login credentials are available
-  const envUrl = import.meta.env.VITE_OPENSUBSONIC_URL;
+  const envUrl = getConfigValue('VITE_OPENSUBSONIC_URL');
   const envUsername = import.meta.env.VITE_OPENSUBSONIC_USERNAME;
   const envPassword = import.meta.env.VITE_OPENSUBSONIC_PASSWORD;
   
