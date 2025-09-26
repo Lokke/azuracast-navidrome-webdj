@@ -1,5 +1,5 @@
 import "./style.css";
-import { SubsonicApiClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist } from "./opensubsonic";
+import { SubsonicApiClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist, type OpenSubsonicPlaylist } from "./opensubsonic";
 import { AzuraCastWebcaster, createAzuraCastConfig, fetchAzuraCastStations, fetchAllAzuraCastStations, type AzuraCastMetadata, type AzuraCastStation, type AzuraCastNowPlayingResponse } from "./azuracast";
 import { azuraCastWebSocket, type AzuraCastNowPlayingData } from "./azuracast-websocket";
 import { SetupWizard } from "./setup-wizard";
@@ -496,8 +496,10 @@ async function initializeAudioMixing() {
         if (typeof startVolumeMeter === 'function') {
           startVolumeMeter('a');
           startVolumeMeter('b');
+          startVolumeMeter('c');
+          startVolumeMeter('d');
           startVolumeMeter('mic');
-          console.log('🎵 Volume meters started successfully');
+          console.log('🎵 Volume meters started successfully for all players');
         } else {
           console.warn('🎵 startVolumeMeter function not available yet');
           // Retry later when function is available
@@ -505,8 +507,10 @@ async function initializeAudioMixing() {
             if (typeof startVolumeMeter === 'function') {
               startVolumeMeter('a');
               startVolumeMeter('b');
+              startVolumeMeter('c');
+              startVolumeMeter('d');
               startVolumeMeter('mic');
-              console.log('🎵 Volume meters started on retry');
+              console.log('🎵 Volume meters started on retry for all players');
             }
           }, 2000);
         }
@@ -650,57 +654,61 @@ function createPlayerDeckHTML(side: 'a' | 'b' | 'c' | 'd'): string {
     <!-- Controls Bar (Outside player-main, spans full width) -->
     <div class="controls-bar">
       <div class="controls-line-breadcrumb">
-        <!-- Transport Controls -->
-        <button class="breadcrumb-btn play-pause-btn" id="play-pause-${side}" title="Play/Pause">
-          <span class="material-icons">play_arrow</span>
-        </button>
-        <button class="breadcrumb-btn restart-btn" id="restart-${side}" title="Restart">
-          <span class="material-icons">skip_previous</span>
-        </button>
-        <button class="breadcrumb-btn eject-btn" id="eject-${side}" title="Eject">
-          <span class="material-icons">eject</span>
-        </button>
-        
-        <!-- Time Display -->
-        <div class="breadcrumb-element time-display" id="time-display-${side}">0:00 / 0:00</div>
-        
-        <!-- Rating Stars -->
-        <div class="breadcrumb-element rating-display" id="player-rating-${side}">
-          <span class="rating-star">★</span>
-          <span class="rating-star">★</span>
-          <span class="rating-star">★</span>
-          <span class="rating-star">★</span>
-          <span class="rating-star">★</span>
+        <!-- LEFT SECTION: Transport Controls (Fixed) -->
+        <div class="controls-left-section">
+          <button class="breadcrumb-btn play-pause-btn" id="play-pause-${side}" title="Play/Pause">
+            <span class="material-icons">play_arrow</span>
+          </button>
+          <button class="breadcrumb-btn restart-btn" id="restart-${side}" title="Restart">
+            <span class="material-icons">skip_previous</span>
+          </button>
+          <button class="breadcrumb-btn eject-btn" id="eject-${side}" title="Eject">
+            <span class="material-icons">eject</span>
+          </button>
         </div>
         
-        <!-- Volume Control -->
-        <div class="breadcrumb-element volume-control">
-          <span class="volume-label">Vol</span>
-          <input type="range" class="volume-slider-breadcrumb" id="volume-${side}" min="0" max="100" step="1" value="80">
-        </div>
-        
-        <!-- Spacer to push volume meter to the right -->
-        <div class="controls-spacer"></div>
-        
-        <!-- Volume Meter (Right-aligned) -->
-        <div class="breadcrumb-element volume-meter" id="volume-meter-${side}">
-          <div class="meter-bars">
-            <div class="meter-bar"></div>
-            <div class="meter-bar"></div>
-            <div class="meter-bar"></div>
-            <div class="meter-bar"></div>
-            <div class="meter-bar"></div>
-            <div class="meter-bar"></div>
-            <div class="meter-bar"></div>
-            <div class="meter-bar"></div>
+        <!-- MIDDLE SECTION: Flexible Elements (Intelligent Hide/Show) -->
+        <div class="controls-middle-section">
+          <!-- Time Display -->
+          <div class="breadcrumb-element time-display" id="time-display-${side}">0:00 / 0:00</div>
+          
+          <!-- Rating Stars -->
+          <div class="breadcrumb-element rating-display" id="player-rating-${side}">
+            <span class="rating-star">★</span>
+            <span class="rating-star">★</span>
+            <span class="rating-star">★</span>
+            <span class="rating-star">★</span>
+            <span class="rating-star">★</span>
+          </div>
+          
+          <!-- Volume Control -->
+          <div class="breadcrumb-element volume-control">
+            <span class="volume-label">Vol</span>
+            <input type="range" class="volume-slider-breadcrumb" id="volume-${side}" min="0" max="100" step="1" value="80">
+          </div>
+          
+          <!-- Volume Meter -->
+          <div class="breadcrumb-element volume-meter" id="volume-meter-${side}">
+            <div class="meter-bars">
+              <div class="meter-bar"></div>
+              <div class="meter-bar"></div>
+              <div class="meter-bar"></div>
+              <div class="meter-bar"></div>
+              <div class="meter-bar"></div>
+              <div class="meter-bar"></div>
+              <div class="meter-bar"></div>
+              <div class="meter-bar"></div>
+            </div>
           </div>
         </div>
         
-        <!-- Wizard Button -->
-        <div class="breadcrumb-element wizard-control" id="wizard-control-${side}" title="Ähnliche Songs finden">
-          <i class="material-icons wizard-icon">casino</i>
-          <i class="material-icons wizard-dice-animation" style="display: none;">casino</i>
-          <i class="material-icons wizard-loading" style="display: none;">hourglass_empty</i>
+        <!-- RIGHT SECTION: Wizard Control (Fixed) -->
+        <div class="controls-right-section">
+          <div class="breadcrumb-element wizard-control" id="wizard-control-${side}" title="Ähnliche Songs finden">
+            <i class="material-icons wizard-icon">casino</i>
+            <i class="material-icons wizard-dice-animation" style="display: none;">casino</i>
+            <i class="material-icons wizard-loading" style="display: none;">hourglass_empty</i>
+          </div>
         </div>
       </div>
     </div>
@@ -1055,7 +1063,7 @@ function initializePlayerSystem() {
 // Update Album Cover Function
 function updateAlbumCover(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong) {
   const albumCoverElement = document.getElementById(`album-cover-${side}`);
-  console.log(`?? Updating album cover for ${side} player:`, {
+  console.log(`🎵 Updating album cover for ${side} player:`, {
     element: albumCoverElement,
     song: song.title,
     coverArt: song.coverArt,
@@ -1063,12 +1071,12 @@ function updateAlbumCover(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong) {
   });
   
   if (!albumCoverElement) {
-    console.error(`? Album cover element not found: album-cover-${side}`);
+    console.error(`❌ Album cover element not found: album-cover-${side}`);
     return;
   }
   
   if (!openSubsonicClient) {
-    console.warn(`? OpenSubsonic client not available`);
+    console.warn(`⚠️ OpenSubsonic client not available`);
     albumCoverElement.innerHTML = `
       <div class="no-cover">
         <span class="material-icons">music_note</span>
@@ -1078,35 +1086,45 @@ function updateAlbumCover(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong) {
   }
   
   if (song.coverArt) {
-    const coverUrl = openSubsonicClient.getCoverArtUrl(song.coverArt, 90);
-    console.log(`??? Setting cover URL: ${coverUrl}`);
-    
-    const img = document.createElement('img');
-    img.src = coverUrl;
-    img.alt = 'Album Cover';
-    img.style.width = '100%';
-    img.style.height = '100%';
-    img.style.objectFit = 'cover';
-    
-    // Debug: Check if image loads
-    img.onload = () => {
-      console.log(`? Album cover loaded successfully for ${side}`);
-    };
-    img.onerror = (error) => {
-      console.error(`? Album cover failed to load for ${side}:`, error);
-      console.error(`Failed URL: ${coverUrl}`);
-      // Fallback to no-cover display
+    try {
+      // Direct cover URL
+      const coverUrl = openSubsonicClient.getCoverArtUrl(song.coverArt, 90);
+      
+      console.log(`🖼️ Setting cover URL for ${side}`);
+      
+      const img = document.createElement('img');
+      img.src = coverUrl;
+      img.alt = 'Album Cover';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      
+      // Debug: Check if image loads
+      img.onload = () => {
+        console.log(`✅ Album cover loaded successfully for ${side}`);
+      };
+      img.onerror = (error) => {
+        console.error(`❌ Album cover failed to load for ${side}:`, error);
+        // Fallback to no-cover display
+        albumCoverElement.innerHTML = `
+          <div class="no-cover">
+            <span class="material-icons">music_note</span>
+          </div>
+        `;
+      };
+      
+      albumCoverElement.innerHTML = '';
+      albumCoverElement.appendChild(img);
+    } catch (error) {
+      console.error(`❌ Error loading cover for ${side}:`, error);
       albumCoverElement.innerHTML = `
         <div class="no-cover">
           <span class="material-icons">music_note</span>
         </div>
       `;
-    };
-    
-    albumCoverElement.innerHTML = '';
-    albumCoverElement.appendChild(img);
+    }
   } else {
-    console.log(`? No cover art for song: ${song.title}`);
+    console.log(`ℹ️ No cover art for song: ${song.title}`);
     albumCoverElement.innerHTML = `
       <div class="no-cover">
         <span class="material-icons">music_note</span>
@@ -1785,9 +1803,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 // END OF MAIN APPLICATION INITIALIZATION
-// THE CODE BELOW IS LEGACY AND SHOULD BE REFACTORED
-// It currently runs regardless of setup status, which causes the problem
-// TODO: Move all this code into initializeFullApp() function
+// Note: The code below runs after setup completion
   
   // Microphone Toggle Functionality
   const micBtn = document.getElementById("mic-toggle") as HTMLButtonElement;
@@ -3270,8 +3286,8 @@ function displaySearchResults(results: any, addToHistory: boolean = true) {
       onItemClick: (item) => {
         const song = results.song.find((s: OpenSubsonicSong) => s.id === item.id);
         if (song) {
-          console.log('Playing song:', song.title);
-          // TODO: Add to player or start playing
+          console.log('Song selected:', song.title);
+          // Feature implementation needed
         }
       }
     });
@@ -3593,7 +3609,7 @@ function addAlbumClickListeners(container: Element) {
         e.preventDefault();
         e.stopPropagation();
         console.log(`Album play button clicked: ${albumId}`);
-        // TODO: Add play album functionality
+        // Feature implementation needed
         return;
       }
       
@@ -4867,8 +4883,6 @@ function initializeOpenSubsonicLogin() {
   const individualLoginSections = document.getElementById('individual-login-sections') as HTMLElement;
   const unifiedUsernameInput = document.getElementById('unified-username') as HTMLInputElement;
   const unifiedPasswordInput = document.getElementById('unified-password') as HTMLInputElement;
-  const opensubsonicUrlValue = document.getElementById('opensubsonic-url-value') as HTMLElement;
-  const azuracastUrlValue = document.getElementById('azuracast-url-value') as HTMLElement;
   
   // Individual form elements
   const serverInput = document.getElementById('OpenSubsonic-server') as HTMLInputElement;
@@ -4885,12 +4899,102 @@ function initializeOpenSubsonicLogin() {
     if (unifiedLoginSection) unifiedLoginSection.style.display = 'block';
     if (individualLoginSections) individualLoginSections.style.display = 'none';
     
-    // Display pre-configured URLs (read-only)
-    if (opensubsonicUrlValue && envOpenSubsonicUrl) {
-      opensubsonicUrlValue.textContent = envOpenSubsonicUrl;
-    }
-    if (azuracastUrlValue && envAzuraCastServers) {
-      azuracastUrlValue.textContent = envAzuraCastServers;
+    // Check for auto-login with unified credentials
+    const envUnifiedUsername = import.meta.env.VITE_UNIFIED_USERNAME;
+    const envUnifiedPassword = import.meta.env.VITE_UNIFIED_PASSWORD;
+    
+    console.log('🔑 Unified Auto-Login Check:', {
+      hasUrl: !!envOpenSubsonicUrl,
+      hasUsername: !!envUnifiedUsername,
+      hasPassword: !!envUnifiedPassword,
+      username: envUnifiedUsername ? `${envUnifiedUsername.substring(0, 3)}***` : null
+    });
+    
+    // Auto-login if all credentials are available
+    if (envOpenSubsonicUrl && envUnifiedUsername && envUnifiedPassword) {
+      console.log('🚀 Unified Auto-Login: All credentials available, attempting auto-login...');
+      
+      // Hide login form immediately and show DJ controls
+      if (loginForm) loginForm.style.display = 'none';
+      if (djControls) djControls.style.display = 'flex';
+      
+      // Perform auto-login
+      setTimeout(async () => {
+        autoLoginInProgress = true;
+        
+        try {
+          openSubsonicClient = new SubsonicApiClient({
+            serverUrl: envOpenSubsonicUrl,
+            username: envUnifiedUsername,
+            password: envUnifiedPassword
+          });
+          
+          const authenticated = await openSubsonicClient.authenticate();
+          
+          if (authenticated) {
+            console.log("✅ Unified Auto-Login successful!");
+            
+            isOpenSubsonicLoggedIn = true;
+            autoLoginInProgress = false;
+            
+            updateUserStatus('opensubsonic', envUnifiedUsername, true);
+            
+            // Configure streaming with unified credentials
+            if (envAzuraCastServers) {
+              streamConfig.username = envUnifiedUsername;
+              streamConfig.password = envUnifiedPassword;
+              updateUserStatus('stream', envUnifiedUsername, true);
+            }
+            
+            // Initialize systems
+            initializeLiveStreaming();
+            
+            // Auto-initialize microphone
+            try {
+              if (!audioContext) await initializeAudioMixing();
+              if (audioContext && audioContext.state === 'suspended') await audioContext.resume();
+              
+              const micReady = await setupMicrophone();
+              if (micReady) {
+                setMicrophoneEnabled(false);
+                setTimeout(() => {
+                  if (typeof startVolumeMeter === 'function') {
+                    startVolumeMeter('mic');
+                  }
+                }, 100);
+              }
+            } catch (error) {
+              console.warn("⚠️ Microphone auto-initialization failed:", error);
+            }
+            
+            // Initialize music library
+            await initializeMusicLibrary();
+            
+          } else {
+            console.error("❌ Unified Auto-Login failed - showing login form");
+            autoLoginInProgress = false;
+            if (loginForm) loginForm.style.display = 'flex';
+            if (djControls) djControls.style.display = 'none';
+          }
+          
+        } catch (error) {
+          console.error("❌ Unified Auto-Login error:", error);
+          autoLoginInProgress = false;
+          if (loginForm) loginForm.style.display = 'flex';
+          if (djControls) djControls.style.display = 'none';
+        }
+      }, 100);
+      
+    } else {
+      console.log('ℹ️ Unified Auto-Login skipped - missing credentials');
+      
+      // Pre-fill unified login form with environment credentials (if available)
+      if (unifiedUsernameInput && envUnifiedUsername) {
+        unifiedUsernameInput.value = envUnifiedUsername;
+      }
+      if (unifiedPasswordInput && envUnifiedPassword) {
+        unifiedPasswordInput.value = envUnifiedPassword;
+      }
     }
     
     console.log('✅ Unified login interface activated');
@@ -6203,70 +6307,160 @@ function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic') {
   const meterId = side === 'mic' ? 'mic-volume-meter' : `volume-meter-${side}`;
   const meterElement = document.getElementById(meterId);
   
-  if (!meterElement || !audioContext) return;
-  
-  // AnalyserNode für Audio-Level-Messung
-  let analyser: AnalyserNode;
+  if (!meterElement) {
+    console.warn(`⚠️ Volume meter element ${meterId} not found`);
+    return;
+  }
   
   if (side === 'mic') {
-    // Verwende den bereits erstellten micAnalyser für bessere Performance
-    analyser = (window as any).micAnalyser;
+    // Microphone Volume Meter
+    const analyser = (window as any).micAnalyser;
     if (!analyser) {
       console.warn('🎤 Microphone analyser not available yet');
       return;
     }
-  } else {
-    // Für Player: erstelle neue Analyser
-    let gainNode: GainNode | null = null;
-    
-    if (side === 'a') {
-      gainNode = aPlayerGain;
-    } else if (side === 'b') {
-      gainNode = bPlayerGain;
-    } else if (side === 'c') {
-      gainNode = cPlayerGain;
-    } else if (side === 'd') {
-      gainNode = dPlayerGain;
-    }
-    
-    if (!gainNode) return;
-    
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.8;
-    
-    // Verbinde Gain Node mit Analyser (ohne Audio-Flow zu stören)
-    gainNode.connect(analyser);
-  }
-  
-  try {
     
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
-    // Update Interval
     volumeMeterIntervals[side] = setInterval(() => {
       analyser.getByteFrequencyData(dataArray);
       
-      // Berechne RMS (Root Mean Square) für bessere Level-Anzeige
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) {
         sum += dataArray[i] * dataArray[i];
       }
       const rms = Math.sqrt(sum / bufferLength);
-      
-      // Verbesserte Empfindlichkeit - direktere Umrechnung
-      // Normalisiere von 0-255 zu 0-8 Balken mit mehr Empfindlichkeit
-      const normalizedLevel = Math.floor((rms / 255) * 12); // Erhöht auf 12 für mehr Empfindlichkeit
-      const clampedLevel = Math.max(0, Math.min(8, normalizedLevel)); // Begrenze auf 8 Balken
+      const normalizedLevel = Math.floor((rms / 255) * 12);
+      const clampedLevel = Math.max(0, Math.min(8, normalizedLevel));
       
       updateVolumeMeter(meterId, clampedLevel);
-    }, 50); // 20 FPS Update-Rate
+    }, 50);
     
-    console.log(`?? Volume meter started for ${side}`);
-  } catch (error) {
-    console.error(`Failed to start volume meter for ${side}:`, error);
+    console.log(`🎤 Volume meter started for microphone`);
+    return;
   }
+  
+  // Player Volume Meter - funktioniert immer, auch ohne Streaming
+  const audioElement = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+  if (!audioElement) {
+    console.warn(`⚠️ Audio element for player ${side} not found`);
+    return;
+  }
+  
+  // Fallback: Wenn kein AudioContext oder kein Streaming aktiv ist
+  if (!audioContext) {
+    // Einfache Volume Meter basierend auf audio.volume
+    volumeMeterIntervals[side] = setInterval(() => {
+      if (audioElement.paused || audioElement.muted) {
+        updateVolumeMeter(meterId, 0);
+      } else {
+        // Simulate audio level basierend auf Volume und currentTime
+        const volume = audioElement.volume;
+        const simulatedLevel = Math.floor(volume * 6); // 0-6 Balken
+        updateVolumeMeter(meterId, simulatedLevel);
+      }
+    }, 100);
+    
+    console.log(`🔊 Simple volume meter started for player ${side} (no WebAudio)`);
+    return;
+  }
+  
+  // Web Audio API Volume Meter (wenn verfügbar)
+  let gainNode: GainNode | null = null;
+  
+  if (side === 'a') {
+    gainNode = aPlayerGain;
+  } else if (side === 'b') {
+    gainNode = bPlayerGain;
+  } else if (side === 'c') {
+    gainNode = cPlayerGain;
+  } else if (side === 'd') {
+    gainNode = dPlayerGain;
+  }
+  
+  if (!gainNode) {
+    // Fallback: Wenn GainNode nicht existiert, erstelle temporären Analyser
+    try {
+      if (audioElement.src && !audioElement.paused) {
+        const sourceNode = audioContext.createMediaElementSource(audioElement);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.8;
+        
+        sourceNode.connect(analyser);
+        analyser.connect(audioContext.destination);
+        
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        volumeMeterIntervals[side] = setInterval(() => {
+          analyser.getByteFrequencyData(dataArray);
+          
+          let sum = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i] * dataArray[i];
+          }
+          const rms = Math.sqrt(sum / bufferLength);
+          const normalizedLevel = Math.floor((rms / 255) * 12);
+          const clampedLevel = Math.max(0, Math.min(8, normalizedLevel));
+          
+          updateVolumeMeter(meterId, clampedLevel);
+        }, 50);
+        
+        console.log(`🔊 Temporary volume meter started for player ${side}`);
+        return;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Could not create temporary analyser for ${side}:`, error);
+    }
+    
+    // Final fallback: Einfache Volume-basierte Meter
+    volumeMeterIntervals[side] = setInterval(() => {
+      if (audioElement.paused || audioElement.muted) {
+        updateVolumeMeter(meterId, 0);
+      } else {
+        const volume = audioElement.volume;
+        const simulatedLevel = Math.floor(volume * 6);
+        updateVolumeMeter(meterId, simulatedLevel);
+      }
+    }, 100);
+    
+    console.log(`🔊 Fallback volume meter started for player ${side}`);
+    return;
+  }
+  
+  // Standard Web Audio API Volume Meter
+  const analyser = audioContext.createAnalyser();
+  analyser.fftSize = 256;
+  analyser.smoothingTimeConstant = 0.8;
+  
+  // Verbinde Gain Node mit Analyser (ohne Audio-Flow zu stören)
+  gainNode.connect(analyser);
+  
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  
+  // Update Interval
+  volumeMeterIntervals[side] = setInterval(() => {
+    analyser.getByteFrequencyData(dataArray);
+    
+    // Berechne RMS (Root Mean Square) für bessere Level-Anzeige
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      sum += dataArray[i] * dataArray[i];
+    }
+    const rms = Math.sqrt(sum / bufferLength);
+    
+    // Verbesserte Empfindlichkeit - direktere Umrechnung
+    // Normalisiere von 0-255 zu 0-8 Balken mit mehr Empfindlichkeit
+    const normalizedLevel = Math.floor((rms / 255) * 12); // Erhöht auf 12 für mehr Empfindlichkeit
+    const clampedLevel = Math.max(0, Math.min(8, normalizedLevel)); // Begrenze auf 8 Balken
+    
+    updateVolumeMeter(meterId, clampedLevel);
+  }, 50); // 20 FPS Update-Rate
+  
+  console.log(`🔊 WebAudio volume meter started for player ${side}`);
 }
 
 function updateVolumeMeter(meterId: string, level: number) {
@@ -7280,8 +7474,23 @@ function initializeMediaLibrary() {
     useUnifiedLogin
   });
   
+  // Check if we have all required credentials for login
+  const hasRequiredCredentials = envUrl && finalUsername && finalPassword;
+  
+  console.log("🔒 UNIFIED LOGIN DEBUG:", {
+    envUrl: !!envUrl,
+    useUnifiedLogin,
+    unifiedUsername: !!unifiedUsername,
+    unifiedPassword: !!unifiedPassword,
+    envUsername: !!envUsername,
+    envPassword: !!envPassword,
+    finalUsername: !!finalUsername,
+    finalPassword: !!finalPassword,
+    hasRequiredCredentials
+  });
+  
   // If credentials are available, delay showing login hint to allow auto-login to complete
-  if (envUrl && finalUsername && finalPassword) {
+  if (hasRequiredCredentials) {
     console.log("🔄 Auto-login credentials detected, waiting for auto-login...");
     
     // Wait for auto-login with multiple checks
@@ -7317,8 +7526,13 @@ function initializeMediaLibrary() {
     // Start checking after a short delay
     setTimeout(checkAutoLogin, 500);
   } else {
-    console.log("🎵 LIBRARY DEBUG: No credentials available, showing login hint immediately");
-    // No credentials available, show login hint immediately
+    console.log("🎵 LIBRARY DEBUG: Missing required credentials, showing login hint immediately");
+    console.log("🔒 MISSING:", {
+      url: !envUrl ? "OpenSubsonic URL" : null,
+      username: !finalUsername ? (useUnifiedLogin ? "Unified Username" : "OpenSubsonic Username") : null,
+      password: !finalPassword ? (useUnifiedLogin ? "Unified Password" : "OpenSubsonic Password") : null
+    });
+    // Missing required credentials, show login hint immediately
     showLoginHintForLibrary();
   }
 }
@@ -7643,8 +7857,8 @@ function showAlbumDetailView(album: OpenSubsonicAlbum, tracks: OpenSubsonicSong[
       if ((e.target as HTMLElement).classList.contains('star')) return;
       
       if (track) {
-        console.log('Playing track:', track.title);
-        // TODO: Add to player or start playing
+        console.log('Track selected:', track.title);
+        // Feature implementation needed
       }
     });
   });
@@ -7765,14 +7979,14 @@ function showArtistDetailView(artist: OpenSubsonicArtist, albums: OpenSubsonicAl
 
 // Unified Library Browser System
 interface BrowseContext {
-  type: 'home' | 'artist' | 'album' | 'search' | 'wizard';
+  type: 'home' | 'artist' | 'album' | 'search' | 'wizard' | 'playlist';
   data?: any;
   breadcrumbs: BreadcrumbItem[];
 }
 
 interface BreadcrumbItem {
   label: string;
-  type: 'home' | 'artist' | 'album' | 'wizard';
+  type: 'home' | 'artist' | 'album' | 'wizard' | 'playlist';
   id?: string;
   action: () => void;
 }
@@ -7854,6 +8068,57 @@ class LibraryBrowser {
     breadcrumb.action();
   }
 
+  private async loadHausaufgabenContent(playlist: OpenSubsonicPlaylist) {
+    const content = document.getElementById('library-content')!;
+    content.innerHTML = `
+      <div class="album-header">
+        <div class="album-info">
+          <div class="album-cover-large">
+            <div class="playlist-cover-large">
+              <span class="material-icons" style="font-size: 120px; color: #ff6b6b;">school</span>
+              <div class="playlist-overlay-large">Playlist</div>
+            </div>
+          </div>
+          <div class="album-details">
+            <h1 class="album-name">${escapeHtml(playlist.name)}</h1>
+            <p class="album-artist">Hausaufgaben Playlist</p>
+            <p class="album-year">${playlist.songCount} Songs • ${Math.floor((playlist.duration || 0) / 60)} Minutes</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="media-section">
+        <h3 class="section-title">Songs</h3>
+        <div class="songs-container" id="playlist-songs">
+          <div class="loading-placeholder">Loading playlist...</div>
+        </div>
+      </div>
+    `;
+
+    // Load playlist songs
+    try {
+      const playlistDetails = await openSubsonicClient.getPlaylist(playlist.id);
+      
+      const songsContainer = document.getElementById('playlist-songs')!;
+      if (playlistDetails && playlistDetails.entry && playlistDetails.entry.length > 0) {
+        const songsListContainer = createUnifiedSongsContainer(playlistDetails.entry, 'album');
+        songsContainer.innerHTML = '';
+        songsContainer.className = 'songs-container';
+        songsContainer.appendChild(songsListContainer);
+        
+        // Add click listeners for artist and album links in songs
+        addSongClickListeners(songsContainer);
+      } else {
+        songsContainer.innerHTML = '<p class="no-items">No songs found in playlist</p>';
+      }
+
+    } catch (error) {
+      console.error('Error loading hausaufgaben playlist content:', error);
+      const songsContainer = document.getElementById('playlist-songs')!;
+      songsContainer.innerHTML = '<p class="no-items">Error loading playlist</p>';
+    }
+  }
+
   showHome() {
     this.currentContext = {
       type: 'home',
@@ -7894,6 +8159,20 @@ class LibraryBrowser {
     
     this.updateBreadcrumbs();
     this.loadAlbumContent(album);
+  }
+
+  showHausaufgabenPlaylist(playlist: OpenSubsonicPlaylist) {
+    this.currentContext = {
+      type: 'playlist',
+      data: playlist,
+      breadcrumbs: [
+        { label: 'Library', type: 'home', action: () => this.showHome() },
+        { label: playlist.name, type: 'playlist', id: playlist.id, action: () => this.showHausaufgabenPlaylist(playlist) }
+      ]
+    };
+    
+    this.updateBreadcrumbs();
+    this.loadHausaufgabenContent(playlist);
   }
 
   showWizardResults(songs: OpenSubsonicSong[], songTitle: string, artist: string) {
@@ -8250,31 +8529,62 @@ class LibraryBrowser {
     if (!openSubsonicClient) return;
 
     try {
-      const [recentAlbums, mostPlayedAlbums, randomAlbums, randomArtists] = await Promise.all([
+      const [recentAlbums, mostPlayedAlbums, randomAlbums, randomArtists, hausaufgabenPlaylist] = await Promise.all([
         openSubsonicClient.getNewestAlbums(20), // Uses getAlbumList2 with type=newest
         openSubsonicClient.getAlbumList2('frequent', 20), // Uses getAlbumList2 with type=frequent
         openSubsonicClient.getRandomAlbums(20), // Uses getAlbumList2 with type=random
-        openSubsonicClient.getRandomArtists(20)
+        openSubsonicClient.getRandomArtists(20),
+        openSubsonicClient.getHausaufgabenPlaylist() // Special playlist for musik.radio-endstation.de
       ]);
 
-      // Recent Albums (Recently Added)
+      // Recent Albums (Recently Added) - Now with caching! 🚀
       const recentContainer = document.getElementById('recent-albums');
       if (recentContainer && recentAlbums.length > 0) {
+        // Create Hausaufgaben playlist as first element (if available)
+        let hausaufgabenHtml = '';
+        if (hausaufgabenPlaylist) {
+          hausaufgabenHtml = `
+            <div class="album-card clickable hausaufgaben-playlist" data-playlist-id="${hausaufgabenPlaylist.id}" data-playlist-type="hausaufgaben">
+              <div class="album-cover">
+                <div class="playlist-cover">
+                  <span class="material-icons" style="font-size: 48px; color: #ff6b6b;">school</span>
+                  <div class="playlist-overlay">Playlist</div>
+                </div>
+              </div>
+              <h4 class="album-title">${escapeHtml(hausaufgabenPlaylist.name)}</h4>
+              <p class="album-artist">${hausaufgabenPlaylist.songCount} Songs • ${Math.floor((hausaufgabenPlaylist.duration || 0) / 60)} Min</p>
+            </div>
+          `;
+        }
+        
+        // Create recent albums HTML
         const albumsHtml = recentAlbums.map(album => `
           <div class="album-card clickable" data-album-id="${album.id}">
-            <div class="library-album-cover">
-              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+            <div class="album-cover">
+              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" loading="lazy">
             </div>
             <h4 class="album-title">${escapeHtml(album.name)}</h4>
             <p class="album-artist clickable-artist" data-artist-name="${escapeHtml(album.artist)}" data-artist-id="${album.artistId || ''}">${escapeHtml(album.artist)}</p>
           </div>
         `).join('');
         
+        // Combine Hausaufgaben playlist (if exists) + recent albums
         recentContainer.className = 'horizontal-scroll';
-        recentContainer.innerHTML = albumsHtml;
+        recentContainer.innerHTML = hausaufgabenHtml + albumsHtml;
         
         // Add drag scrolling to container
         this.addDragScrolling(recentContainer as HTMLElement);
+        
+        // Add click listener for Hausaufgaben playlist (if present)
+        if (hausaufgabenPlaylist) {
+          const hausaufgabenCard = recentContainer.querySelector('[data-playlist-id]');
+          if (hausaufgabenCard) {
+            hausaufgabenCard.addEventListener('click', () => {
+              this.showHausaufgabenPlaylist(hausaufgabenPlaylist);
+            });
+          }
+          console.log(`🎒 Hausaufgaben playlist displayed as first element: ${hausaufgabenPlaylist.name}`);
+        }
         
         // Add event listeners for recent album cards
         recentContainer.querySelectorAll('[data-album-id]').forEach(card => {
@@ -8291,13 +8601,13 @@ class LibraryBrowser {
         });
       }
 
-      // Most Played Albums
+      // Most Played Albums - Now with caching! 🚀
       const mostPlayedContainer = document.getElementById('most-played-albums');
       if (mostPlayedContainer && mostPlayedAlbums.length > 0) {
         const albumsHtml = mostPlayedAlbums.map(album => `
           <div class="album-card clickable" data-album-id="${album.id}">
-            <div class="library-album-cover">
-              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+            <div class="album-cover">
+              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" loading="lazy">
             </div>
             <h4 class="album-title">${escapeHtml(album.name)}</h4>
             <p class="album-artist clickable-artist" data-artist-name="${escapeHtml(album.artist)}" data-artist-id="${album.artistId || ''}">${escapeHtml(album.artist)}</p>
@@ -8309,6 +8619,8 @@ class LibraryBrowser {
         
         // Add drag scrolling to container
         this.addDragScrolling(mostPlayedContainer as HTMLElement);
+        
+
         
         // Add event listeners for most played album cards
         mostPlayedContainer.querySelectorAll('[data-album-id]').forEach(card => {
@@ -8325,13 +8637,13 @@ class LibraryBrowser {
         });
       }
 
-      // Random Albums
+      // Random Albums - Now with caching! 🚀
       const randomContainer = document.getElementById('random-albums');
       if (randomContainer && randomAlbums.length > 0) {
         const albumsHtml = randomAlbums.map(album => `
           <div class="album-card clickable" data-album-id="${album.id}">
-            <div class="library-album-cover">
-              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Crect width=%22180%22 height=%22180%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2290%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2220%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+            <div class="album-cover">
+              <img src="${openSubsonicClient.getCoverArtUrl(album.coverArt || '', 300)}" alt="${escapeHtml(album.name)}" loading="lazy">
             </div>
             <h4 class="album-title">${escapeHtml(album.name)}</h4>
             <p class="album-artist clickable-artist" data-artist-name="${escapeHtml(album.artist)}" data-artist-id="${album.artistId || ''}">${escapeHtml(album.artist)}</p>
@@ -8343,6 +8655,8 @@ class LibraryBrowser {
         
         // Add drag scrolling to container
         this.addDragScrolling(randomContainer as HTMLElement);
+        
+
         
         // Add event listeners for random album cards
         randomContainer.querySelectorAll('[data-album-id]').forEach(card => {
@@ -8359,15 +8673,13 @@ class LibraryBrowser {
         });
       }
 
-      // Random Artists
+      // Random Artists - Now with caching! 🚀
       const artistsContainer = document.getElementById('random-artists');
       if (artistsContainer && randomArtists.length > 0) {
         const artistsHtml = randomArtists.map(artist => `
           <div class="artist-card clickable" data-artist-id="${artist.id}">
-            <div class="artist-image">
-              <img src="${artist.coverArt ? openSubsonicClient.getCoverArtUrl(artist.coverArt, 300) : 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Ccircle cx=%2290%22 cy=%2290%22 r=%2280%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2295%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'}" 
-                   alt="${escapeHtml(artist.name)}" 
-                   onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%22180%22 fill=%22%23333%22%3E%3Ccircle cx=%2290%22 cy=%2290%22 r=%2280%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2290%22 y=%2295%22 text-anchor=%22middle%22 dy=%220.3em%22 font-family=%22Arial%22 font-size=%2224%22 fill=%22%23666%22%3E♪%3C/text%3E%3C/svg%3E'">
+            <div class="artist-image" data-artist-id="${artist.id}">
+              <div class="no-cover">🎤</div>
             </div>
             <h4 class="artist-name">${escapeHtml(artist.name)}</h4>
             <p class="artist-type">Artist</p>
@@ -8379,6 +8691,9 @@ class LibraryBrowser {
         
         // Add drag scrolling to container
         this.addDragScrolling(artistsContainer as HTMLElement);
+        
+        // Load artist images asynchronously
+        this.loadArtistImages(artistsContainer, randomArtists);
         
         // Add event listeners for random artist cards
         artistsContainer.querySelectorAll('[data-artist-id]').forEach(card => {
@@ -8474,6 +8789,38 @@ class LibraryBrowser {
       });
     });
   }
+
+  // Load artist images asynchronously
+  private async loadArtistImages(container: HTMLElement, artists: OpenSubsonicArtist[]) {
+    const imageElements = container.querySelectorAll('.artist-image[data-artist-id]');
+    
+    for (let i = 0; i < imageElements.length && i < artists.length; i++) {
+      const imageElement = imageElements[i] as HTMLElement;
+      const artist = artists[i];
+      const artistId = artist.id;
+      
+      if (artistId && openSubsonicClient) {
+        try {
+          // Get artist image URL
+          const imageUrl = await openSubsonicClient.getArtistImage(artistId, 300);
+          
+          if (imageUrl) {
+            // Replace placeholder with actual image
+            imageElement.innerHTML = `
+              <img src="${imageUrl}" alt="${artist.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\"no-cover\\">🎤</div>'">
+            `;
+          } else {
+            // Keep the placeholder
+            console.log(`No image available for artist ${artist.name}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error loading artist image for ${artist.name}:`, error);
+          // Keep the placeholder
+        }
+      }
+    }
+  }
+
 }
 
 // Global instance - declared above

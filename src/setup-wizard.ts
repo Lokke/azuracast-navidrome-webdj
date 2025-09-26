@@ -191,218 +191,57 @@ class SetupWizard {
   private attachEventListeners(): void {
     console.log('🔧 Attaching Setup Wizard event listeners...');
     
-    // Extensive button debugging
-    const buttonDebugInfo = {
-      demoBtn: {
-        exists: !!this.demoBtn,
-        element: this.demoBtn,
-        id: this.demoBtn?.id,
-        classes: this.demoBtn?.className,
-        visible: this.demoBtn ? window.getComputedStyle(this.demoBtn).display !== 'none' : false,
-        disabled: this.demoBtn?.disabled,
-        parentVisible: this.demoBtn?.parentElement ? window.getComputedStyle(this.demoBtn.parentElement).display !== 'none' : false
-      },
-      customBtn: {
-        exists: !!this.customBtn,
-        element: this.customBtn,
-        id: this.customBtn?.id,
-        classes: this.customBtn?.className,
-        visible: this.customBtn ? window.getComputedStyle(this.customBtn).display !== 'none' : false,
-        disabled: this.customBtn?.disabled,
-        parentVisible: this.customBtn?.parentElement ? window.getComputedStyle(this.customBtn.parentElement).display !== 'none' : false
-      },
-      nextBtn: {
-        exists: !!this.nextBtn,
-        element: this.nextBtn,
-        id: this.nextBtn?.id,
-        classes: this.nextBtn?.className,
-        visible: this.nextBtn ? window.getComputedStyle(this.nextBtn).display !== 'none' : false,
-        disabled: this.nextBtn?.disabled
-      },
-      backBtn: {
-        exists: !!this.backBtn,
-        element: this.backBtn,
-        id: this.backBtn?.id,
-        classes: this.backBtn?.className,
-        visible: this.backBtn ? window.getComputedStyle(this.backBtn).display !== 'none' : false,
-        disabled: this.backBtn?.disabled
-      },
-      finishBtn: {
-        exists: !!this.finishBtn,
-        element: this.finishBtn,
-        id: this.finishBtn?.id,
-        classes: this.finishBtn?.className,
-        visible: this.finishBtn ? window.getComputedStyle(this.finishBtn).display !== 'none' : false,
-        disabled: this.finishBtn?.disabled
-      },
-      skipBtn: {
-        exists: !!this.skipBtn,
-        element: this.skipBtn,
-        id: this.skipBtn?.id,
-        classes: this.skipBtn?.className,
-        visible: this.skipBtn ? window.getComputedStyle(this.skipBtn).display !== 'none' : false,
-        disabled: this.skipBtn?.disabled
-      }
-    };
-    
-    console.log('🔍 Detailed button debug info:', buttonDebugInfo);
-    
-    // DOM query alternatives for missing buttons
-    if (!this.demoBtn) {
-      console.log('🔍 Searching for demo button by alternative selectors...');
-      const altDemo = document.querySelector('#setup-demo-btn, [data-action="demo"], .demo-btn, button[onclick*="demo"]');
-      console.log('Alternative demo button search result:', altDemo);
-    }
-    
-    if (!this.customBtn) {
-      console.log('🔍 Searching for custom button by alternative selectors...');
-      const altCustom = document.querySelector('#setup-custom-btn, [data-action="custom"], .custom-btn, button[onclick*="custom"]');
-      console.log('Alternative custom button search result:', altCustom);
-    }
-    
-    // Demo and Custom setup buttons with enhanced debugging
+    // Demo and Custom setup buttons
     if (this.demoBtn) {
-      console.log('📝 Attaching demo button listener...');
       this.demoBtn.addEventListener('click', (e) => {
-        console.log('🚀 Demo button click event triggered!', {
-          event: e,
-          target: e.target,
-          currentTarget: e.currentTarget,
-          timeStamp: e.timeStamp,
-          bubbles: e.bubbles,
-          cancelable: e.cancelable
-        });
         e.preventDefault();
         e.stopPropagation();
-        console.log('🚀 Demo button event prevented and stopped, calling startDemoSetup()...');
-        try {
-          this.startDemoSetup();
-          console.log('✅ startDemoSetup() completed successfully');
-        } catch (error) {
-          console.error('❌ Error in startDemoSetup():', error);
-        }
+        this.startDemoSetup();
       });
-      
-      // Additional event listeners for debugging
-      this.demoBtn.addEventListener('mousedown', () => console.log('🖱️ Demo button mousedown'));
-      this.demoBtn.addEventListener('mouseup', () => console.log('🖱️ Demo button mouseup'));
-      this.demoBtn.addEventListener('mouseover', () => console.log('🖱️ Demo button mouseover'));
-      console.log('✅ Demo button listeners attached');
-    } else {
-      console.error('❌ Demo button not found in DOM!');
     }
     
     if (this.customBtn) {
-      console.log('📝 Attaching custom button listener...');
       this.customBtn.addEventListener('click', (e) => {
-        console.log('⚙️ Custom button click event triggered!', {
-          event: e,
-          target: e.target,
-          currentTarget: e.currentTarget,
-          timeStamp: e.timeStamp,
-          bubbles: e.bubbles,
-          cancelable: e.cancelable
-        });
         e.preventDefault();
         e.stopPropagation();
-        console.log('⚙️ Custom button event prevented and stopped, calling startCustomSetup()...');
-        try {
-          this.startCustomSetup();
-          console.log('✅ startCustomSetup() completed successfully');
-        } catch (error) {
-          console.error('❌ Error in startCustomSetup():', error);
-        }
+        this.startCustomSetup();
       });
-      
-      // Additional event listeners for debugging
-      this.customBtn.addEventListener('mousedown', () => console.log('🖱️ Custom button mousedown'));
-      this.customBtn.addEventListener('mouseup', () => console.log('🖱️ Custom button mouseup'));
-      this.customBtn.addEventListener('mouseover', () => console.log('🖱️ Custom button mouseover'));
-      console.log('✅ Custom button listeners attached');
-    } else {
-      console.error('❌ Custom button not found in DOM!');
     }
     
     if (this.backBtn) {
-      console.log('📝 Attaching back button listener...');
       this.backBtn.addEventListener('click', (e) => {
-        console.log('⬅️ Back button click event triggered!');
         e.preventDefault();
         e.stopPropagation();
-        console.log('⬅️ Back button calling previousStep()...');
-        try {
-          this.previousStep();
-          console.log('✅ previousStep() completed successfully');
-        } catch (error) {
-          console.error('❌ Error in previousStep():', error);
-        }
+        this.previousStep();
       });
-      console.log('✅ Back button listener attached');
-    } else {
-      console.error('❌ Back button not found in DOM!');
     }
     
     if (this.nextBtn) {
-      console.log('📝 Attaching next button listener...');
       this.nextBtn.addEventListener('click', (e) => {
-        console.log('➡️ Next button click event triggered!');
         e.preventDefault();
         e.stopPropagation();
-        console.log('➡️ Next button calling nextStep()...');
-        try {
-          this.nextStep();
-          console.log('✅ nextStep() completed successfully');
-        } catch (error) {
-          console.error('❌ Error in nextStep():', error);
-        }
+        this.nextStep();
       });
-      console.log('✅ Next button listener attached');
-    } else {
-      console.error('❌ Next button not found in DOM!');
     }
     
     if (this.finishBtn) {
-      console.log('📝 Attaching finish button listener...');
       this.finishBtn.addEventListener('click', (e) => {
-        console.log('✅ Finish button click event triggered!');
         e.preventDefault();
         e.stopPropagation();
-        console.log('✅ Finish button calling finishSetup()...');
-        try {
-          this.finishSetup();
-          console.log('✅ finishSetup() completed successfully');
-        } catch (error) {
-          console.error('❌ Error in finishSetup():', error);
-        }
+        this.finishSetup();
       });
-      console.log('✅ Finish button listener attached');
-    } else {
-      console.error('❌ Finish button not found in DOM!');
     }
     
     if (this.skipBtn) {
-      console.log('📝 Attaching skip button listener...');
       this.skipBtn.addEventListener('click', (e) => {
-        console.log('⏭️ Skip button click event triggered!');
         e.preventDefault();
         e.stopPropagation();
-        console.log('⏭️ Skip button calling skipSetup()...');
-        try {
-          this.skipSetup();
-          console.log('✅ skipSetup() completed successfully');
-        } catch (error) {
-          console.error('❌ Error in skipSetup():', error);
-        }
+        this.skipSetup();
       });
-      console.log('✅ Skip button listener attached');
-    } else {
-      console.error('❌ Skip button not found in DOM!');
     }
 
     // Auto-fill validation listeners
     this.addValidationListeners();
-    
-    console.log('✅ Setup Wizard event listeners attached with enhanced debugging');
   }
 
   private addValidationListeners(): void {

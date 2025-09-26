@@ -18,6 +18,10 @@ Non-commercial use only.
 
 See LICENSE and COMMERCIAL-LICENSE.md for details.
 
+### Third-Party Licenses
+
+This project uses Material Icons (MaterialIcons-Regular.woff2) provided by Google under the Apache License 2.0. See LICENSE-MATERIAL-ICONS for the full license text.
+
 ## Docker Setup
 
 Clone repository:

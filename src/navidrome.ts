@@ -67,6 +67,21 @@ interface OpenSubsonicSearchResult {
   artist?: OpenSubsonicArtist[];
 }
 
+interface OpenSubsonicPlaylist {
+  id: string;
+  name: string;
+  comment?: string;
+  owner?: string;
+  public?: boolean;
+  songCount: number;
+  duration: number;
+  created?: string;
+  changed?: string;
+  coverArt?: string;
+  allowedUser?: string[];
+  entry?: OpenSubsonicSong[];
+}
+
 class SubsonicApiClient {
   private config: OpenSubsonicConfig;
   private auth: OpenSubsonicAuth | null = null;
@@ -455,7 +470,7 @@ class SubsonicApiClient {
     return response.artist?.album || [];
   }
 
-  // Get artist cover art from first album
+  // Get artist cover art from first album (ohne Cache)
   async getArtistCoverArt(artistId: string): Promise<string | null> {
     try {
       const albums = await this.getArtistAlbums(artistId);
@@ -466,6 +481,28 @@ class SubsonicApiClient {
     } catch (error) {
       console.error('Error getting artist cover art:', error);
       return null;
+    }
+  }
+
+  // Get artist image URL directly
+  async getArtistImage(artistId: string, size = 300): Promise<string> {
+    if (!artistId) {
+      return '';
+    }
+    
+    try {
+      // Versuche Cover Art vom ersten Album zu bekommen
+      const coverArtId = await this.getArtistCoverArt(artistId);
+      
+      if (coverArtId) {
+        return this.getCoverArtUrl(coverArtId, size);
+      }
+      
+      return '';
+      
+    } catch (error) {
+      console.error(`❌ Failed to load artist image for ${artistId}:`, error);
+      return '';
     }
   }
 
@@ -566,7 +603,7 @@ class SubsonicApiClient {
     return proxiedUrl;
   }
 
-  // Cover Art URL erstellen
+  // Cover Art URL erstellen (ohne Cache)
   getCoverArtUrl(coverArtId: string, size = 300): string {
     if (!this.auth || !coverArtId) {
       return '';
@@ -590,6 +627,8 @@ class SubsonicApiClient {
     
     return proxiedUrl;
   }
+
+
 
   // Download URL für einen Song
   getDownloadUrl(songId: string): string {
@@ -863,7 +902,107 @@ class SubsonicApiClient {
       return [];
     }
   }
+
+  // Get all playlists
+  async getPlaylists(): Promise<OpenSubsonicPlaylist[]> {
+    try {
+      const response = await this.makeRequest('getPlaylists');
+      const playlists = response.playlists?.playlist || [];
+      
+      console.log(`📋 Playlists loaded: ${playlists.length} playlists`);
+      
+      return playlists.map((playlist: any) => ({
+        id: playlist.id,
+        name: playlist.name,
+        comment: playlist.comment,
+        owner: playlist.owner,
+        public: playlist.public,
+        songCount: playlist.songCount || 0,
+        duration: playlist.duration || 0,
+        created: playlist.created,
+        changed: playlist.changed,
+        coverArt: playlist.coverArt
+      }));
+      
+    } catch (error) {
+      console.error('Failed to load playlists:', error);
+      return [];
+    }
+  }
+
+  // Get playlist details with songs
+  async getPlaylist(playlistId: string): Promise<OpenSubsonicPlaylist | null> {
+    try {
+      const response = await this.makeRequest('getPlaylist', { id: playlistId });
+      const playlist = response.playlist;
+      
+      if (!playlist) {
+        return null;
+      }
+      
+      console.log(`📋 Playlist loaded: ${playlist.name} with ${playlist.entry?.length || 0} songs`);
+      
+      return {
+        id: playlist.id,
+        name: playlist.name,
+        comment: playlist.comment,
+        owner: playlist.owner,
+        public: playlist.public,
+        songCount: playlist.songCount || 0,
+        duration: playlist.duration || 0,
+        created: playlist.created,
+        changed: playlist.changed,
+        coverArt: playlist.coverArt,
+        entry: playlist.entry?.map((song: any) => ({
+          id: song.id,
+          title: song.title || song.name,
+          artist: song.artist || song.artistName || 'Unknown Artist',
+          album: song.album || song.albumName || 'Unknown Album',
+          albumId: song.albumId,
+          duration: song.duration || 0,
+          size: song.size || 0,
+          suffix: song.suffix || song.format || 'mp3',
+          bitRate: song.bitRate || 0,
+          year: song.year,
+          genre: song.genre,
+          coverArt: song.coverArt || song.albumArt,
+          userRating: song.userRating,
+          playCount: song.playCount
+        })) || []
+      };
+      
+    } catch (error) {
+      console.error(`Failed to load playlist ${playlistId}:`, error);
+      return null;
+    }
+  }
+
+  // Find "Hausaufgaben" playlist (only for musik.radio-endstation.de)
+  async getHausaufgabenPlaylist(): Promise<OpenSubsonicPlaylist | null> {
+    // Only for the specific server
+    if (!this.config.serverUrl.includes('musik.radio-endstation.de')) {
+      return null;
+    }
+
+    try {
+      const playlists = await this.getPlaylists();
+      const hausaufgabenPlaylist = playlists.find(playlist => 
+        playlist.name.toLowerCase().includes('hausaufgaben')
+      );
+
+      if (hausaufgabenPlaylist) {
+        console.log(`🎯 Found Hausaufgaben playlist: ${hausaufgabenPlaylist.name}`);
+        // Load full playlist with songs
+        return await this.getPlaylist(hausaufgabenPlaylist.id);
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Failed to find Hausaufgaben playlist:', error);
+      return null;
+    }
+  }
 }
 
 // Exportiere für Verwendung in main.ts
-export { SubsonicApiClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist, type OpenSubsonicSearchResult };
+export { SubsonicApiClient, type OpenSubsonicSong, type OpenSubsonicAlbum, type OpenSubsonicArtist, type OpenSubsonicSearchResult, type OpenSubsonicPlaylist };
