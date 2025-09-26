@@ -1688,18 +1688,27 @@ async function checkConfigurationAndInitialize() {
   console.log('  VITE_STREAM_BITRATE:', import.meta.env.VITE_STREAM_BITRATE);
   console.log('  VITE_OPENSUBSONIC_USERNAME:', import.meta.env.VITE_OPENSUBSONIC_USERNAME);
   
-  // If we have any configuration in environment variables, assume .env exists
-  const hasConfig = hasOpenSubsonicUrl || hasAzuraCastServers || hasStreamConfig;
+  // Check with server API if configuration exists (runtime check)
+  console.log('🔍 Checking server configuration via API...');
   
-  console.log('🎯 Final configuration decision: hasConfig =', hasConfig);
-  
-  if (hasConfig) {
-    console.log('✅ Configuration found in environment variables - initializing full app');
-    console.log('🚀 Calling initializeFullApp()...');
-    initializeFullApp();
-  } else {
-    console.log('❌ No configuration found in environment variables - showing setup wizard only');
-    console.log('🔧 Calling showSetupWizardOnly()...');
+  try {
+    const response = await fetch('/api/setup-status');
+    const setupStatus = await response.json();
+    
+    console.log('📡 Server setup status:', setupStatus);
+    
+    if (setupStatus.configExists && setupStatus.hasContent) {
+      console.log('✅ Server configuration found - initializing full app');
+      console.log('🚀 Calling initializeFullApp()...');
+      initializeFullApp();
+    } else {
+      console.log('❌ No server configuration found - showing setup wizard');
+      console.log('🔧 Calling showSetupWizardOnly()...');
+      showSetupWizardOnly();
+    }
+  } catch (error) {
+    console.error('❌ Error checking server configuration:', error);
+    console.log('🔧 Falling back to setup wizard due to API error');
     showSetupWizardOnly();
   }
 }
