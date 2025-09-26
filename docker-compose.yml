@@ -14,6 +14,9 @@ services:
       - NODE_ENV=production
       - PORT=3001
     restart: unless-stopped
+    volumes:
+      # Host directory for persistent .env file
+      - ./docker-data:/app/docker-data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s

@@ -283,7 +283,15 @@ app.post('/api/save-config', async (req, res) => {
             return res.status(400).json({ error: 'Invalid content provided' });
         }
         
-        const envPath = path.join(__dirname, '.env');
+        // In Docker: persistentes Volume verwenden, sonst aktuelles Verzeichnis
+        const isDocker = process.env.NODE_ENV === 'production' && await fs.access('/app/docker-data').then(() => true).catch(() => false);
+        const envDir = isDocker ? '/app/docker-data' : __dirname;
+        const envPath = path.join(envDir, '.env');
+        
+        // Verzeichnis erstellen falls nicht vorhanden
+        if (isDocker) {
+            await fs.mkdir('/app/docker-data', { recursive: true });
+        }
         
         // Create backup if requested
         if (createBackup) {
@@ -320,7 +328,10 @@ app.post('/api/save-config', async (req, res) => {
 // Setup Wizard - Check Configuration Status
 app.get('/api/setup-status', async (req, res) => {
     try {
-        const envPath = path.join(__dirname, '.env');
+        // In Docker: persistentes Volume verwenden, sonst aktuelles Verzeichnis
+        const isDocker = process.env.NODE_ENV === 'production' && await fs.access('/app/docker-data').then(() => true).catch(() => false);
+        const envDir = isDocker ? '/app/docker-data' : __dirname;
+        const envPath = path.join(envDir, '.env');
         
         try {
             const envContent = await fs.readFile(envPath, 'utf8');
