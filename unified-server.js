@@ -12,6 +12,12 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3001;
 
+// Debug: Environment Variables
+console.log('🔍 Environment Debug:');
+console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`   DOCKER_ENV: ${process.env.DOCKER_ENV}`);
+console.log(`   __dirname: ${__dirname}`);
+
 // CORS für alle Requests aktivieren
 app.use(cors({
     origin: '*',
