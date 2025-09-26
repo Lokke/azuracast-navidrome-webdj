@@ -1,36 +1,32 @@
-# SubCaster Docker Compose
+version: '3.8'
+
 services:
   subcaster:
-    build: 
+    build:
       context: .
+      dockerfile: Dockerfile.production
       args:
-        # Build-time variables für Vite (werden in das JavaScript eingebaut)
-        VITE_STREAM_USERNAME: ${STREAM_USERNAME:-test}
-        VITE_STREAM_PASSWORD: ${STREAM_PASSWORD:-test}
-        VITE_STREAM_SERVER: ${STREAM_SERVER:-funkturm.radio-endstation.de}
-        VITE_STREAM_PORT: ${STREAM_PORT:-8015}
-        VITE_STREAM_MOUNT: ${STREAM_MOUNT:-/}
-        # OpenSubsonic Credentials (werden auch in das JavaScript eingebaut)
-        VITE_OPENSUBSONIC_URL: ${VITE_OPENSUBSONIC_URL}
-        VITE_OPENSUBSONIC_USERNAME: ${VITE_OPENSUBSONIC_USERNAME}
-        VITE_OPENSUBSONIC_PASSWORD: ${VITE_OPENSUBSONIC_PASSWORD}
-        # Unified Login (optional)
-        VITE_USE_UNIFIED_LOGIN: ${VITE_USE_UNIFIED_LOGIN}
-        VITE_UNIFIED_USERNAME: ${VITE_UNIFIED_USERNAME}
-        VITE_UNIFIED_PASSWORD: ${VITE_UNIFIED_PASSWORD}
+        NODE_VERSION: "24.8.0"
+      pull: true
+      no_cache: false
+    container_name: subcaster
     ports:
-      - "5173:5173"  # Unified server (Web interface + CORS proxy + Harbor stream)
+      - "3001:3001"
     environment:
-      # Runtime-Umgebungsvariablen für den CORS-Proxy
-      - STREAM_USERNAME=${STREAM_USERNAME:-test}
-      - STREAM_PASSWORD=${STREAM_PASSWORD:-test}
-      - STREAM_SERVER=${STREAM_SERVER:-funkturm.radio-endstation.de}
-      - STREAM_PORT=${STREAM_PORT:-8015}
-      - STREAM_MOUNT=${STREAM_MOUNT:-/}
+      - NODE_ENV=production
+      - PORT=3001
     env_file:
       - .env.docker
-    # volumes:
-      # Optional: für persistente Konfigurationsdateien
-      # - ./config:/app/config
     restart: unless-stopped
-    container_name: subcaster
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - webdj-network
+
+networks:
+  webdj-network:
+    driver: bridge

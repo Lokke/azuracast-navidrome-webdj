@@ -1,0 +1,50 @@
+# Multi-stage build für optimierte Production-Image
+FROM node:24.8.0-alpine AS builder
+
+# Arbeitsverzeichnis setzen
+WORKDIR /app
+
+# Package-Dateien kopieren
+COPY package*.json ./
+
+# Dependencies installieren
+RUN npm ci --only=production
+
+# Source-Code kopieren
+COPY . .
+
+# Production build erstellen
+RUN npm run build
+
+# Production Stage
+FROM node:24.8.0-alpine AS production
+
+# Arbeitsverzeichnis setzen
+WORKDIR /app
+
+# System-Dependencies für Health-Check
+RUN apk add --no-cache curl
+
+# Nur notwendige Dateien kopieren
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/unified-server.js ./
+
+# Non-root User erstellen
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Ownership ändern
+RUN chown -R nodejs:nodejs /app
+USER nodejs
+
+# Port freigeben
+EXPOSE 3001
+
+# Health-Check hinzufügen
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
+# Server starten
+CMD ["node", "unified-server.js"]
