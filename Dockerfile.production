@@ -7,8 +7,8 @@ WORKDIR /app
 # Package-Dateien kopieren
 COPY package*.json ./
 
-# Dependencies installieren
-RUN npm ci --only=production
+# Alle Dependencies installieren (build braucht devDependencies)
+RUN npm ci
 
 # Source-Code kopieren
 COPY . .
@@ -25,10 +25,14 @@ WORKDIR /app
 # System-Dependencies für Health-Check
 RUN apk add --no-cache curl
 
-# Nur notwendige Dateien kopieren
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
+# Package-Dateien kopieren für production install
 COPY --from=builder /app/package*.json ./
+
+# Nur Production-Dependencies installieren
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Build-Artefakte kopieren
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/unified-server.js ./
 
 # Non-root User erstellen
