@@ -4451,7 +4451,7 @@ function setupRadioStreamSelector() {
       console.log('📻 Loading radio stations...');
       
       // Get AzuraCast servers from environment
-      const serverUrls = import.meta.env.VITE_AZURACAST_SERVERS?.split(',').map((url: string) => url.trim()) || [];
+      const serverUrls = getConfigValue('VITE_AZURACAST_SERVERS')?.split(',').map((url: string) => url.trim()) || [];
       
       if (serverUrls.length === 0) {
         throw new Error('No AzuraCast servers configured');
@@ -4910,8 +4910,8 @@ function initializeOpenSubsonicLogin() {
   
   // Get environment configuration
   const envOpenSubsonicUrl = getConfigValue('VITE_OPENSUBSONIC_URL');
-  const envAzuraCastServers = import.meta.env.VITE_AZURACAST_SERVERS;
-  const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
+  const envAzuraCastServers = getConfigValue('VITE_AZURACAST_SERVERS');
+  const useUnifiedLogin = getConfigValue('VITE_USE_UNIFIED_LOGIN') === 'true';
   
   // Get UI elements
   const unifiedLoginSection = document.getElementById('unified-login-section') as HTMLElement;
@@ -4935,8 +4935,8 @@ function initializeOpenSubsonicLogin() {
     if (individualLoginSections) individualLoginSections.style.display = 'none';
     
     // Check for auto-login with unified credentials
-    const envUnifiedUsername = import.meta.env.VITE_UNIFIED_USERNAME;
-    const envUnifiedPassword = import.meta.env.VITE_UNIFIED_PASSWORD;
+    const envUnifiedUsername = getConfigValue('VITE_UNIFIED_USERNAME');
+    const envUnifiedPassword = getConfigValue('VITE_UNIFIED_PASSWORD');
     
     console.log('🔑 Unified Auto-Login Check:', {
       hasUrl: !!envOpenSubsonicUrl,
@@ -7484,8 +7484,8 @@ function initializeMediaLibrary() {
   
   // Check if auto-login credentials are available
   const envUrl = getConfigValue('VITE_OPENSUBSONIC_URL');
-  const envUsername = import.meta.env.VITE_OPENSUBSONIC_USERNAME;
-  const envPassword = import.meta.env.VITE_OPENSUBSONIC_PASSWORD;
+  const envUsername = getConfigValue('VITE_OPENSUBSONIC_USERNAME');
+  const envPassword = getConfigValue('VITE_OPENSUBSONIC_PASSWORD');
   
   console.log("🎵 LIBRARY DEBUG: Environment variables:", {
     envUrl: !!envUrl,
@@ -7495,9 +7495,9 @@ function initializeMediaLibrary() {
   });
   
   // Unified Login Configuration
-  const useUnifiedLogin = import.meta.env.VITE_USE_UNIFIED_LOGIN === 'true';
-  const unifiedUsername = import.meta.env.VITE_UNIFIED_USERNAME;
-  const unifiedPassword = import.meta.env.VITE_UNIFIED_PASSWORD;
+  const useUnifiedLogin = getConfigValue('VITE_USE_UNIFIED_LOGIN') === 'true';
+  const unifiedUsername = getConfigValue('VITE_UNIFIED_USERNAME');
+  const unifiedPassword = getConfigValue('VITE_UNIFIED_PASSWORD');
   
   // Determine final credentials
   const finalUsername = useUnifiedLogin ? unifiedUsername : envUsername;
