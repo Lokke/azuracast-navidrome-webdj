@@ -284,9 +284,11 @@ app.post('/api/save-config', async (req, res) => {
         }
         
         // In Docker: persistentes Volume verwenden, sonst aktuelles Verzeichnis
-        const isDocker = process.env.NODE_ENV === 'production' && await fs.access('/app/docker-data').then(() => true).catch(() => false);
+        const isDocker = process.env.DOCKER_ENV === 'true';
         const envDir = isDocker ? '/app/docker-data' : __dirname;
         const envPath = path.join(envDir, '.env');
+        
+        console.log(`📁 Using env path: ${envPath} (Docker: ${isDocker})`);
         
         // Verzeichnis erstellen falls nicht vorhanden
         if (isDocker) {
@@ -329,9 +331,11 @@ app.post('/api/save-config', async (req, res) => {
 app.get('/api/setup-status', async (req, res) => {
     try {
         // In Docker: persistentes Volume verwenden, sonst aktuelles Verzeichnis
-        const isDocker = process.env.NODE_ENV === 'production' && await fs.access('/app/docker-data').then(() => true).catch(() => false);
+        const isDocker = process.env.DOCKER_ENV === 'true';
         const envDir = isDocker ? '/app/docker-data' : __dirname;
         const envPath = path.join(envDir, '.env');
+        
+        console.log(`📁 Checking env path: ${envPath} (Docker: ${isDocker})`);
         
         try {
             const envContent = await fs.readFile(envPath, 'utf8');

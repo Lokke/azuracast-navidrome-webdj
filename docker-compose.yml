@@ -13,6 +13,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - DOCKER_ENV=true
     restart: unless-stopped
     volumes:
       # Host directory for persistent .env file
