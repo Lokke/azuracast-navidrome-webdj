@@ -8,7 +8,6 @@ services:
       args:
         NODE_VERSION: "24.8.0"
       pull: true
-      no_cache: false
     container_name: subcaster
     ports:
       - "3001:3001"
