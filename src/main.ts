@@ -1953,6 +1953,11 @@ document.addEventListener("DOMContentLoaded", async () => {
           }
           
           console.log('📋 Opening station selection dropdown');
+          // Load stations if not already loaded
+          if (stations.length === 0) {
+            console.log('🔄 Loading stations for first time...');
+            await loadStations();
+          }
           // Open dropdown to select station
           isOpen = !isOpen;
           dropdownOverlay.classList.toggle('show', isOpen);
@@ -2145,65 +2150,78 @@ document.addEventListener("DOMContentLoaded", async () => {
       return item;
     };
 
-    try {
-      const config = createAzuraCastConfig();
-      console.log('🔍 Loading AzuraCast stations from all servers...');
-      
-      // Load stations from all configured servers
-      const allServersData = await fetchAllAzuraCastStations(config.servers);
-      
-      // Flatten all stations with server info
-      stations = [];
-      allServersData.forEach(serverData => {
-        serverData.stations.forEach(stationData => {
-          stations.push({
-            ...stationData,
-            serverUrl: serverData.serverUrl // Add server URL to each station
+    // Load stations from AzuraCast servers
+    const loadStations = async (): Promise<void> => {
+      try {
+        const config = createAzuraCastConfig();
+        console.log('🔍 Loading AzuraCast stations from all servers...');
+        console.log('📡 Server URLs:', config.servers);
+        
+        // Load stations from all configured servers
+        const allServersData = await fetchAllAzuraCastStations(config.servers);
+        console.log('📋 Received server data:', allServersData);
+        
+        // Flatten all stations with server info
+        stations = [];
+        allServersData.forEach(serverData => {
+          console.log(`📡 Processing server: ${serverData.serverUrl}, stations: ${serverData.stations.length}`);
+          serverData.stations.forEach(stationData => {
+            stations.push({
+              ...stationData,
+              serverUrl: serverData.serverUrl // Add server URL to each station
+            });
           });
         });
-      });
-      
-      // Clear loading state
-      dropdownMenu.innerHTML = '';
-      
-      // Create station items
-      stations.forEach((stationData: any) => {
-        // Merge station data with live info
-        const stationWithLive = {
-          ...stationData.station,
-          live: stationData.live
-        };
-        const item = createStationItem(stationWithLive);
-        dropdownMenu.appendChild(item);
-      });
-      
-      // Set default station if configured
-      if (config.stationId && config.stationId !== '0') {
-        const defaultStationData = stations.find((s: any) => s.station.id.toString() === config.stationId);
-        if (defaultStationData) {
-          currentStationId = config.stationId;
-          currentStationShortcode = defaultStationData.station.shortcode;
-          
-          const stationWithLive = {
-            ...defaultStationData.station,
-            live: defaultStationData.live
-          };
-          updateStreamButton(stationWithLive);
-          
-          // Mark as selected in dropdown
-          const selectedItem = dropdownMenu.querySelector(`[data-station-id="${config.stationId}"]`);
-          selectedItem?.classList.add('selected');
+        
+        console.log(`✅ Loaded ${stations.length} stations total`);
+        
+        // Clear loading state
+        dropdownMenu.innerHTML = '';
+        
+        if (stations.length === 0) {
+          dropdownMenu.innerHTML = '<div class="station-dropdown-item">No stations available</div>';
+          return;
         }
+        
+        // Create station items
+        stations.forEach((stationData: any) => {
+          // Merge station data with live info
+          const stationWithLive = {
+            ...stationData.station,
+            live: stationData.live
+          };
+          const item = createStationItem(stationWithLive);
+          dropdownMenu.appendChild(item);
+        });
+        
+        // Set default station if configured
+        if (config.stationId && config.stationId !== '0') {
+          const defaultStationData = stations.find((s: any) => s.station.id.toString() === config.stationId);
+          if (defaultStationData) {
+            currentStationId = config.stationId;
+            currentStationShortcode = defaultStationData.station.shortcode;
+            
+            const stationWithLive = {
+              ...defaultStationData.station,
+              live: defaultStationData.live
+            };
+            updateStreamButton(stationWithLive);
+            
+            // Mark as selected in dropdown
+            const selectedItem = dropdownMenu.querySelector(`[data-station-id="${config.stationId}"]`);
+            selectedItem?.classList.add('selected');
+          }
+        }
+        
+        console.log(`✅ Loaded ${stations.length} AzuraCast stations`);
+        
+      } catch (error) {
+        console.error('❌ Failed to load AzuraCast stations:', error);
+        
+        // Show error in dropdown
+        dropdownMenu.innerHTML = '<div class="station-dropdown-item">Fehler beim Laden der Stationen</div>';
       }
-      
-      console.log(`✅ Loaded ${stations.length} AzuraCast stations`);
-      
-    } catch (error) {
-      console.error('❌ Failed to load AzuraCast stations:', error);
-      
-      // Show error in dropdown
-      dropdownMenu.innerHTML = '<div class="dropdown-loading">Fehler beim Laden der Stationen</div>';
-    }
+    };
 
     // Event listeners
     streamButton.addEventListener('click', handleStreamButtonClick);
