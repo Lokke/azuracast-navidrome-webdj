@@ -2434,7 +2434,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // AzuraCast Station Selection Setup
-  await initializeStationDropdown();
+  initializeStationDropdown();
 
   // Stream Live Button Event Listener - AzuraCast WebDJ Integration
   // NOTE: This handler is now handled by the station dropdown logic in initializeStationDropdown()
