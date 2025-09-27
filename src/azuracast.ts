@@ -283,18 +283,31 @@ export class AzuraCastWebcaster {
  */
 export function createAzuraCastConfig(overrideStationId?: string, overrideStationShortcode?: string, selectedServerUrl?: string, dynamicUsername?: string, dynamicPassword?: string): AzuraCastConfig {
   const timestamp = Date.now();
-  const serversEnv = import.meta.env.VITE_AZURACAST_SERVERS || 'https://localhost';
+  
+  // Use runtime config if available, fallback to import.meta.env
+  const getConfigValue = (window as any).getConfigValue || ((key: string) => import.meta.env[key]);
+  
+  const serversEnv = getConfigValue('VITE_AZURACAST_SERVERS') || 'https://localhost';
   const servers = serversEnv.split(',').map((url: string) => url.trim());
+  
+  // Check for unified login
+  const useUnifiedLogin = getConfigValue('VITE_USE_UNIFIED_LOGIN') === 'true';
+  const unifiedUsername = getConfigValue('VITE_UNIFIED_USERNAME');
+  const unifiedPassword = getConfigValue('VITE_UNIFIED_PASSWORD');
+  
+  // Determine credentials
+  const finalUsername = dynamicUsername || (useUnifiedLogin ? unifiedUsername : getConfigValue('VITE_AZURACAST_DJ_USERNAME')) || 'webdj';
+  const finalPassword = dynamicPassword || (useUnifiedLogin ? unifiedPassword : getConfigValue('VITE_AZURACAST_DJ_PASSWORD')) || 'webdj123';
   
   const config = {
     servers,
     serverUrl: selectedServerUrl || servers[0], // Default to first server
-    stationId: overrideStationId || import.meta.env.VITE_AZURACAST_STATION_ID || '1',
+    stationId: overrideStationId || getConfigValue('VITE_AZURACAST_STATION_ID') || '1',
     stationShortcode: overrideStationShortcode,
-    username: dynamicUsername || import.meta.env.VITE_AZURACAST_DJ_USERNAME || 'webdj',
-    password: dynamicPassword || import.meta.env.VITE_AZURACAST_DJ_PASSWORD || 'webdj123',
-    bitrate: parseInt(import.meta.env.VITE_STREAM_BITRATE || '128'),
-    sampleRate: parseInt(import.meta.env.VITE_STREAM_SAMPLE_RATE || '44100')
+    username: finalUsername,
+    password: finalPassword,
+    bitrate: parseInt(getConfigValue('VITE_STREAM_BITRATE') || '128'),
+    sampleRate: parseInt(getConfigValue('VITE_STREAM_SAMPLE_RATE') || '44100')
   };
   
   console.log(`🔧 [${timestamp}] AzuraCast Config created:`);
