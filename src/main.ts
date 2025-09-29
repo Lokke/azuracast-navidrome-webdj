@@ -5399,17 +5399,37 @@ function initializeOpenSubsonicLogin() {
     }
   };
   
-  loginBtn?.addEventListener('click', performLoginFromForm);
+  // Handle both click and form submit events for better browser compatibility
+  loginBtn?.addEventListener('click', (e) => {
+    e.preventDefault(); // Prevent form submission for click events
+    performLoginFromForm();
+  });
   
-  // Enter key in password fields
+  // Handle form submission (for better browser password manager support)
+  const loginFormElement = document.querySelector('.login-form') as HTMLFormElement;
+  loginFormElement?.addEventListener('submit', (e) => {
+    e.preventDefault(); // Prevent actual form submission
+    performLoginFromForm();
+  });
+  
+  // Enter key in password fields (still support legacy behavior)
   passwordInput?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
       performLoginFromForm();
     }
   });
   
   streamPasswordInput?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
+      performLoginFromForm();
+    }
+  });
+  
+  unifiedPasswordInput?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
       performLoginFromForm();
     }
   });

@@ -47,7 +47,13 @@
             
             <div class="setup-form-group">
               <label for="setup-opensubsonic-url">Server URL: *</label>
-              <input type="text" id="setup-opensubsonic-url" placeholder="https://music.yourdomain.com" required />
+              <input type="url" 
+                     id="setup-opensubsonic-url" 
+                     name="opensubsonic-url"
+                     placeholder="https://music.yourdomain.com" 
+                     autocomplete="url"
+                     spellcheck="false"
+                     required />
               <small>The URL to your OpenSubsonic/Navidrome/Airsonic server</small>
             </div>
             
@@ -62,12 +68,21 @@
               <div class="setup-unified-credentials" id="setup-unified-credentials" style="display: none;">
                 <div class="setup-form-group">
                   <label for="setup-unified-username">Unified Username:</label>
-                  <input type="text" id="setup-unified-username" placeholder="shared-username" />
+                  <input type="text" 
+                         id="setup-unified-username" 
+                         name="unified-username"
+                         placeholder="shared-username"
+                         autocomplete="username"
+                         spellcheck="false" />
                 </div>
                 
                 <div class="setup-form-group">
                   <label for="setup-unified-password">Unified Password:</label>
-                  <input type="password" id="setup-unified-password" placeholder="shared-password" />
+                  <input type="password" 
+                         id="setup-unified-password" 
+                         name="unified-password"
+                         placeholder="shared-password"
+                         autocomplete="current-password" />
                 </div>
               </div>
             </div>
@@ -75,12 +90,21 @@
             <div class="setup-individual-credentials" id="setup-individual-credentials">
               <div class="setup-form-group">
                 <label for="setup-opensubsonic-username">Username (optional):</label>
-                <input type="text" id="setup-opensubsonic-username" placeholder="your-username" />
+                <input type="text" 
+                       id="setup-opensubsonic-username" 
+                       name="opensubsonic-username"
+                       placeholder="your-username"
+                       autocomplete="username"
+                       spellcheck="false" />
               </div>
               
               <div class="setup-form-group">
                 <label for="setup-opensubsonic-password">Password (optional):</label>
-                <input type="password" id="setup-opensubsonic-password" placeholder="your-password" />
+                <input type="password" 
+                       id="setup-opensubsonic-password" 
+                       name="opensubsonic-password"
+                       placeholder="your-password"
+                       autocomplete="current-password" />
               </div>
             </div>
 
@@ -97,7 +121,13 @@
             
             <div class="setup-form-group">
               <label for="setup-azuracast-servers">Server URLs (separate multiple with comma): *</label>
-              <input type="text" id="setup-azuracast-servers" placeholder="https://radio.yourdomain.com,https://backup.yourdomain.com" required />
+              <input type="text" 
+                     id="setup-azuracast-servers" 
+                     name="azuracast-servers"
+                     placeholder="https://radio.yourdomain.com,https://backup.yourdomain.com" 
+                     autocomplete="url"
+                     spellcheck="false"
+                     required />
               <small>Comma-separated list of your AzuraCast servers</small>
             </div>
             
@@ -110,12 +140,21 @@
             <div class="setup-individual-azuracast-credentials" id="setup-individual-azuracast-credentials">
               <div class="setup-form-group">
                 <label for="setup-azuracast-username">DJ Username (optional):</label>
-                <input type="text" id="setup-azuracast-username" placeholder="dj-username" />
+                <input type="text" 
+                       id="setup-azuracast-username" 
+                       name="azuracast-username"
+                       placeholder="dj-username"
+                       autocomplete="username"
+                       spellcheck="false" />
               </div>
               
               <div class="setup-form-group">
                 <label for="setup-azuracast-password">DJ Password (optional):</label>
-                <input type="password" id="setup-azuracast-password" placeholder="dj-password" />
+                <input type="password" 
+                       id="setup-azuracast-password" 
+                       name="azuracast-password"
+                       placeholder="dj-password"
+                       autocomplete="current-password" />
               </div>
             </div>
 
@@ -239,14 +278,23 @@
         <div class="center-controls">
           <!-- Login Form Overlay -->
           <div class="OpenSubsonic-login" id="OpenSubsonic-login">
-            <div class="login-form">
+            <form class="login-form" autocomplete="on">
               <!-- Unified Login Section (when VITE_USE_UNIFIED_LOGIN=true) -->
               <div class="form-group" id="unified-login-section" style="display: none;">
                 <div class="login-input-container">
-                  <input type="text" id="unified-username" placeholder="Username">
+                  <input type="text" 
+                         id="unified-username" 
+                         name="username" 
+                         placeholder="Username"
+                         autocomplete="username"
+                         spellcheck="false">
                 </div>
                 <div class="login-input-container">
-                  <input type="password" id="unified-password" placeholder="Password">
+                  <input type="password" 
+                         id="unified-password" 
+                         name="password"
+                         placeholder="Password"
+                         autocomplete="current-password">
                 </div>
               </div>
 
@@ -256,13 +304,27 @@
                 <div class="form-group" id="opensubsonic-section">
                   <h4>OpenSubsonic (Music Library)</h4>
                   <div class="login-input-container">
-                    <input type="text" id="OpenSubsonic-server" placeholder="OpenSubsonic Server URL">
+                    <input type="url" 
+                           id="OpenSubsonic-server" 
+                           name="opensubsonic-server"
+                           placeholder="OpenSubsonic Server URL"
+                           autocomplete="url"
+                           spellcheck="false">
                   </div>
                   <div class="login-input-container">
-                    <input type="text" id="OpenSubsonic-username" placeholder="OpenSubsonic Username">
+                    <input type="text" 
+                           id="OpenSubsonic-username" 
+                           name="opensubsonic-username"
+                           placeholder="OpenSubsonic Username"
+                           autocomplete="username"
+                           spellcheck="false">
                   </div>
                   <div class="login-input-container">
-                    <input type="password" id="OpenSubsonic-password" placeholder="OpenSubsonic Password">
+                    <input type="password" 
+                           id="OpenSubsonic-password" 
+                           name="opensubsonic-password"
+                           placeholder="OpenSubsonic Password"
+                           autocomplete="current-password">
                   </div>
                 </div>
                 
@@ -270,21 +332,35 @@
                 <div class="form-group" id="stream-section">
                   <h4>Stream Server (AzuraCast/Icecast)</h4>
                   <div class="login-input-container">
-                    <input type="text" id="stream-server-url" placeholder="Stream Server URL">
+                    <input type="url" 
+                           id="stream-server-url" 
+                           name="stream-server-url"
+                           placeholder="Stream Server URL"
+                           autocomplete="url"
+                           spellcheck="false">
                   </div>
                   <div class="login-input-container">
-                    <input type="text" id="stream-username" placeholder="Stream Username">
+                    <input type="text" 
+                           id="stream-username" 
+                           name="stream-username"
+                           placeholder="Stream Username"
+                           autocomplete="username"
+                           spellcheck="false">
                   </div>
                   <div class="login-input-container">
-                    <input type="password" id="stream-password" placeholder="Stream Password">
+                    <input type="password" 
+                           id="stream-password" 
+                           name="stream-password"
+                           placeholder="Stream Password"
+                           autocomplete="current-password">
                   </div>
                 </div>
               </div>
-            </div>
+            </form>
             
-            <!-- Login Button outside the form -->
+            <!-- Login Button inside the form for better browser compatibility -->
             <div class="login-button-container">
-              <button type="button" id="OpenSubsonic-login-btn">
+              <button type="submit" id="OpenSubsonic-login-btn">
                 <span class="material-icons">login</span>
                 <span>Connect</span>
               </button>
