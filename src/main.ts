@@ -957,10 +957,12 @@ function setupVolumeControls() {
       // Volume slider event
       volumeSlider.addEventListener('input', (e) => {
         const target = e.target as HTMLInputElement;
-        const volume = parseFloat(target.value);
+        const sliderValue = parseFloat(target.value); // 0-100 from slider
+        const volume = sliderValue / 100; // Convert to 0-1 for audio.volume
         audio.volume = volume;
-        // Use existing updateVolumeMeter function with correct meter ID
-        updateVolumeMeter(`volume-meter-${side}`, volume);
+        // Convert slider value (0-100) to meter level (0-8) for visual feedback
+        const meterLevel = Math.floor((sliderValue / 100) * 8);
+        updateVolumeMeter(`volume-meter-${side}`, meterLevel);
       });
       
       // Audio level monitoring for volume meter
@@ -1002,7 +1004,9 @@ function startVolumeMeterAnimation(side: string) {
     const randomVariation = Math.random() * 0.3;
     const currentLevel = Math.min(1, baseLevel + randomVariation);
     
-    updateVolumeMeter(meterId, currentLevel);
+    // Convert volume (0-1) to meter level (0-8)
+    const meterLevel = Math.floor(currentLevel * 8);
+    updateVolumeMeter(meterId, meterLevel);
   }, 100);
 }
 
@@ -1016,7 +1020,10 @@ function stopVolumeMeterAnimation(side: string) {
   // Reset meter to show only volume level
   const volumeSlider = document.getElementById(`volume-${side}`) as HTMLInputElement;
   if (volumeSlider) {
-    updateVolumeMeter(meterId, parseFloat(volumeSlider.value));
+    // Convert slider value (0-100) to meter level (0-8)
+    const sliderValue = parseFloat(volumeSlider.value) / 100; // Convert to 0-1
+    const meterLevel = Math.floor(sliderValue * 8);
+    updateVolumeMeter(meterId, meterLevel);
   }
 }
 
