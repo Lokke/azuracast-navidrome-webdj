@@ -6377,17 +6377,32 @@ function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic') {
     const dataArray = new Uint8Array(bufferLength);
     
     volumeMeterIntervals[side] = setInterval(() => {
-      analyser.getByteFrequencyData(dataArray);
-      
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i] * dataArray[i];
+      try {
+        if (!dataArray || bufferLength <= 0) {
+          return;
+        }
+        
+        analyser.getByteFrequencyData(dataArray);
+        
+        let sum = 0;
+        for (let i = 0; i < Math.min(bufferLength, dataArray.length); i++) {
+          const value = dataArray[i];
+          if (typeof value === 'number' && !isNaN(value)) {
+            sum += value * value;
+          }
+        }
+        const rms = Math.sqrt(sum / bufferLength);
+        const normalizedLevel = Math.floor((rms / 255) * 12);
+        const clampedLevel = Math.max(0, Math.min(8, normalizedLevel));
+        
+        updateVolumeMeter(meterId, clampedLevel);
+      } catch (error) {
+        console.warn(`⚠️ Error in microphone volume meter:`, error);
+        if (volumeMeterIntervals[side]) {
+          clearInterval(volumeMeterIntervals[side]);
+          delete volumeMeterIntervals[side];
+        }
       }
-      const rms = Math.sqrt(sum / bufferLength);
-      const normalizedLevel = Math.floor((rms / 255) * 12);
-      const clampedLevel = Math.max(0, Math.min(8, normalizedLevel));
-      
-      updateVolumeMeter(meterId, clampedLevel);
     }, 50);
     
     console.log(`🎤 Volume meter started for microphone`);
@@ -6448,17 +6463,32 @@ function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic') {
         const dataArray = new Uint8Array(bufferLength);
         
         volumeMeterIntervals[side] = setInterval(() => {
-          analyser.getByteFrequencyData(dataArray);
-          
-          let sum = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            sum += dataArray[i] * dataArray[i];
+          try {
+            if (!dataArray || bufferLength <= 0) {
+              return;
+            }
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            let sum = 0;
+            for (let i = 0; i < Math.min(bufferLength, dataArray.length); i++) {
+              const value = dataArray[i];
+              if (typeof value === 'number' && !isNaN(value)) {
+                sum += value * value;
+              }
+            }
+            const rms = Math.sqrt(sum / bufferLength);
+            const normalizedLevel = Math.floor((rms / 255) * 12);
+            const clampedLevel = Math.max(0, Math.min(8, normalizedLevel));
+            
+            updateVolumeMeter(meterId, clampedLevel);
+          } catch (error) {
+            console.warn(`⚠️ Error in temporary volume meter for ${side}:`, error);
+            if (volumeMeterIntervals[side]) {
+              clearInterval(volumeMeterIntervals[side]);
+              delete volumeMeterIntervals[side];
+            }
           }
-          const rms = Math.sqrt(sum / bufferLength);
-          const normalizedLevel = Math.floor((rms / 255) * 12);
-          const clampedLevel = Math.max(0, Math.min(8, normalizedLevel));
-          
-          updateVolumeMeter(meterId, clampedLevel);
         }, 50);
         
         console.log(`🔊 Temporary volume meter started for player ${side}`);
@@ -6496,21 +6526,38 @@ function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic') {
   
   // Update Interval
   volumeMeterIntervals[side] = setInterval(() => {
-    analyser.getByteFrequencyData(dataArray);
-    
-    // Berechne RMS (Root Mean Square) für bessere Level-Anzeige
-    let sum = 0;
-    for (let i = 0; i < bufferLength; i++) {
-      sum += dataArray[i] * dataArray[i];
+    try {
+      // Sicherheitscheck: Stelle sicher, dass dataArray und bufferLength gültig sind
+      if (!dataArray || bufferLength <= 0) {
+        return;
+      }
+      
+      analyser.getByteFrequencyData(dataArray);
+      
+      // Berechne RMS (Root Mean Square) für bessere Level-Anzeige
+      let sum = 0;
+      for (let i = 0; i < Math.min(bufferLength, dataArray.length); i++) {
+        const value = dataArray[i];
+        if (typeof value === 'number' && !isNaN(value)) {
+          sum += value * value;
+        }
+      }
+      const rms = Math.sqrt(sum / bufferLength);
+      
+      // Verbesserte Empfindlichkeit - direktere Umrechnung
+      // Normalisiere von 0-255 zu 0-8 Balken mit mehr Empfindlichkeit
+      const normalizedLevel = Math.floor((rms / 255) * 12); // Erhöht auf 12 für mehr Empfindlichkeit
+      const clampedLevel = Math.max(0, Math.min(8, normalizedLevel)); // Begrenze auf 8 Balken
+      
+      updateVolumeMeter(meterId, clampedLevel);
+    } catch (error) {
+      console.warn(`⚠️ Error in volume meter loop for ${side}:`, error);
+      // Stoppe das Interval bei wiederholten Fehlern
+      if (volumeMeterIntervals[side]) {
+        clearInterval(volumeMeterIntervals[side]);
+        delete volumeMeterIntervals[side];
+      }
     }
-    const rms = Math.sqrt(sum / bufferLength);
-    
-    // Verbesserte Empfindlichkeit - direktere Umrechnung
-    // Normalisiere von 0-255 zu 0-8 Balken mit mehr Empfindlichkeit
-    const normalizedLevel = Math.floor((rms / 255) * 12); // Erhöht auf 12 für mehr Empfindlichkeit
-    const clampedLevel = Math.max(0, Math.min(8, normalizedLevel)); // Begrenze auf 8 Balken
-    
-    updateVolumeMeter(meterId, clampedLevel);
   }, 50); // 20 FPS Update-Rate
   
   console.log(`🔊 WebAudio volume meter started for player ${side}`);
@@ -6522,15 +6569,34 @@ function updateVolumeMeter(meterId: string, level: number) {
   
   // Support für beide Meter-Typen: kompakt und regular
   const bars = meterElement.querySelectorAll('.meter-bar-compact, .meter-bar');
-  bars.forEach((bar, index) => {
-    // Entferne alle aktiven Klassen
-    bar.classList.remove('active', 'active-1', 'active-2', 'active-3', 'active-4', 'active-5', 'active-6', 'active-7', 'active-8');
-    
-    if (index < level) {
-      // Setze die entsprechende aktive Klasse basierend auf dem Index
-      bar.classList.add(`active-${index + 1}`);
-    }
-  });
+  
+  // Sicherheitscheck: Stelle sicher, dass bars existieren und nicht leer sind
+  if (!bars || bars.length === 0) {
+    // console.warn(`⚠️ No meter bars found for ${meterId}`);
+    return;
+  }
+  
+  // Zusätzlicher Sicherheitscheck: Stelle sicher, dass level im gültigen Bereich ist
+  const safeLevel = Math.max(0, Math.min(bars.length, level));
+  
+  try {
+    bars.forEach((bar, index) => {
+      // Sicherheitscheck für jedes Element
+      if (!bar || typeof bar.classList === 'undefined') {
+        return; // Überspringe ungültige Elemente
+      }
+      
+      // Entferne alle aktiven Klassen
+      bar.classList.remove('active', 'active-1', 'active-2', 'active-3', 'active-4', 'active-5', 'active-6', 'active-7', 'active-8');
+      
+      if (index < safeLevel) {
+        // Setze die entsprechende aktive Klasse basierend auf dem Index
+        bar.classList.add(`active-${index + 1}`);
+      }
+    });
+  } catch (error) {
+    console.warn(`⚠️ Error updating volume meter ${meterId}:`, error);
+  }
 }
 
 function stopVolumeMeter(side: 'a' | 'b' | 'mic') {
