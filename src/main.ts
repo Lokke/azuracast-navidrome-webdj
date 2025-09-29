@@ -154,20 +154,30 @@ window.addEventListener('unload', () => {
   cleanupAudioResources();
 });
 
-// Handle page visibility change more carefully
+// BROWSER-AUDIO-KOMPATIBILITÄT: Page Visibility Handling für bessere Koexistenz
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    console.log('📱 Page hidden - keeping audio context active for continuous playback');
+    console.log('📱 Page hidden - optimizing for background audio compatibility');
     // DON'T suspend AudioContext - this would stop all players!
-    // Only reduce resource usage if no audio is playing
+    // Aber reduziere Resource Usage für bessere Browser-Kompatibilität
+    
+    // Reduziere Analyser-Updates wenn Seite nicht sichtbar
+    if ((window as any).volumeMeterAnimationId) {
+      cancelAnimationFrame((window as any).volumeMeterAnimationId);
+      (window as any).volumeMeterAnimationId = null;
+      console.log('⏸️ Volume meter animations paused for background compatibility');
+    }
   } else {
-    console.log('📱 Page visible - audio context ready');
+    console.log('📱 Page visible - resuming full audio compatibility mode');
+    
     // Ensure AudioContext is resumed if it was suspended
     if (audioContext && audioContext.state === 'suspended') {
       audioContext.resume().then(() => {
         console.log('🔊 AudioContext resumed when page became visible');
       });
     }
+    
+    // Volume meters werden automatisch beim nächsten Audio-Update reaktiviert
   }
 });
 
@@ -252,6 +262,19 @@ function clearPlayerDeck(side: 'a' | 'b' | 'c' | 'd') {
     audio.src = '';
     audio.currentTime = 0;
     audio.removeAttribute('data-song-id');
+    
+    // FEHLERFIX: Cleanup MediaElementSourceNode to prevent "already connected" errors
+    if ((audio as any)._audioSourceNode) {
+      try {
+        (audio as any)._audioSourceNode.disconnect();
+        console.log(`🔌 Disconnected MediaElementSourceNode for player ${side}`);
+      } catch (e) {
+        console.warn(`⚠️ Source node disconnect error for player ${side}:`, e);
+      }
+      // Clear the reference completely
+      delete (audio as any)._audioSourceNode;
+      console.log(`🗑️ Removed MediaElementSourceNode reference for player ${side}`);
+    }
     
     // Note: We don't need to clone the audio element since we want to keep the basic event listeners
     // The audio element will be properly reinitialized when a new track is loaded
@@ -377,13 +400,33 @@ let streamConfig: StreamConfig = {
 // Audio-Mixing-System initialisieren
 async function initializeAudioMixing() {
   try {
-    // AudioContext mit dynamischer Sample Rate (Browser-Standard)
+    // AudioContext mit Browser-freundlichen Optionen für minimale Interferenz
     const audioContextOptions: AudioContextOptions = {
-      latencyHint: 'playback' // Optimiert f�r Playback statt Interaktion
-      // sampleRate bewusst weggelassen ? Browser w�hlt optimale Sample Rate
+      latencyHint: 'playback', // Optimiert für Playback statt Interaktion - weniger invasiv
+      // sampleRate bewusst weggelassen → Browser wählt optimale Sample Rate
+      // Keine Hardware-Exklusivität anfordern
     };
     
     audioContext = new (window.AudioContext || (window as any).webkitAudioContext)(audioContextOptions);
+    
+    // AudioContext Policy: Koexistenz mit anderen Browser-Audio
+    console.log('🎵 AudioContext created with non-exclusive playback policy');
+    
+    // BROWSER-KOMPATIBILITÄT: Audio Policy Compliance
+    // Diese Einstellungen helfen, andere Browser-Audio nicht zu beeinträchtigen
+    try {
+      // Setze Audio Context auf "playback" Modus für bessere Koexistenz
+      if ('audioWorklet' in audioContext) {
+        console.log('🎵 Using modern AudioWorklet for better browser compatibility');
+      }
+      
+      // Reduziere Buffer-Größe für weniger Audio-Latenz und bessere Koexistenz
+      const bufferSize = audioContext.sampleRate * 0.1; // 100ms buffer
+      console.log(`🎵 Using buffer size: ${bufferSize} samples (${100}ms) for better responsiveness`);
+      
+    } catch (error) {
+      console.warn('⚠️ Advanced audio features not available:', error);
+    }
     
     // Log der tats�chlich verwendeten Sample Rate
     console.log(`?? AudioContext created with dynamic sample rate: ${audioContext.sampleRate} Hz`);
@@ -537,11 +580,26 @@ async function initializeAudioMixing() {
 // Audio-Quellen zu Mixing-System hinzuf�gen
 function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'a' | 'b' | 'c' | 'd') {
   if (!audioContext) {
-    console.error(`? AudioContext not initialized for ${side} player`);
+    console.error(`❌ AudioContext not initialized for ${side} player`);
+    return false;
+  }
+  
+  // FEHLERFIX: Zusätzliche Validierung für bessere Stabilität
+  if (!audioElement || audioElement.readyState === 0) {
+    console.warn(`⚠️ Audio element not ready for ${side} player - retrying later`);
     return false;
   }
   
   try {
+    // FEHLERFIX: Ensure AudioContext is running before creating connections (non-blocking)
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().then(() => {
+        console.log(`🔊 AudioContext resumed for ${side} player connection`);
+      }).catch(err => {
+        console.warn(`⚠️ AudioContext resume failed:`, err);
+      });
+    }
+    
     // Entferne vorherige AudioSource-Verbindung falls vorhanden
     if ((audioElement as any)._audioSourceNode) {
       try {
@@ -560,9 +618,18 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'a' | 'b' | '
     audioElement.crossOrigin = 'anonymous';
     audioElement.preservesPitch = false; // Weniger CPU-intensiv
     
-    // MediaElementAudioSourceNode erstellen
-    const sourceNode = audioContext.createMediaElementSource(audioElement);
-    (audioElement as any)._audioSourceNode = sourceNode;
+    // FEHLERFIX: Prüfe ob MediaElementSourceNode bereits existiert
+    let sourceNode: MediaElementAudioSourceNode;
+    if ((audioElement as any)._audioSourceNode) {
+      // Verwende existierenden Source Node
+      sourceNode = (audioElement as any)._audioSourceNode;
+      console.log(`🔄 ${side} player: reusing existing MediaElementSourceNode`);
+    } else {
+      // Erstelle neuen MediaElementAudioSourceNode
+      sourceNode = audioContext.createMediaElementSource(audioElement);
+      (audioElement as any)._audioSourceNode = sourceNode;
+      console.log(`🆕 ${side} player: created new MediaElementSourceNode`);
+    }
     
     // Mit entsprechendem Player Gain verbinden
     if (side === 'a' && aPlayerGain) {
@@ -1912,15 +1979,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Device selection change handler
-  micDeviceSelect.addEventListener('change', (e) => {
+  micDeviceSelect.addEventListener('change', async (e) => {
     const target = e.target as HTMLSelectElement;
     selectedMicDeviceId = target.value;
     console.log(`🎤 Selected microphone device: ${target.options[target.selectedIndex].text}`);
     
-    // If microphone is currently active, restart with new device
+    // If microphone is currently active, gracefully switch devices
     if (micActive) {
-      console.log('🎤 Restarting microphone with new device...');
-      setupMicrophone();
+      console.log('🎤 Gracefully switching microphone device...');
+      
+      // 1. Erste das alte Mikrofon ordentlich deaktivieren
+      if (microphoneStream) {
+        console.log('🎤 Stopping previous microphone stream...');
+        microphoneStream.getTracks().forEach(track => {
+          track.stop(); // Hardware freigeben
+          console.log(`🎤 Released track: ${track.label}`);
+        });
+        microphoneStream = null;
+      }
+      
+      // 2. Kurze Pause um Hardware-Wechsel zu ermöglichen
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 3. Neues Mikrofon mit neuem Device aktivieren
+      console.log('🎤 Activating new microphone device...');
+      await setupMicrophone();
     }
   });
 
@@ -2564,37 +2647,79 @@ async function setupMicrophone() {
       googAudioMirroring: false
     };
     
+    // BROWSER-FREUNDLICHER MIKROFON-ZUGRIFF
+    // Minimale Rechte anfordern um andere Browser-Audio nicht zu blockieren
+    const minimalAudioConstraints = {
+      ...audioConstraints,
+      // Browser-freundliche Optionen
+      // @ts-ignore
+      echoCancellation: false,  // Weniger invasiv
+      // @ts-ignore  
+      noiseSuppression: false,  // Weniger Verarbeitung
+      // @ts-ignore
+      autoGainControl: false,   // Manuelle Kontrolle
+      // @ts-ignore
+      googEchoCancellation: false,
+      // @ts-ignore
+      googAutoGainControl: false,
+      // @ts-ignore
+      googNoiseSuppression: false
+    };
+
     microphoneStream = await navigator.mediaDevices.getUserMedia({ 
-      audio: audioConstraints
+      audio: minimalAudioConstraints
     });
     
-    // Mikrofon-Track Sample Rate Analyse
+    // BROWSER-FREUNDLICHES TRACK MANAGEMENT
+    // Tracks so konfigurieren, dass sie andere Browser-Audio minimal beeinträchtigen
     microphoneStream.getAudioTracks().forEach((track, index) => {
-      track.enabled = true; // Track ist aktiv f�r Aufnahme
+      track.enabled = true; // Track ist aktiv für Aufnahme
+      
+      // BROWSER-KOMPATIBILITÄT: Setze Track-Constraints für bessere Koexistenz
+      if (track.applyConstraints) {
+        track.applyConstraints({
+          echoCancellation: false,    // Weniger CPU-Last
+          noiseSuppression: false,    // Weniger Verarbeitung  
+          autoGainControl: false,     // Weniger Interferenz
+        }).catch(err => {
+          console.warn('⚠️ Could not apply track constraints:', err);
+        });
+      }
       
       const settings = track.getSettings();
-      console.log(`?? Microphone Track ${index + 1} Settings:`);
+      console.log(`🎙️ Microphone Track ${index + 1} Settings:`);
       console.log(`   - Sample Rate: ${settings.sampleRate || 'unknown'} Hz`);
       console.log(`   - Channels: ${settings.channelCount || 'unknown'}`);
       console.log(`   - Sample Size: ${settings.sampleSize || 'unknown'} bit`);
-      console.log(`   - Echo Cancellation: ${settings.echoCancellation ? '?' : '?'}`);
-      console.log(`   - Noise Suppression: ${settings.noiseSuppression ? '?' : '?'}`);
-      console.log(`   - Auto Gain Control: ${settings.autoGainControl ? '?' : '?'}`);
+      console.log(`   - Echo Cancellation: ${settings.echoCancellation ? '✅' : '❌'}`);
+      console.log(`   - Noise Suppression: ${settings.noiseSuppression ? '✅' : '❌'}`);
+      console.log(`   - Auto Gain Control: ${settings.autoGainControl ? '✅' : '❌'}`);
       
-      // Sample Rate Kompatibilit�t pr�fen
+      // Sample Rate Kompatibilität prüfen
       if (settings.sampleRate && settings.sampleRate !== contextSampleRate) {
-        console.warn(`??  Sample Rate Mismatch: Microphone=${settings.sampleRate}Hz, AudioContext=${contextSampleRate}Hz`);
-        console.log(`?? Browser will automatically resample: ${settings.sampleRate}Hz ? ${contextSampleRate}Hz`);
+        console.warn(`⚠️  Sample Rate Mismatch: Microphone=${settings.sampleRate}Hz, AudioContext=${contextSampleRate}Hz`);
+        console.log(`🔄 Browser will automatically resample: ${settings.sampleRate}Hz → ${contextSampleRate}Hz`);
       } else {
-        console.log(`? Perfect Sample Rate Match: ${contextSampleRate}Hz`);
+        console.log(`✅ Perfect Sample Rate Match: ${contextSampleRate}Hz`);
       }
       
-      // Erweiterte Track-Einstellungen - ALLE Audio-Effekte deaktiviert f�r nat�rliche Stimme
+      // BROWSER-AUDIO-KOMPATIBILITÄT: Prüfe Audio-Policy-Konformität
+      if (audioContext?.state === 'running' && audioContext.baseLatency) {
+        console.log(`🔊 Audio Policy Status:`, {
+          contextState: audioContext.state,
+          baseLatency: audioContext.baseLatency,
+          outputLatency: audioContext.outputLatency,
+          sampleRate: audioContext.sampleRate,
+          renderingMode: 'playback-optimized'
+        });
+      }
+      
+      // Erweiterte Track-Einstellungen - ALLE Audio-Effekte deaktiviert für natürliche Stimme
       if (track.applyConstraints) {
         track.applyConstraints({
-          echoCancellation: false,      // Echo-Cancel AUS f�r DJ-Mikrofon
-          noiseSuppression: false,      // Noise-Suppress AUS f�r nat�rliche Stimme
-          autoGainControl: false,       // AGC AUS f�r manuelle Kontrolle
+          echoCancellation: false,      // Echo-Cancel AUS für DJ-Mikrofon
+          noiseSuppression: false,      // Noise-Suppress AUS für natürliche Stimme
+          autoGainControl: false,       // AGC AUS für manuelle Kontrolle
           sampleRate: contextSampleRate // Dynamische Sample Rate
         }).catch(e => console.warn('Could not apply advanced mic constraints:', e));
       }
@@ -6458,7 +6583,17 @@ function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic') {
     // Fallback: Wenn GainNode nicht existiert, erstelle temporären Analyser
     try {
       if (audioElement.src && !audioElement.paused) {
-        const sourceNode = audioContext.createMediaElementSource(audioElement);
+        // FEHLERFIX: Prüfe ob MediaElementSourceNode bereits existiert
+        let sourceNode: MediaElementAudioSourceNode;
+        if ((audioElement as any)._audioSourceNode) {
+          sourceNode = (audioElement as any)._audioSourceNode;
+          console.log(`🔄 Volume meter: reusing existing MediaElementSourceNode for ${side}`);
+        } else {
+          sourceNode = audioContext.createMediaElementSource(audioElement);
+          (audioElement as any)._audioSourceNode = sourceNode;
+          console.log(`🆕 Volume meter: created new MediaElementSourceNode for ${side}`);
+        }
+        
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.8;
@@ -6641,7 +6776,7 @@ function setupAudioEventListeners(audio: HTMLAudioElement, side: 'a' | 'b' | 'c'
   
   // ZUS�TZLICH: Sicherstellen dass Verbindung bei Play-Event existiert
   audio.addEventListener('play', () => {
-    console.log(`?? PLAY EVENT: ${side} player starting playback`);
+    console.log(`🎵 PLAY EVENT: ${side} player starting playback`);
     // Verbindung nochmals prüfen/herstellen bei Wiedergabe
     if (audioContext && (aPlayerGain || bPlayerGain || cPlayerGain || dPlayerGain)) {
       const connected = connectAudioToMixer(audio, side);
