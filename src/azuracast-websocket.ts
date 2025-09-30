@@ -41,6 +41,8 @@ export class AzuraCastWebSocketService {
   private subscribers = new Map<string, Set<(data: AzuraCastNowPlayingData) => void>>();
   private nowPlayingData = new Map<string, AzuraCastNowPlayingData>();
   private reconnectTimeouts = new Map<string, NodeJS.Timeout>();
+  private failedWebSockets = new Set<string>();
+  private pollingIntervals = new Map<string, NodeJS.Timeout>();
 
   /**
    * Subscribe to Now Playing updates for a specific station
@@ -109,6 +111,14 @@ export class AzuraCastWebSocketService {
    */
   private connect(serverUrl: string, stationShortcode: string) {
     const key = `${serverUrl}:${stationShortcode}`;
+    
+    // If this server has failed WebSocket before, use HTTP polling
+    if (this.failedWebSockets.has(key)) {
+      console.log(`🔄 Using HTTP polling for ${stationShortcode} (WebSocket previously failed)`);
+      this.startHttpPolling(serverUrl, stationShortcode);
+      return;
+    }
+    
     const wsUrl = `${serverUrl.replace(/^https?:\/\//, 'wss://')}/api/live/nowplaying/websocket`;
     
     try {
@@ -138,6 +148,14 @@ export class AzuraCastWebSocketService {
         console.log(`🔌 WebSocket closed for ${stationShortcode}:`, event.code, event.reason);
         this.connections.delete(key);
         
+        // Check for failure codes that indicate WebSocket is not supported
+        if (event.code === 1005 || event.code === 1006 || event.code === 1011 || event.code === 1002) {
+          console.log(`🔄 WebSocket not supported for ${stationShortcode}, switching to HTTP polling`);
+          this.failedWebSockets.add(key);
+          this.startHttpPolling(serverUrl, stationShortcode);
+          return;
+        }
+        
         // Attempt to reconnect if there are still subscribers
         if (this.subscribers.has(key) && this.subscribers.get(key)!.size > 0) {
           this.scheduleReconnect(serverUrl, stationShortcode);
@@ -150,7 +168,8 @@ export class AzuraCastWebSocketService {
 
     } catch (error) {
       console.error(`❌ Failed to connect to WebSocket for ${stationShortcode}:`, error);
-      this.scheduleReconnect(serverUrl, stationShortcode);
+      this.failedWebSockets.add(key);
+      this.startHttpPolling(serverUrl, stationShortcode);
     }
   }
 
@@ -212,7 +231,7 @@ export class AzuraCastWebSocketService {
   }
 
   /**
-   * Disconnect from WebSocket
+   * Disconnect from WebSocket or stop HTTP polling
    */
   private disconnect(key: string) {
     if (this.connections.has(key)) {
@@ -223,6 +242,11 @@ export class AzuraCastWebSocketService {
     if (this.reconnectTimeouts.has(key)) {
       clearTimeout(this.reconnectTimeouts.get(key)!);
       this.reconnectTimeouts.delete(key);
+    }
+    
+    if (this.pollingIntervals.has(key)) {
+      clearInterval(this.pollingIntervals.get(key)!);
+      this.pollingIntervals.delete(key);
     }
     
     this.nowPlayingData.delete(key);
@@ -250,7 +274,56 @@ export class AzuraCastWebSocketService {
   }
 
   /**
-   * Cleanup all connections
+   * Start HTTP polling as fallback when WebSocket fails
+   */
+  private startHttpPolling(serverUrl: string, stationShortcode: string) {
+    const key = `${serverUrl}:${stationShortcode}`;
+    
+    // Clear any existing polling interval
+    if (this.pollingIntervals.has(key)) {
+      clearInterval(this.pollingIntervals.get(key)!);
+    }
+    
+    // Start polling every 10 seconds
+    const pollNowPlaying = async () => {
+      try {
+        const response = await fetch(`${serverUrl}/api/nowplaying/${stationShortcode}`);
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Store the data
+          this.nowPlayingData.set(key, data);
+          
+          // Notify all subscribers
+          if (this.subscribers.has(key)) {
+            this.subscribers.get(key)!.forEach(callback => {
+              try {
+                callback(data);
+              } catch (error) {
+                console.error('❌ Error in Now Playing callback:', error);
+              }
+            });
+          }
+          
+          console.log(`🔄 HTTP polling update for ${stationShortcode}:`, data.now_playing?.song?.text || 'Unknown');
+        } else {
+          console.error(`❌ HTTP polling failed for ${stationShortcode}:`, response.status);
+        }
+      } catch (error) {
+        console.error(`❌ HTTP polling error for ${stationShortcode}:`, error);
+      }
+    };
+    
+    // Poll immediately, then every 10 seconds
+    pollNowPlaying();
+    const interval = setInterval(pollNowPlaying, 10000);
+    this.pollingIntervals.set(key, interval as any);
+    
+    console.log(`🔄 Started HTTP polling for ${stationShortcode}`);
+  }
+
+  /**
+   * Cleanup all connections and polling intervals
    */
   cleanup() {
     this.connections.forEach((socket, key) => {
@@ -261,10 +334,16 @@ export class AzuraCastWebSocketService {
       clearTimeout(timeout);
     });
     
+    this.pollingIntervals.forEach((interval) => {
+      clearInterval(interval);
+    });
+    
     this.connections.clear();
     this.subscribers.clear();
     this.nowPlayingData.clear();
     this.reconnectTimeouts.clear();
+    this.pollingIntervals.clear();
+    this.failedWebSockets.clear();
   }
 }
 

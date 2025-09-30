@@ -4164,7 +4164,7 @@ body {
 }
 
 .radio-stream-list {
-  max-height: 300px;
+  max-height: 450px; /* Increased to show ~6 streams before scrolling */
   overflow-y: auto;
 }
 

@@ -283,6 +283,20 @@ function clearPlayerDeck(side: 'a' | 'b' | 'c' | 'd') {
   // Clear stored song data for drag & drop
   deckSongs[side] = null;
   
+  // Clear radio stream refresh interval if exists
+  const refreshInterval = (window as any)[`radioRefreshInterval_${side}`];
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    delete (window as any)[`radioRefreshInterval_${side}`];
+    console.log(`🔄 Cleared radio stream refresh interval for deck ${side.toUpperCase()}`);
+  }
+  
+  // Clear radio track data if exists
+  if ((window as any)[`radioTrack_${side}`]) {
+    delete (window as any)[`radioTrack_${side}`];
+    console.log(`📻 Cleared radio track data for deck ${side.toUpperCase()}`);
+  }
+  
   // Clear metadata display
   if (titleElement) titleElement.textContent = 'No Track Loaded';
   if (artistElement) artistElement.textContent = '';
@@ -4573,6 +4587,7 @@ function setupRadioStreamSelector() {
   
   let isDropdownOpen = false;
   let radioStations: any[] = [];
+  let listenerUpdateInterval: NodeJS.Timeout | null = null;
   
   // Toggle dropdown
   const toggleDropdown = async () => {
@@ -4580,6 +4595,9 @@ function setupRadioStreamSelector() {
       dropdown.classList.remove('show');
       radioBtn.classList.remove('active');
       isDropdownOpen = false;
+      
+      // Stop listener updates
+      stopListenerUpdates();
     } else {
       dropdown.classList.add('show');
       radioBtn.classList.add('active');
@@ -4589,6 +4607,9 @@ function setupRadioStreamSelector() {
       if (radioStations.length === 0) {
         await loadRadioStations();
       }
+      
+      // Start periodic listener count updates
+      startListenerUpdates();
     }
   };
   
@@ -4657,7 +4678,7 @@ function setupRadioStreamSelector() {
       // Add live class for styling
       stationItem.className = `radio-stream-item ${isLive ? 'live-stream' : ''}`;
       
-      // Create description text
+      // Create description text with listener count
       let description = station.description || 'Radio Stream';
       if (isLive && streamerName) {
         description = `🔴 LIVE: ${streamerName}`;
@@ -4665,13 +4686,17 @@ function setupRadioStreamSelector() {
         description = `🎵 ${nowPlaying.artist} - ${nowPlaying.title}`;
       }
       
+      // Add listener count if available
+      const listenerCount = station.listeners?.unique || station.listeners?.current || 0;
+      const listenerDisplay = ` • 👥 ${listenerCount}`;
+      
       stationItem.innerHTML = `
         <div class="radio-stream-info">
           <div class="radio-stream-name">
             ${isLive ? '<span class="live-indicator">●</span>' : ''}
             ${station.name}
           </div>
-          <div class="radio-stream-description">${description}</div>
+          <div class="radio-stream-description">${description}${listenerDisplay}</div>
         </div>
         <div class="radio-stream-deck-buttons">
           <button class="radio-deck-btn" data-deck="a" data-station-id="${station.id}" data-server-url="${station.serverUrl}" data-shortcode="${station.shortcode}">A</button>
@@ -4680,6 +4705,10 @@ function setupRadioStreamSelector() {
           <button class="radio-deck-btn" data-deck="d" data-station-id="${station.id}" data-server-url="${station.serverUrl}" data-shortcode="${station.shortcode}">D</button>
         </div>
       `;
+      
+      // Add data attributes for easier updates
+      stationItem.setAttribute('data-station-key', `${station.serverUrl}:${station.shortcode}`);
+      stationItem.setAttribute('data-listener-count', listenerCount.toString());
       
       streamList.appendChild(stationItem);
     });
@@ -4702,6 +4731,114 @@ function setupRadioStreamSelector() {
     });
   };
   
+  // Start periodic listener count updates
+  const startListenerUpdates = () => {
+    // Clear any existing interval
+    stopListenerUpdates();
+    
+    // Update listener counts every 30 seconds when dropdown is open
+    listenerUpdateInterval = setInterval(async () => {
+      if (isDropdownOpen && radioStations.length > 0) {
+        await updateListenerCounts();
+      }
+    }, 30000);
+    
+    // Also subscribe to WebSocket updates for all stations to get real-time updates
+    radioStations.forEach(station => {
+      azuraCastWebSocket.subscribe(station.serverUrl, station.shortcode, (data: AzuraCastNowPlayingData) => {
+        updateStationFromWebSocket(station, data);
+      });
+    });
+    
+    console.log('🔄 Started listener count updates for radio streams');
+  };
+  
+  // Stop listener count updates
+  const stopListenerUpdates = () => {
+    if (listenerUpdateInterval) {
+      clearInterval(listenerUpdateInterval);
+      listenerUpdateInterval = null;
+      console.log('⏹️ Stopped listener count updates');
+    }
+    
+    // Unsubscribe from WebSocket updates for all stations
+    radioStations.forEach(station => {
+      azuraCastWebSocket.unsubscribeAll(station.serverUrl, station.shortcode);
+    });
+  };
+  
+  // Update station info from WebSocket data (including listener counts)
+  const updateStationFromWebSocket = (station: any, data: AzuraCastNowPlayingData) => {
+    if (!isDropdownOpen) return; // Only update if dropdown is open
+    
+    const stationKey = `${station.serverUrl}:${station.shortcode}`;
+    const stationItem = streamList.querySelector(`[data-station-key="${stationKey}"]`);
+    
+    if (stationItem) {
+      const descriptionEl = stationItem.querySelector('.radio-stream-description');
+      if (descriptionEl) {
+        // Update now playing info
+        let description = station.description || 'Radio Stream';
+        if (data.live?.is_live && data.live?.streamer_name) {
+          description = `🔴 LIVE: ${data.live.streamer_name}`;
+        } else if (data.now_playing?.song) {
+          const song = data.now_playing.song;
+          description = `🎵 ${song.artist} - ${song.title}`;
+        }
+        
+        // Update listener count if available
+        const listenerCount = data.listeners?.unique || data.listeners?.current || 0;
+        const listenerDisplay = ` • 👥 ${listenerCount}`;
+        
+        descriptionEl.textContent = description + listenerDisplay;
+        stationItem.setAttribute('data-listener-count', listenerCount.toString());
+      }
+    }
+  };
+  
+  // Update listener counts for all visible stations
+  const updateListenerCounts = async () => {
+    try {
+      console.log('📊 Updating listener counts...');
+      
+      // Get server URLs for current stations
+      const serverUrls = [...new Set(radioStations.map(station => station.serverUrl))];
+      
+      // Fetch fresh nowplaying data for all servers
+      const { fetchAllAzuraCastStations } = await import('./azuracast');
+      const allServersData = await fetchAllAzuraCastStations(serverUrls);
+      
+      // Update listener counts in DOM
+      allServersData.forEach(serverData => {
+        serverData.stations.forEach(stationResponse => {
+          const station = stationResponse.station || stationResponse;
+          const listeners = stationResponse.listeners || station.listeners;
+          const stationKey = `${serverData.serverUrl}:${station.shortcode}`;
+          
+          // Find the station item in DOM
+          const stationItem = streamList.querySelector(`[data-station-key="${stationKey}"]`);
+          if (stationItem && listeners) {
+            const descriptionEl = stationItem.querySelector('.radio-stream-description');
+            if (descriptionEl) {
+              const currentText = descriptionEl.textContent || '';
+              const textWithoutListeners = currentText.replace(/\s*•\s*👥\s*\d+/, '');
+              const uniqueListeners = listeners.unique || listeners.current || 0;
+              const listenerDisplay = ` • 👥 ${uniqueListeners}`;
+              descriptionEl.textContent = textWithoutListeners + listenerDisplay;
+              
+              // Update data attribute
+              stationItem.setAttribute('data-listener-count', uniqueListeners.toString());
+            }
+          }
+        });
+      });
+      
+      console.log('✅ Listener counts updated');
+    } catch (error) {
+      console.warn('⚠️ Failed to update listener counts:', error);
+    }
+  };
+  
   // Load radio stream to specified deck
   const loadRadioStreamToDeck = async (deck: string, station: any) => {
     try {
@@ -4718,40 +4855,138 @@ function setupRadioStreamSelector() {
         return;
       }
       
-      // Always use standard AzuraCast listen URL format (more reliable for CORS)
-      const streamUrl = `${station.serverUrl}/listen/${station.shortcode}/radio.mp3`;
-      
-      console.log(`📻 Stream URL: ${streamUrl}`);
-      
-      // Create a deck-compatible track object for the radio stream
-      const radioTrack = {
-        id: `radio-${station.id}`,
-        title: station.name,
-        artist: 'Live Radio Stream',
-        album: station.description || station.name,
-        duration: 0, // Live streams have no duration
-        genre: station.genre || 'Radio',
-        year: new Date().getFullYear(),
-        track: 0,
-        discNumber: 0,
-        coverArt: station.now_playing?.song?.art || null,
-        suffix: 'mp3',
-        bitRate: station.bitrate || 128,
-        path: streamUrl,
-        isStream: true,
-        isRadio: true,
-        stationId: station.id,
-        shortcode: station.shortcode,
-        serverUrl: station.serverUrl
+      // Function to try loading stream URLs with fallback
+      const tryLoadRadioStream = async (urls: string[], urlIndex = 0): Promise<void> => {
+        if (urlIndex >= urls.length) {
+          throw new Error('All stream URLs failed to load');
+        }
+        
+        const currentUrl = urls[urlIndex];
+        console.log(`📻 Trying Stream URL ${urlIndex + 1}/${urls.length}: ${currentUrl}`);
+        
+        return new Promise((resolve, reject) => {
+          const testAudio = new Audio();
+          testAudio.crossOrigin = 'anonymous';
+          testAudio.preload = 'none'; // No caching for test audio
+          
+          const cleanup = () => {
+            testAudio.removeEventListener('canplay', onCanPlay);
+            testAudio.removeEventListener('error', onError);
+            testAudio.removeEventListener('abort', onError);
+          };
+          
+          const onCanPlay = () => {
+            cleanup();
+            console.log(`✅ Stream URL ${urlIndex + 1} works: ${currentUrl}`);
+            
+            // Create radio track object with working URL (add cache-busting parameters)
+            const noCacheUrl = `${currentUrl}${currentUrl.includes('?') ? '&' : '?'}t=${Date.now()}&nocache=1`;
+            
+            const radioTrack = {
+              id: `radio-${station.id}`,
+              title: station.name,
+              artist: 'Live Radio Stream',
+              album: station.description || station.name,
+              duration: 0,
+              genre: station.genre || 'Radio',
+              year: new Date().getFullYear(),
+              track: 0,
+              discNumber: 0,
+              coverArt: station.now_playing?.song?.art || null,
+              suffix: 'mp3',
+              bitRate: station.bitrate || 128,
+              path: noCacheUrl,
+              isStream: true,
+              isRadio: true,
+              stationId: station.id,
+              shortcode: station.shortcode,
+              serverUrl: station.serverUrl
+            };
+            
+            // Store radio track info for this deck
+            (window as any)[`radioTrack_${deck}`] = radioTrack;
+            
+            // Configure audio element to prevent caching
+            audio.preload = 'none'; // Don't preload anything
+            audio.crossOrigin = 'anonymous';
+            
+            // Set cache-control attributes for radio streams
+            if (audio.setAttribute) {
+              audio.setAttribute('data-no-cache', 'true');
+              audio.setAttribute('data-stream-type', 'live');
+            }
+            
+            // Load the working stream URL with cache-busting
+            audio.src = noCacheUrl;
+            audio.load();
+            
+            resolve();
+          };
+          
+          const onError = () => {
+            cleanup();
+            console.warn(`❌ Stream URL ${urlIndex + 1} failed: ${currentUrl}`);
+            
+            // Try next URL
+            tryLoadRadioStream(urls, urlIndex + 1)
+              .then(resolve)
+              .catch(reject);
+          };
+          
+          testAudio.addEventListener('canplay', onCanPlay);
+          testAudio.addEventListener('error', onError);
+          testAudio.addEventListener('abort', onError);
+          
+          // Set source with cache-busting parameter and trigger loading
+          const testUrl = `${currentUrl}${currentUrl.includes('?') ? '&' : '?'}test=${Date.now()}`;
+          testAudio.src = testUrl;
+          testAudio.load();
+          
+          // Timeout after 10 seconds
+          setTimeout(() => {
+            if (testAudio.readyState === 0) {
+              cleanup();
+              onError();
+            }
+          }, 10000);
+        });
       };
       
-      // Store radio track info for this deck
-      (window as any)[`radioTrack_${deck}`] = radioTrack;
+      // Primary URL: Standard format that works for most stations
+      const primaryStreamUrl = `${station.serverUrl}/listen/${station.shortcode}/radio.mp3`;
+      // Fallback URL: Official AzuraCast format from API or constructed format
+      const fallbackStreamUrl = station.listen_url || `${station.serverUrl}/listen/${station.shortcode}/${station.shortcode}`;
       
-      // Load the stream
-      audio.src = streamUrl;
-      audio.crossOrigin = 'anonymous'; // Allow CORS for radio streams
-      audio.load();
+      // Try URLs in order: primary first, then fallback
+      const streamUrls = [primaryStreamUrl];
+      if (fallbackStreamUrl !== primaryStreamUrl) {
+        streamUrls.push(fallbackStreamUrl);
+      }
+      
+      // Try loading the stream with fallback
+      await tryLoadRadioStream(streamUrls);
+      
+      // Setup periodic cache-busting for live streams
+      const refreshStreamUrl = () => {
+        const radioTrack = (window as any)[`radioTrack_${deck}`];
+        if (radioTrack && radioTrack.isRadio && audio.src) {
+          const baseUrl = radioTrack.path.split('?')[0]; // Remove existing parameters
+          const freshUrl = `${baseUrl}?t=${Date.now()}&live=1`;
+          
+          // Only refresh if audio is not currently playing or loading
+          if (audio.paused && audio.readyState >= 2) {
+            console.log(`🔄 Refreshing radio stream URL for deck ${deck.toUpperCase()}`);
+            audio.src = freshUrl;
+            radioTrack.path = freshUrl;
+          }
+        }
+      };
+      
+      // Refresh stream URL every 2 minutes to prevent stale cache
+      const refreshInterval = setInterval(refreshStreamUrl, 120000);
+      
+      // Store refresh interval to clean up later if needed
+      (window as any)[`radioRefreshInterval_${deck}`] = refreshInterval;
       
       // Update initial display
       updateRadioStreamDisplay(deck, station);
