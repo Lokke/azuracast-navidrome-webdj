@@ -243,11 +243,15 @@ function setPlayerState(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong | nu
   if (isPlaying && !wasPlaying) {
     state.startTime = Date.now();
     console.log(`?? Player ${side.toUpperCase()} started: "${song?.title}" at ${state.startTime}`);
+    
+    // Auto-update stream metadata when a new track starts
+    setTimeout(() => updateStreamMetadata(), 100); // Small delay to ensure state is updated
   } else if (!isPlaying && wasPlaying) {
     console.log(`?? Player ${side.toUpperCase()} stopped: "${song?.title}"`);
+    
+    // Auto-update stream metadata when a track stops (in case this was the priority track)
+    setTimeout(() => updateStreamMetadata(), 100);
   }
-  
-
 }
 
 // Get currently loaded song from player
@@ -1289,7 +1293,7 @@ function setupAlbumCoverDragDrop() {
       }
       
       const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
-      const hasTrack = audio && audio.src && !audio.paused;
+      const isPlaying = audio && audio.src && !audio.paused;
       const hasLoadedTrack = audio && audio.src; // Simplified: just check if there's a source
       const songData = deckSongs[side];
       
@@ -1297,16 +1301,24 @@ function setupAlbumCoverDragDrop() {
         hasAudio: !!audio,
         hasSrc: !!audio?.src,
         hasLoadedTrack,
-        isPlaying: hasTrack,
+        isPlaying,
         songData: !!songData
       });
       
-      if (hasLoadedTrack) {
+      if (hasLoadedTrack && !isPlaying) {
+        // Only allow dragging if track is loaded but NOT playing
         albumCover.draggable = true;
-        albumCover.style.cursor = hasTrack ? 'not-allowed' : 'grab';
+        albumCover.style.cursor = 'grab';
         albumCover.setAttribute('draggable', 'true'); // Ensure attribute is set
-        console.log(`🎵 Deck ${side} album cover: draggable=true, cursor=${hasTrack ? 'not-allowed' : 'grab'}`);
+        console.log(`🎵 Deck ${side} album cover: draggable=true (track loaded, not playing)`);
+      } else if (hasLoadedTrack && isPlaying) {
+        // Track is playing - disable dragging
+        albumCover.draggable = false;
+        albumCover.style.cursor = 'not-allowed';
+        albumCover.removeAttribute('draggable'); // Remove attribute
+        console.log(`🎵 Deck ${side} album cover: draggable=false (track is playing)`);
       } else {
+        // No track loaded - disable dragging
         albumCover.draggable = false;
         albumCover.style.cursor = 'default';
         albumCover.removeAttribute('draggable'); // Remove attribute
@@ -2548,27 +2560,49 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // Get current track metadata for AzuraCast
+  // Get current track metadata for AzuraCast - prioritize most recently started track
   function getCurrentTrackMetadata(): AzuraCastMetadata | null {
-    // Try to get metadata from currently playing deck
-    const playingDecks = ['a', 'b', 'c', 'd'].filter(deck => {
-      const playBtn = document.getElementById(`play-${deck}`) as HTMLButtonElement;
-      return playBtn?.classList.contains('playing');
-    });
+    // Get all currently playing decks with their start times
+    const playingDecks = ['a', 'b', 'c', 'd']
+      .map(deck => {
+        const playBtn = document.getElementById(`play-${deck}`) as HTMLButtonElement;
+        const isPlaying = playBtn?.classList.contains('playing');
+        const deckState = playerStates[deck as keyof typeof playerStates];
+        
+        return {
+          deck,
+          isPlaying,
+          startTime: deckState?.startTime || 0,
+          song: deckSongs[deck as keyof typeof deckSongs]
+        };
+      })
+      .filter(info => info.isPlaying && info.song) // Only playing decks with songs
+      .sort((a, b) => b.startTime - a.startTime); // Sort by start time DESC (most recent first)
     
     if (playingDecks.length > 0) {
-      const deckId = playingDecks[0];
-      const song = deckSongs[deckId as keyof typeof deckSongs];
+      const mostRecentDeck = playingDecks[0];
+      console.log(`🎵 Metadata priority: Deck ${mostRecentDeck.deck.toUpperCase()} (started: ${new Date(mostRecentDeck.startTime).toLocaleTimeString()})`);
       
-      if (song) {
+      if (mostRecentDeck.song) {
         return {
-          title: song.title || 'Unknown Title',
-          artist: song.artist || 'Unknown Artist'
+          title: mostRecentDeck.song.title || 'Unknown Title',
+          artist: mostRecentDeck.song.artist || 'Unknown Artist'
         };
       }
     }
     
     return null;
+  }
+
+  // Auto-update metadata when tracks start/stop
+  function updateStreamMetadata() {
+    if (azuraCastWebcaster?.isConnected) {
+      const currentTrack = getCurrentTrackMetadata();
+      if (currentTrack) {
+        azuraCastWebcaster.sendMetadata(currentTrack);
+        console.log(`📊 Auto-updated stream metadata: ${currentTrack.artist} - ${currentTrack.title}`);
+      }
+    }
   }
   
   micBtn?.addEventListener("click", async () => {
@@ -6468,11 +6502,34 @@ function initializePlayerDropZones() {
     e.preventDefault(); // Prevent default file handling
   });
   
-  // Test: Add a global drag detection
+  // Test: Add a global drag detection and cleanup
   document.addEventListener('dragstart', (e) => {
     console.log('🚀 GLOBAL DRAGSTART detected:', e.target);
     console.log('🚀 Draggable element:', e.target);
     console.log('🚀 DataTransfer available:', !!e.dataTransfer);
+    
+    // Clean up any lingering drag classes from previous operations
+    const allDecks = ['a', 'b', 'c', 'd'];
+    allDecks.forEach(deckSide => {
+      const deck = document.getElementById(`player-${deckSide}`);
+      if (deck) {
+        deck.classList.remove('drag-over', 'drop-blocked');
+      }
+    });
+  });
+  
+  // Global dragend cleanup
+  document.addEventListener('dragend', (e) => {
+    console.log('🏁 GLOBAL DRAGEND detected');
+    
+    // Clean up all drag-related classes when drag operation ends
+    const allDecks = ['a', 'b', 'c', 'd'];
+    allDecks.forEach(deckSide => {
+      const deck = document.getElementById(`player-${deckSide}`);
+      if (deck) {
+        deck.classList.remove('drag-over', 'drop-blocked');
+      }
+    });
   });
   
   initializePlayerDropZone('a');
@@ -7034,30 +7091,19 @@ function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
     e.stopPropagation();
     console.log(`🎯 Dragover on player ${side}`);
     
-    // Block drops during playback unless it's a deck-to-deck move
-    if (isAnyDeckPlaying()) {
-      // Check if it's a deck-to-deck move (allowed during playback)
-      const jsonData = e.dataTransfer?.getData('application/json');
-      let isDeckMove = false;
-      
-      if (jsonData) {
-        try {
-          const dragData = JSON.parse(jsonData);
-          isDeckMove = dragData.type === 'deck-song';
-        } catch {
-          // Not JSON data, could be file drop - block during playback
-        }
+    // Block drops only on THIS deck if it's playing
+    const thisAudio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+    const thisPlayerIsPlaying = thisAudio && !thisAudio.paused && thisAudio.currentTime > 0;
+    
+    if (thisPlayerIsPlaying) {
+      // Block drops only on this specific playing deck
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'none';
       }
-      
-      if (!isDeckMove) {
-        // Block non-deck moves during playback
-        if (e.dataTransfer) {
-          e.dataTransfer.dropEffect = 'none';
-        }
-        playerDeck.classList.add('drop-blocked');
-        playerDeck.classList.remove('drag-over');
-        return;
-      }
+      playerDeck.classList.add('drop-blocked');
+      playerDeck.classList.remove('drag-over');
+      console.log(`🚫 Blocking drop on player ${side} - deck is playing`);
+      return;
     }
     
     if (e.dataTransfer) {
@@ -7092,8 +7138,16 @@ function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
     e.preventDefault();
     e.stopPropagation();
     console.log(`🎯 Dragleave on player ${side}`);
-    playerDeck.classList.remove('drag-over');
-    playerDeck.classList.remove('drop-blocked');
+    
+    // Use setTimeout to ensure dragleave is real and not just hovering over child elements
+    setTimeout(() => {
+      // Check if we're really leaving - not just moving over a child element
+      if (!playerDeck.matches(':hover')) {
+        playerDeck.classList.remove('drag-over');
+        playerDeck.classList.remove('drop-blocked');
+        console.log(`🎯 Cleared drag classes on player ${side}`);
+      }
+    }, 50);
   });
   
   playerDeck.addEventListener('drop', async (e) => {
@@ -7104,25 +7158,13 @@ function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
     
     const dragEvent = e as DragEvent;
     
-    // Block drops during playback unless it's a deck-to-deck move
-    if (isAnyDeckPlaying()) {
-      // Check if it's a deck-to-deck move (allowed during playback)
-      const jsonData = dragEvent.dataTransfer?.getData('application/json');
-      let isDeckMove = false;
-      
-      if (jsonData) {
-        try {
-          const dragData = JSON.parse(jsonData);
-          isDeckMove = dragData.type === 'deck-song';
-        } catch {
-          // Not JSON data, could be file drop - block during playback
-        }
-      }
-      
-      if (!isDeckMove) {
-        console.log(`🚫 Drop blocked during playback on player ${side.toUpperCase()}`);
-        return;
-      }
+    // Block drops only on THIS deck if it's playing
+    const thisAudio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+    const thisPlayerIsPlaying = thisAudio && !thisAudio.paused && thisAudio.currentTime > 0;
+    
+    if (thisPlayerIsPlaying) {
+      console.log(`🚫 Drop blocked on player ${side.toUpperCase()} - this deck is playing`);
+      return;
     }
     
     // Check for local files first (from desktop drag & drop)
