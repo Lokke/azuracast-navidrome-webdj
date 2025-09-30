@@ -2599,8 +2599,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (azuraCastWebcaster?.getConnectionStatus()) {
       const currentTrack = getCurrentTrackMetadata();
       if (currentTrack) {
+        // Send immediately
         azuraCastWebcaster.sendMetadata(currentTrack);
         console.log(`📊 Auto-updated stream metadata: ${currentTrack.artist} - ${currentTrack.title}`);
+        
+        // Send again after 2 seconds to ensure AzuraCast receives it
+        setTimeout(() => {
+          if (azuraCastWebcaster?.getConnectionStatus()) {
+            azuraCastWebcaster.sendMetadata(currentTrack);
+            console.log(`📊 Confirmed stream metadata: ${currentTrack.artist} - ${currentTrack.title}`);
+          }
+        }, 2000);
       }
     }
   }

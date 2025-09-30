@@ -81,6 +81,7 @@ export class AzuraCastWebcaster {
   private isConnected = false;
   private config: AzuraCastConfig;
   private metadata: AzuraCastMetadata | null = null;
+  private metadataInterval: number | null = null;
 
   constructor(config: AzuraCastConfig) {
     this.config = config;
@@ -146,6 +147,9 @@ export class AzuraCastWebcaster {
               if (this.metadata) {
                 this.sendMetadata(this.metadata);
               }
+              
+              // Start periodic metadata transmission
+              this.startMetadataInterval();
               
               resolve(true);
             }
@@ -242,10 +246,42 @@ export class AzuraCastWebcaster {
   }
 
   /**
+   * Start periodic metadata transmission every 10 seconds
+   * This ensures AzuraCast always has current metadata
+   */
+  private startMetadataInterval(): void {
+    // Clear any existing interval
+    this.stopMetadataInterval();
+    
+    // Send metadata every 10 seconds while connected
+    this.metadataInterval = window.setInterval(() => {
+      if (this.isConnected && this.metadata) {
+        this.sendMetadata(this.metadata);
+      }
+    }, 10000); // Every 10 seconds
+    
+    console.log('🔄 Started periodic metadata transmission (every 10s)');
+  }
+
+  /**
+   * Stop periodic metadata transmission
+   */
+  private stopMetadataInterval(): void {
+    if (this.metadataInterval) {
+      clearInterval(this.metadataInterval);
+      this.metadataInterval = null;
+      console.log('⏹️ Stopped periodic metadata transmission');
+    }
+  }
+
+  /**
    * Disconnect from AzuraCast
    */
   disconnect(): void {
     this.isConnected = false;
+    
+    // Stop periodic metadata transmission
+    this.stopMetadataInterval();
     
     if (this.mediaRecorder) {
       this.stopRecording();
