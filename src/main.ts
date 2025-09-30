@@ -2596,7 +2596,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Auto-update metadata when tracks start/stop
   function updateStreamMetadata() {
-    if (azuraCastWebcaster?.isConnected) {
+    if (azuraCastWebcaster?.getConnectionStatus()) {
       const currentTrack = getCurrentTrackMetadata();
       if (currentTrack) {
         azuraCastWebcaster.sendMetadata(currentTrack);
