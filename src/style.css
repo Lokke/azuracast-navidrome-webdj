@@ -274,6 +274,156 @@ body {
   background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
+/* Local file cover styling */
+.local-file-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 8px;
+  background: linear-gradient(135deg, rgba(100, 255, 218, 0.1), rgba(100, 255, 218, 0.05));
+  border: 2px solid rgba(100, 255, 218, 0.3);
+  border-radius: 8px;
+  color: rgba(100, 255, 218, 0.9);
+  text-align: center;
+}
+
+.local-file-cover .material-icons {
+  font-size: 32px;
+  margin-bottom: 4px;
+  color: rgba(100, 255, 218, 0.8);
+}
+
+.local-file-cover .file-info {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.local-file-cover .file-name {
+  font-weight: 600;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.local-file-cover .file-size {
+  opacity: 0.7;
+  font-size: 9px;
+}
+
+/* Local file indicator in rating area */
+.local-file-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: rgba(100, 255, 218, 0.8);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  background: rgba(100, 255, 218, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(100, 255, 218, 0.3);
+}
+
+.local-file-indicator .material-icons {
+  font-size: 16px;
+}
+
+/* Live Radio Waveform Styling */
+.live-radio-waveform {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(255, 87, 34, 0.1), rgba(255, 87, 34, 0.05));
+  border-radius: 8px;
+  color: rgba(255, 87, 34, 0.9);
+}
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.live-dot {
+  width: 12px;
+  height: 12px;
+  background: #ff5722;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(255, 87, 34, 0.6);
+}
+
+.live-dot.pulsing {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.radio-bars {
+  display: flex;
+  align-items: end;
+  gap: 4px;
+  height: 40px;
+  margin-bottom: 12px;
+}
+
+.radio-bar {
+  width: 6px;
+  height: 20%;
+  background: linear-gradient(to top, #ff5722, #ff8a65);
+  border-radius: 3px;
+  transition: height 0.3s ease;
+}
+
+.radio-bar.animated {
+  animation: radioWave 1.2s ease-in-out infinite;
+}
+
+@keyframes radioWave {
+  0%, 100% {
+    height: 20%;
+  }
+  25% {
+    height: 60%;
+  }
+  50% {
+    height: 80%;
+  }
+  75% {
+    height: 40%;
+  }
+}
+
+.radio-info {
+  font-size: 12px;
+  opacity: 0.8;
+  text-align: center;
+}
+
+.radio-frequency {
+  font-family: 'Source Code Pro', monospace;
+  font-weight: 500;
+}
+
 .album-placeholder {
   color: #666;
   font-size: 12px;
@@ -5004,6 +5154,33 @@ body {
   box-shadow: 
     0 0 15px rgba(0, 255, 136, 0.5),
     inset 0 0 10px rgba(0, 255, 136, 0.2);
+}
+
+.player-deck.drop-blocked {
+  background: rgba(255, 102, 102, 0.1) !important;
+  border: 2px solid #ff6666 !important;
+  transform: scale(0.98);
+  box-shadow: 
+    0 0 15px rgba(255, 102, 102, 0.5),
+    inset 0 0 10px rgba(255, 102, 102, 0.2);
+  cursor: not-allowed;
+}
+
+.player-deck.drop-blocked::after {
+  content: "🚫 Playback Active - Drop Blocked";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 102, 102, 0.9);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 1000;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .player-deck audio {

@@ -273,6 +273,7 @@ function clearPlayerDeck(side: 'a' | 'b' | 'c' | 'd') {
       }
       // Clear the reference completely
       delete (audio as any)._audioSourceNode;
+      delete (audio as any)._isConnectedToMixer;
       console.log(`🗑️ Removed MediaElementSourceNode reference for player ${side}`);
     }
     
@@ -295,6 +296,20 @@ function clearPlayerDeck(side: 'a' | 'b' | 'c' | 'd') {
   if ((window as any)[`radioTrack_${side}`]) {
     delete (window as any)[`radioTrack_${side}`];
     console.log(`📻 Cleared radio track data for deck ${side.toUpperCase()}`);
+  }
+  
+  // Clear local file ObjectURL if exists (prevent memory leaks)
+  const localObjectUrl = (window as any)[`localObjectUrl_${side}`];
+  if (localObjectUrl) {
+    URL.revokeObjectURL(localObjectUrl);
+    delete (window as any)[`localObjectUrl_${side}`];
+    console.log(`📁 Revoked local file ObjectURL for deck ${side.toUpperCase()}`);
+  }
+  
+  // Clear local track data if exists
+  if ((window as any)[`localTrack_${side}`]) {
+    delete (window as any)[`localTrack_${side}`];
+    console.log(`📁 Cleared local track data for deck ${side.toUpperCase()}`);
   }
   
   // Clear metadata display
@@ -614,6 +629,12 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'a' | 'b' | '
       });
     }
     
+    // Check if audio source is already properly connected
+    if ((audioElement as any)._audioSourceNode && (audioElement as any)._isConnectedToMixer) {
+      console.log(`? ${side} player already connected to mixer - skipping reconnection`);
+      return true;
+    }
+    
     // Entferne vorherige AudioSource-Verbindung falls vorhanden
     if ((audioElement as any)._audioSourceNode) {
       try {
@@ -622,6 +643,7 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'a' | 'b' | '
       } catch (e) {
         // Source node already disconnected
       }
+      delete (audioElement as any)._isConnectedToMixer;
     }
     
     // Audio routing always through Web Audio API for monitoring and mixing
@@ -669,6 +691,9 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'a' | 'b' | '
     
     console.log(`??? Audio Flow when STREAMING: ${side} Player ? Web Audio API ? [Monitor + Stream]`);
     console.log(`??? Audio Flow when NOT streaming: ${side} Player ? Browser Audio ? Headphones`);
+    
+    // Mark as successfully connected to prevent unnecessary reconnections
+    (audioElement as any)._isConnectedToMixer = true;
     
     return true;
   } catch (error) {
@@ -4988,13 +5013,28 @@ function setupRadioStreamSelector() {
       // Store refresh interval to clean up later if needed
       (window as any)[`radioRefreshInterval_${deck}`] = refreshInterval;
       
+      // Reset waveform first (before loading new stream)
+      const deckType = deck as 'a' | 'b' | 'c' | 'd';
+      resetWaveform(deckType);
+      
       // Update initial display
       updateRadioStreamDisplay(deck, station);
+      
+      // Update waveform info overlay for radio stream
+      updateWaveformInfoForRadio(deckType, station);
+      
+      // For radio streams, create a simple live waveform visualization
+      createLiveWaveformForRadio(deckType, audio);
       
       // Subscribe to WebSocket updates for this station
       azuraCastWebSocket.subscribe(station.serverUrl, station.shortcode, (data: AzuraCastNowPlayingData) => {
         updateRadioStreamFromWebSocket(deck, station, data);
+        // Update waveform info with now playing data
+        updateWaveformInfoForRadio(deckType, station, data);
       });
+      
+      // Setup audio event listeners for radio streams
+      setupAudioEventListeners(audio, deckType);
       
       // Update file info display
       const fileInfo = document.querySelector(`#file-info-${deck} .file-path-display`);
@@ -6279,6 +6319,454 @@ function initializePlayerDropZones() {
   }, 2000);
 }
 
+/**
+ * Load local audio file to deck (from desktop drag & drop)
+ */
+async function loadLocalFileToDeck(deck: 'a' | 'b' | 'c' | 'd', file: File): Promise<void> {
+  try {
+    console.log(`📁 Loading local file to deck ${deck.toUpperCase()}: ${file.name}`);
+    
+    // Validate audio format
+    if (!isValidAudioFile(file)) {
+      console.error(`❌ Unsupported file format: ${file.type || 'unknown'}`);
+      showFileFormatError(deck, file.name, file.type || 'unknown');
+      return;
+    }
+    
+    // Get audio element
+    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
+    if (!audio) {
+      console.error(`❌ Audio element for deck ${deck} not found`);
+      return;
+    }
+    
+    // Create object URL for the file
+    const objectUrl = URL.createObjectURL(file);
+    
+    // Extract metadata from file (reuse the objectUrl we just created)
+    const metadata = await extractFileMetadata(file, objectUrl);
+    
+    // Create a track object for the local file
+    const localTrack = {
+      id: `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      title: metadata.title || file.name.replace(/\.[^/.]+$/, ''), // Remove extension
+      artist: metadata.artist || 'Local File',
+      album: metadata.album || 'Local Files',
+      duration: metadata.duration || 0,
+      genre: metadata.genre || 'Unknown',
+      year: metadata.year || new Date().getFullYear(),
+      track: 0,
+      discNumber: 0,
+      coverArt: metadata.coverArt || null,
+      suffix: file.name.split('.').pop()?.toLowerCase() || 'mp3',
+      bitRate: metadata.bitRate || 0,
+      path: objectUrl,
+      isLocal: true,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    };
+    
+    // Store local track info for this deck (for cleanup)
+    (window as any)[`localTrack_${deck}`] = localTrack;
+    (window as any)[`localObjectUrl_${deck}`] = objectUrl;
+    
+    // Reset waveform first (before loading new track)
+    resetWaveform(deck);
+    
+    // Load the local file
+    audio.src = objectUrl;
+    audio.load();
+    
+    // Update display with local file info
+    updateLocalFileDisplay(deck, localTrack);
+    
+    // Update waveform info overlay
+    updateWaveformInfoForLocalFile(deck, localTrack);
+    
+    // Load waveform for local file
+    loadWaveform(deck, objectUrl, metadata.duration);
+    
+    // Setup audio event listeners (needed for waveform sync)
+    setupAudioEventListeners(audio, deck);
+    
+    // Update deck visual state
+    const playerDeck = document.getElementById(`player-${deck}`);
+    if (playerDeck) {
+      playerDeck.classList.add('loaded', 'has-track');
+      playerDeck.classList.remove('loading');
+    }
+    
+    console.log(`✅ Local file loaded to Deck ${deck.toUpperCase()}: "${localTrack.title}"`);
+    
+  } catch (error) {
+    console.error(`❌ Error loading local file to deck ${deck}:`, error);
+    showFileLoadError(deck, file.name);
+  }
+}
+
+/**
+ * Validate if file is a supported audio format
+ */
+function isValidAudioFile(file: File): boolean {
+  const supportedTypes = [
+    'audio/mpeg',     // .mp3
+    'audio/wav',      // .wav
+    'audio/wave',     // .wav (alternative)
+    'audio/flac',     // .flac
+    'audio/ogg',      // .ogg
+    'audio/mp4',      // .m4a
+    'audio/aac',      // .aac
+    'audio/webm',     // .webm
+    'audio/x-flac'    // .flac (alternative)
+  ];
+  
+  const supportedExtensions = ['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.webm'];
+  
+  // Check MIME type
+  if (file.type && supportedTypes.includes(file.type)) {
+    return true;
+  }
+  
+  // Check file extension as fallback
+  const extension = '.' + file.name.split('.').pop()?.toLowerCase();
+  return supportedExtensions.includes(extension);
+}
+
+/**
+ * Extract metadata from audio file using multiple methods
+ */
+async function extractFileMetadata(file: File, objectUrl?: string): Promise<any> {
+  // First try basic filename parsing
+  const filename = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
+  let parsedMetadata = parseFilenameMetadata(filename);
+  
+  // Then try HTML5 Audio for duration (reuse objectUrl if provided)
+  const audioMetadata = await extractAudioMetadata(file, objectUrl);
+  
+  // Combine results - prefer parsed filename data over null values
+  return {
+    duration: audioMetadata.duration || 0,
+    title: parsedMetadata.title || filename,
+    artist: parsedMetadata.artist || 'Unknown Artist',
+    album: parsedMetadata.album || 'Local Files',
+    genre: 'Local File',
+    year: new Date().getFullYear(),
+    coverArt: null,
+    bitRate: 0
+  };
+}
+
+/**
+ * Check if any audio deck is currently playing
+ */
+function isAnyDeckPlaying(): boolean {
+  const decks = ['a', 'b', 'c', 'd'];
+  
+  for (const deck of decks) {
+    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
+    if (audio && !audio.paused && audio.currentTime > 0) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Parse metadata from filename using common patterns
+ */
+function parseFilenameMetadata(filename: string): any {
+  const metadata = {
+    title: null as string | null,
+    artist: null as string | null,
+    album: null as string | null
+  };
+  
+  // Common patterns:
+  // "Artist - Title"
+  // "Artist - Album - Title" 
+  // "01 - Artist - Title"
+  // "Artist_Title"
+  
+  // Remove track numbers at start
+  let cleanName = filename.replace(/^\d+[\s\-_\.]*/, '');
+  
+  // Pattern: "Artist - Title"
+  if (cleanName.includes(' - ')) {
+    const parts = cleanName.split(' - ');
+    if (parts.length >= 2) {
+      metadata.artist = parts[0].trim();
+      metadata.title = parts[1].trim();
+      if (parts.length >= 3) {
+        metadata.album = parts[1].trim();
+        metadata.title = parts[2].trim();
+      }
+    }
+  }
+  // Pattern: "Artist_Title" or "Artist Title"
+  else if (cleanName.includes('_') || cleanName.includes(' ')) {
+    const separator = cleanName.includes('_') ? '_' : ' ';
+    const parts = cleanName.split(separator);
+    if (parts.length >= 2) {
+      // Try to detect artist vs title (heuristic)
+      const midPoint = Math.floor(parts.length / 2);
+      metadata.artist = parts.slice(0, midPoint).join(' ').trim();
+      metadata.title = parts.slice(midPoint).join(' ').trim();
+    }
+  }
+  
+  return metadata;
+}
+
+/**
+ * Extract basic audio metadata using HTML5 Audio
+ */
+async function extractAudioMetadata(file: File, reuseObjectUrl?: string): Promise<any> {
+  return new Promise((resolve) => {
+    const tempAudio = new Audio();
+    let objectUrl: string;
+    let shouldCleanupUrl = false;
+    
+    // Reuse existing objectUrl if provided, otherwise create new one
+    if (reuseObjectUrl) {
+      objectUrl = reuseObjectUrl;
+    } else {
+      objectUrl = URL.createObjectURL(file);
+      shouldCleanupUrl = true;
+    }
+    
+    const cleanup = () => {
+      // Only revoke URL if we created it ourselves
+      if (shouldCleanupUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      tempAudio.src = '';
+    };
+    
+    tempAudio.addEventListener('loadedmetadata', () => {
+      const metadata = {
+        duration: tempAudio.duration || 0
+      };
+      cleanup();
+      resolve(metadata);
+    });
+    
+    tempAudio.addEventListener('error', () => {
+      cleanup();
+      resolve({ duration: 0 });
+    });
+    
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      cleanup();
+      resolve({ duration: 0 });
+    }, 5000);
+    
+    tempAudio.src = objectUrl;
+  });
+}
+
+/**
+ * Update display for local file
+ */
+function updateLocalFileDisplay(deck: 'a' | 'b' | 'c' | 'd', track: any): void {
+  // Update title and artist
+  const titleElement = document.getElementById(`track-title-${deck}`);
+  const artistElement = document.getElementById(`track-artist-${deck}`);
+  
+  if (titleElement) titleElement.textContent = track.title;
+  if (artistElement) artistElement.textContent = track.artist;
+  
+  // Update album cover (show file icon for local files)
+  const albumCover = document.getElementById(`album-cover-${deck}`) as HTMLElement;
+  if (albumCover) {
+    albumCover.innerHTML = `
+      <div class="local-file-cover">
+        <span class="material-icons">audio_file</span>
+        <div class="file-info">
+          <div class="file-name">${track.fileName}</div>
+          <div class="file-size">${formatFileSize(track.fileSize)}</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  // Update file info display
+  const fileInfo = document.querySelector(`#file-info-${deck} .file-path-display`);
+  if (fileInfo) {
+    fileInfo.textContent = `📁 ${track.fileName}`;
+  }
+  
+  // Clear rating for local files
+  const playerRating = document.getElementById(`player-rating-${deck}`);
+  if (playerRating) {
+    playerRating.innerHTML = `
+      <div class="local-file-indicator">
+        <span class="material-icons">folder</span>
+        <span>Local File</span>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Format file size for display
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/**
+ * Show file format error
+ */
+function showFileFormatError(deck: 'a' | 'b' | 'c' | 'd', fileName: string, fileType: string): void {
+  const titleElement = document.getElementById(`track-title-${deck}`);
+  const artistElement = document.getElementById(`track-artist-${deck}`);
+  
+  if (titleElement) titleElement.textContent = `❌ Unsupported Format`;
+  if (artistElement) artistElement.textContent = `${fileName} (${fileType})`;
+  
+  // Clear after 3 seconds
+  setTimeout(() => {
+    if (titleElement) titleElement.textContent = 'No Track Loaded';
+    if (artistElement) artistElement.textContent = '';
+  }, 3000);
+}
+
+/**
+ * Update waveform info overlay for local file
+ */
+function updateWaveformInfoForLocalFile(deck: 'a' | 'b' | 'c' | 'd', track: any): void {
+  const waveformInfo = document.getElementById(`waveform-info-${deck}`);
+  if (waveformInfo) {
+    waveformInfo.innerHTML = `
+      <div class="track-title">${track.title}</div>
+      <div class="track-artist">${track.artist}</div>
+      <div class="track-album">${track.album}</div>
+      <div class="track-duration">${formatDuration(track.duration)}</div>
+      <div class="local-file-badge">📁 Local File</div>
+    `;
+  }
+}
+
+/**
+ * Update waveform info overlay for radio stream
+ */
+function updateWaveformInfoForRadio(deck: 'a' | 'b' | 'c' | 'd', station: any, nowPlaying?: any): void {
+  const waveformInfo = document.getElementById(`waveform-info-${deck}`);
+  if (waveformInfo) {
+    const currentSong = nowPlaying?.song;
+    waveformInfo.innerHTML = `
+      <div class="track-title">${currentSong?.title || station.name}</div>
+      <div class="track-artist">${currentSong?.artist || 'Live Radio Stream'}</div>
+      <div class="track-album">${station.description || 'Radio Station'}</div>
+      <div class="track-duration">🔴 LIVE</div>
+      <div class="radio-badge">📻 ${station.name}</div>
+    `;
+  }
+}
+
+/**
+ * Create live waveform visualization for radio streams
+ */
+function createLiveWaveformForRadio(deck: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement): void {
+  try {
+    const container = document.getElementById(`waveform-${deck}`);
+    if (!container) {
+      console.warn(`Waveform container not found for deck ${deck}`);
+      return;
+    }
+    
+    // Clear existing waveform
+    container.innerHTML = '';
+    
+    // Create live radio waveform visualization
+    container.innerHTML = `
+      <div class="live-radio-waveform">
+        <div class="live-indicator">
+          <span class="live-dot"></span>
+          <span class="live-text">LIVE</span>
+        </div>
+        <div class="radio-bars">
+          <div class="radio-bar"></div>
+          <div class="radio-bar"></div>
+          <div class="radio-bar"></div>
+          <div class="radio-bar"></div>
+          <div class="radio-bar"></div>
+          <div class="radio-bar"></div>
+          <div class="radio-bar"></div>
+          <div class="radio-bar"></div>
+        </div>
+        <div class="radio-info">
+          <span class="radio-frequency">📻 Radio Stream</span>
+        </div>
+      </div>
+    `;
+    
+    // Add live animation when playing
+    const startLiveAnimation = () => {
+      const bars = container.querySelectorAll('.radio-bar');
+      bars.forEach((bar, index) => {
+        const element = bar as HTMLElement;
+        element.style.animationDelay = `${index * 0.1}s`;
+        element.classList.add('animated');
+      });
+      
+      const liveDot = container.querySelector('.live-dot') as HTMLElement;
+      if (liveDot) {
+        liveDot.classList.add('pulsing');
+      }
+    };
+    
+    const stopLiveAnimation = () => {
+      const bars = container.querySelectorAll('.radio-bar');
+      bars.forEach(bar => {
+        const element = bar as HTMLElement;
+        element.classList.remove('animated');
+      });
+      
+      const liveDot = container.querySelector('.live-dot') as HTMLElement;
+      if (liveDot) {
+        liveDot.classList.remove('pulsing');
+      }
+    };
+    
+    // Listen to audio events for animation control
+    audio.addEventListener('play', startLiveAnimation);
+    audio.addEventListener('pause', stopLiveAnimation);
+    audio.addEventListener('ended', stopLiveAnimation);
+    
+    console.log(`📻 Live radio waveform created for deck ${deck.toUpperCase()}`);
+    
+  } catch (error) {
+    console.error(`❌ Error creating live radio waveform for deck ${deck}:`, error);
+  }
+}
+
+/**
+ * Show file load error
+ */
+function showFileLoadError(deck: 'a' | 'b' | 'c' | 'd', fileName: string): void {
+  const titleElement = document.getElementById(`track-title-${deck}`);
+  const artistElement = document.getElementById(`track-artist-${deck}`);
+  
+  if (titleElement) titleElement.textContent = `❌ Load Error`;
+  if (artistElement) artistElement.textContent = fileName;
+  
+  // Clear after 3 seconds
+  setTimeout(() => {
+    if (titleElement) titleElement.textContent = 'No Track Loaded';
+    if (artistElement) artistElement.textContent = '';
+  }, 3000);
+}
+
 // Debug function to test all draggable elements
 function debugDraggableElements() {
   console.log('🔍 DEBUGGING DRAGGABLE ELEMENTS:');
@@ -6376,6 +6864,33 @@ function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
     e.preventDefault();
     e.stopPropagation();
     console.log(`🎯 Dragover on player ${side}`);
+    
+    // Block drops during playback unless it's a deck-to-deck move
+    if (isAnyDeckPlaying()) {
+      // Check if it's a deck-to-deck move (allowed during playback)
+      const jsonData = e.dataTransfer?.getData('application/json');
+      let isDeckMove = false;
+      
+      if (jsonData) {
+        try {
+          const dragData = JSON.parse(jsonData);
+          isDeckMove = dragData.type === 'deck-song';
+        } catch {
+          // Not JSON data, could be file drop - block during playback
+        }
+      }
+      
+      if (!isDeckMove) {
+        // Block non-deck moves during playback
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'none';
+        }
+        playerDeck.classList.add('drop-blocked');
+        playerDeck.classList.remove('drag-over');
+        return;
+      }
+    }
+    
     if (e.dataTransfer) {
       // Check if it's a deck-to-deck move
       const jsonData = e.dataTransfer.getData('application/json');
@@ -6395,6 +6910,7 @@ function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
       }
     }
     playerDeck.classList.add('drag-over');
+    playerDeck.classList.remove('drop-blocked');
   });
   
   playerDeck.addEventListener('dragenter', (e) => {
@@ -6408,16 +6924,49 @@ function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
     e.stopPropagation();
     console.log(`🎯 Dragleave on player ${side}`);
     playerDeck.classList.remove('drag-over');
+    playerDeck.classList.remove('drop-blocked');
   });
   
   playerDeck.addEventListener('drop', async (e) => {
     console.log(`🎯 DROP EVENT on player ${side}!`);
     e.preventDefault();
     playerDeck.classList.remove('drag-over');
+    playerDeck.classList.remove('drop-blocked');
     
     const dragEvent = e as DragEvent;
     
-    // Try to get JSON data first (preferred format)
+    // Block drops during playback unless it's a deck-to-deck move
+    if (isAnyDeckPlaying()) {
+      // Check if it's a deck-to-deck move (allowed during playback)
+      const jsonData = dragEvent.dataTransfer?.getData('application/json');
+      let isDeckMove = false;
+      
+      if (jsonData) {
+        try {
+          const dragData = JSON.parse(jsonData);
+          isDeckMove = dragData.type === 'deck-song';
+        } catch {
+          // Not JSON data, could be file drop - block during playback
+        }
+      }
+      
+      if (!isDeckMove) {
+        console.log(`🚫 Drop blocked during playback on player ${side.toUpperCase()}`);
+        return;
+      }
+    }
+    
+    // Check for local files first (from desktop drag & drop)
+    if (dragEvent.dataTransfer?.files && dragEvent.dataTransfer.files.length > 0) {
+      console.log(`📁 Local file(s) dropped on player ${side.toUpperCase()}`);
+      const file = dragEvent.dataTransfer.files[0]; // Take first file
+      
+      // Load local file to deck
+      await loadLocalFileToDeck(side, file);
+      return; // Exit early for local files
+    }
+    
+    // Try to get JSON data (OpenSubsonic songs)
     let songData: any = null;
     let songId: string | null = null;
     let song: OpenSubsonicSong | null = null;
@@ -7032,14 +7581,17 @@ function setupAudioEventListeners(audio: HTMLAudioElement, side: 'a' | 'b' | 'c'
   // ZUS�TZLICH: Sicherstellen dass Verbindung bei Play-Event existiert
   audio.addEventListener('play', () => {
     console.log(`🎵 PLAY EVENT: ${side} player starting playback`);
-    // Verbindung nochmals prüfen/herstellen bei Wiedergabe
-    if (audioContext && (aPlayerGain || bPlayerGain || cPlayerGain || dPlayerGain)) {
+    // Nur verbinden wenn noch nicht verbunden
+    if (!(audio as any)._isConnectedToMixer && audioContext && (aPlayerGain || bPlayerGain || cPlayerGain || dPlayerGain)) {
+      console.log(`? ${side} player not connected - establishing connection`);
       const connected = connectAudioToMixer(audio, side);
       if (connected) {
         console.log(`? ${side} player audio routing verified for stream`);
       } else {
         console.error(`? ${side} player audio routing FAILED`);
       }
+    } else if ((audio as any)._isConnectedToMixer) {
+      console.log(`? ${side} player already connected - playback ready`);
     } else {
       console.error(`? ${side} player: audioContext or gain nodes not ready`);
     }
