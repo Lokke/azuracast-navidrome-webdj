@@ -26,6 +26,11 @@ export interface AzuraCastNowPlayingData {
     is_live: boolean;
     streamer_name: string;
   };
+  listeners?: {
+    total: number;
+    unique: number;
+    current: number;
+  };
   playing_next?: {
     song: {
       title: string;
