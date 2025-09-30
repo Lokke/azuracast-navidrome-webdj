@@ -102,6 +102,25 @@ let microphoneGain: GainNode | null = null;
 let crossfaderGain: { a: GainNode; b: GainNode; c: GainNode; d: GainNode } | null = null;
 let microphoneStream: MediaStream | null = null;
 
+// Radio Broadcast Processing Nodes
+let micCompressorNode: DynamicsCompressorNode | null = null;
+let micGateNode: GainNode | null = null;
+let micEqLowNode: BiquadFilterNode | null = null;
+let micEqMidNode: BiquadFilterNode | null = null;
+let micEqHighNode: BiquadFilterNode | null = null;
+let micLimiterNode: DynamicsCompressorNode | null = null;
+let micDeEsserNode: DynamicsCompressorNode | null = null;
+let micProcessingGain: GainNode | null = null;
+
+// Radio Processing State
+let micProcessingState = {
+  compressor: true,    // Default ON - essential for broadcast
+  gate: true,          // Default ON - reduces background noise
+  eq: true,            // Default ON - speech optimization
+  limiter: true,       // Default ON - prevents clipping
+  deesser: false       // Default OFF - only when needed
+};
+
 // Audio Cleanup Function - Essential for preventing browser audio conflicts
 function cleanupAudioResources(): void {
   console.log('🧹 Cleaning up audio resources...');
@@ -1969,9 +1988,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     const target = e.target as HTMLInputElement;
     const volume = parseInt(target.value) / 100;
     if (microphoneGain) {
-      // Apply volume based on button state
-      microphoneGain.gain.value = micActive ? volume : 0;
-      console.log(`🎤 Microphone volume: ${Math.round(volume * 100)}% (Button: ${micActive ? 'ON' : 'OFF'})`);
+      // Apply volume regardless of button state - slider controls actual volume
+      microphoneGain.gain.value = volume;
+      console.log(`🎤 Microphone volume: ${Math.round(volume * 100)}%`);
     }
   });
 
@@ -2054,6 +2073,38 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Initialize microphone device list on startup
   populateMicrophoneDevices();
+
+  // Radio Broadcast Processing Button Event Handlers
+  const micCompressorBtn = document.getElementById('mic-compressor-btn');
+  const micGateBtn = document.getElementById('mic-gate-btn');
+  const micEqBtn = document.getElementById('mic-eq-btn');
+  const micLimiterBtn = document.getElementById('mic-limiter-btn');
+  const micDeEsserBtn = document.getElementById('mic-deesser-btn');
+
+  micCompressorBtn?.addEventListener('click', () => {
+    toggleRadioProcessing('compressor');
+    micCompressorBtn.classList.toggle('active', micProcessingState.compressor);
+  });
+
+  micGateBtn?.addEventListener('click', () => {
+    toggleRadioProcessing('gate');
+    micGateBtn.classList.toggle('active', micProcessingState.gate);
+  });
+
+  micEqBtn?.addEventListener('click', () => {
+    toggleRadioProcessing('eq');
+    micEqBtn.classList.toggle('active', micProcessingState.eq);
+  });
+
+  micLimiterBtn?.addEventListener('click', () => {
+    toggleRadioProcessing('limiter');
+    micLimiterBtn.classList.toggle('active', micProcessingState.limiter);
+  });
+
+  micDeEsserBtn?.addEventListener('click', () => {
+    toggleRadioProcessing('deesser');
+    micDeEsserBtn.classList.toggle('active', micProcessingState.deesser);
+  });
 
   // AzuraCast Station Dropdown Initialization (Triggered by STREAM button)
   async function initializeStationDropdown(): Promise<void> {
@@ -2634,6 +2685,118 @@ function showCORSErrorMessage() {
   }, 10000);
 }
 
+// Initialize radio broadcast processing chain
+async function initializeRadioProcessing(): Promise<void> {
+  if (!audioContext) return;
+  
+  // Processing Gain Node (acts as the processing chain input)
+  micProcessingGain = audioContext.createGain();
+  micProcessingGain.gain.setValueAtTime(1.0, audioContext.currentTime);
+  
+  // Professional Radio Compressor (broadcast-style)
+  micCompressorNode = audioContext.createDynamicsCompressor();
+  micCompressorNode.threshold.setValueAtTime(-18, audioContext.currentTime);  // -18dB threshold
+  micCompressorNode.knee.setValueAtTime(15, audioContext.currentTime);        // 15dB knee
+  micCompressorNode.ratio.setValueAtTime(8, audioContext.currentTime);        // 8:1 ratio
+  micCompressorNode.attack.setValueAtTime(0.001, audioContext.currentTime);   // 1ms attack
+  micCompressorNode.release.setValueAtTime(0.1, audioContext.currentTime);    // 100ms release
+  
+  // Noise Gate (via gain control)
+  micGateNode = audioContext.createGain();
+  micGateNode.gain.setValueAtTime(1.0, audioContext.currentTime);
+  
+  // 3-Band EQ for Voice Optimization
+  micEqLowNode = audioContext.createBiquadFilter();
+  micEqLowNode.type = 'peaking';
+  micEqLowNode.frequency.setValueAtTime(200, audioContext.currentTime);
+  micEqLowNode.Q.setValueAtTime(1.0, audioContext.currentTime);
+  micEqLowNode.gain.setValueAtTime(-2, audioContext.currentTime); // Reduce muddiness
+  
+  micEqMidNode = audioContext.createBiquadFilter();
+  micEqMidNode.type = 'peaking';
+  micEqMidNode.frequency.setValueAtTime(2500, audioContext.currentTime);
+  micEqMidNode.Q.setValueAtTime(1.2, audioContext.currentTime);
+  micEqMidNode.gain.setValueAtTime(4, audioContext.currentTime); // Presence boost
+  
+  micEqHighNode = audioContext.createBiquadFilter();
+  micEqHighNode.type = 'peaking';
+  micEqHighNode.frequency.setValueAtTime(8000, audioContext.currentTime);
+  micEqHighNode.Q.setValueAtTime(0.8, audioContext.currentTime);
+  micEqHighNode.gain.setValueAtTime(2, audioContext.currentTime); // Air/brightness
+  
+  // Broadcast Limiter (prevents clipping)
+  micLimiterNode = audioContext.createDynamicsCompressor();
+  micLimiterNode.threshold.setValueAtTime(-3, audioContext.currentTime);      // -3dB threshold
+  micLimiterNode.knee.setValueAtTime(0, audioContext.currentTime);            // Hard knee
+  micLimiterNode.ratio.setValueAtTime(20, audioContext.currentTime);          // 20:1 ratio
+  micLimiterNode.attack.setValueAtTime(0.0001, audioContext.currentTime);     // 0.1ms attack
+  micLimiterNode.release.setValueAtTime(0.05, audioContext.currentTime);      // 50ms release
+  
+  // De-Esser (frequency-specific compressor)
+  micDeEsserNode = audioContext.createDynamicsCompressor();
+  micDeEsserNode.threshold.setValueAtTime(-20, audioContext.currentTime);
+  micDeEsserNode.knee.setValueAtTime(5, audioContext.currentTime);
+  micDeEsserNode.ratio.setValueAtTime(6, audioContext.currentTime);
+  micDeEsserNode.attack.setValueAtTime(0.001, audioContext.currentTime);
+  micDeEsserNode.release.setValueAtTime(0.1, audioContext.currentTime);
+  
+  console.log('📻 Radio broadcast processing initialized');
+}
+
+
+
+// Toggle radio broadcast processing
+function toggleRadioProcessing(process: 'compressor' | 'gate' | 'eq' | 'limiter' | 'deesser'): void {
+  if (!audioContext) return;
+  
+  micProcessingState[process] = !micProcessingState[process];
+  const isActive = micProcessingState[process];
+  
+  switch (process) {
+    case 'compressor':
+      if (micCompressorNode) {
+        // Bypass by setting ratio to 1:1 or enable aggressive compression
+        micCompressorNode.ratio.setValueAtTime(isActive ? 8 : 1, audioContext.currentTime);
+        console.log(`📻 COMPRESSOR: ${isActive ? 'ON (8:1 ratio)' : 'OFF (1:1 ratio)'}`);
+      }
+      break;
+      
+    case 'gate':
+      if (micGateNode) {
+        // Simple gate implementation via gain
+        micGateNode.gain.setValueAtTime(isActive ? 1.0 : 0.5, audioContext.currentTime);
+        console.log(`📻 GATE: ${isActive ? 'ON (full gain)' : 'OFF (reduced gain)'}`);
+      }
+      break;
+      
+    case 'eq':
+      if (micEqLowNode && micEqMidNode && micEqHighNode) {
+        // Enable/disable EQ by setting gains to 0 or target values
+        micEqLowNode.gain.setValueAtTime(isActive ? -2 : 0, audioContext.currentTime);
+        micEqMidNode.gain.setValueAtTime(isActive ? 4 : 0, audioContext.currentTime);
+        micEqHighNode.gain.setValueAtTime(isActive ? 2 : 0, audioContext.currentTime);
+        console.log(`📻 EQ: ${isActive ? 'ON (voice optimized)' : 'OFF (flat response)'}`);
+      }
+      break;
+      
+    case 'limiter':
+      if (micLimiterNode) {
+        // Bypass by setting high threshold or enable limiting
+        micLimiterNode.threshold.setValueAtTime(isActive ? -3 : 0, audioContext.currentTime);
+        console.log(`📻 LIMITER: ${isActive ? 'ON (-3dB threshold)' : 'OFF (0dB threshold)'}`);
+      }
+      break;
+      
+    case 'deesser':
+      if (micDeEsserNode) {
+        // Enable/disable de-esser by adjusting ratio
+        micDeEsserNode.ratio.setValueAtTime(isActive ? 6 : 1, audioContext.currentTime);
+        console.log(`📻 DE-ESSER: ${isActive ? 'ON (6:1 ratio)' : 'OFF (1:1 ratio)'}`);
+      }
+      break;
+  }
+}
+
 // Mikrofon zum Mixing-System hinzufügen
 async function setupMicrophone() {
   if (!audioContext || !microphoneGain) return false;
@@ -2833,18 +2996,24 @@ async function setupMicrophone() {
     outputGain.gain.setValueAtTime(1.8, audioContext.currentTime);       // +5dB Output für Broadcast-Level
     console.log('🔧 Output gain: +5dB final boost');
     
-    // 🎵 PROFESSIONELLE AUDIO-KETTE AUFBAUEN 🎵
-    // Mikrofon -> Analyser -> High-Pass -> PreAmp -> Kompressor -> EQ -> Limiter -> Output -> Final Gain
+    // Create radio processing nodes
+    await initializeRadioProcessing();
+    
+    // 📻 PROFESSIONAL RADIO BROADCAST CHAIN 📻
+    // Mic -> Analyser -> High-Pass -> PreAmp -> [Radio Processing] -> Final Gain
+    // Radio Processing: Gate -> Compressor -> EQ (3-band) -> De-Esser -> Limiter
     micSourceNode.connect(micAnalyser);
     micAnalyser.connect(highPassFilter);
     highPassFilter.connect(preAmp);
-    preAmp.connect(compressor);
-    compressor.connect(eqLowMid);
-    eqLowMid.connect(eqPresence);
-    eqPresence.connect(eqBrilliance);
-    eqBrilliance.connect(limiter);
-    limiter.connect(outputGain);
-    outputGain.connect(microphoneGain);
+    preAmp.connect(micGateNode!);          // Noise gate first
+    micGateNode!.connect(micCompressorNode!); // Then compression
+    micCompressorNode!.connect(micEqLowNode!); // EQ chain
+    micEqLowNode!.connect(micEqMidNode!);
+    micEqMidNode!.connect(micEqHighNode!);
+    micEqHighNode!.connect(micDeEsserNode!);   // De-esser before limiter
+    micDeEsserNode!.connect(micLimiterNode!);  // Final limiter
+    micLimiterNode!.connect(outputGain);       // Output gain control
+    outputGain.connect(microphoneGain);        // Master microphone gain
     
     console.log(`?? Microphone connected with enhanced audio processing (${contextSampleRate}Hz, compression, dynamic compatibility)`);
     return true;

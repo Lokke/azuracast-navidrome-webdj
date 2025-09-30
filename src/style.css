@@ -2949,6 +2949,66 @@ body {
   color: #4CAF50;
 }
 
+/* Microphone Effects Container */
+.mic-effects-container {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 1rem;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Microphone Effect Buttons */
+.mic-effect-button {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(0, 0, 0, 0.9);
+  padding: 0.3rem 0.7rem;
+  border: 2px solid #444;
+  border-radius: 2px;
+  clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mic-effect-button:hover {
+  border-color: #666;
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+}
+
+.mic-effect-button.active {
+  border-color: #ff6600;
+  background: rgba(255, 102, 0, 0.15);
+  box-shadow: 0 0 8px rgba(255, 102, 0, 0.3);
+}
+
+.mic-effect-button .effect-icon {
+  font-size: 11px;
+  color: #888;
+  transition: all 0.2s ease;
+}
+
+.mic-effect-button.active .effect-icon {
+  color: #ff6600;
+}
+
+.mic-effect-button .effect-text {
+  color: #ccc;
+  transition: all 0.2s ease;
+}
+
+.mic-effect-button.active .effect-text {
+  color: #ff6600;
+}
+
 .live-dot {
   width: 6px;
   height: 6px;
