@@ -16,6 +16,32 @@ function getConfigValue(key: string): string | undefined {
   return runtimeConfig[key] || import.meta.env[key];
 }
 
+// Global metadata update function - used for immediate metadata broadcasting
+function broadcastCurrentMetadata(force: boolean = false) {
+  console.log(`🔍 broadcastCurrentMetadata called (force: ${force})`);
+  
+  if (azuraCastWebcaster?.getConnectionStatus()) {
+    console.log(`🔗 AzuraCast connected, getting current track...`);
+    const currentTrack = getCurrentTrackMetadata();
+    
+    if (currentTrack) {
+      console.log(`🎵 Current track found: ${currentTrack.artist} - ${currentTrack.title}`);
+      azuraCastWebcaster.updateMetadataImmediate(currentTrack);
+      if (force) {
+        console.log(`🎯 Forced metadata broadcast: ${currentTrack.artist} - ${currentTrack.title}`);
+      }
+    } else {
+      console.log(`❌ No current track found, using fallback metadata`);
+      azuraCastWebcaster.updateMetadataImmediate(); // Fallback metadata
+      if (force) {
+        console.log('🎯 Forced metadata broadcast (fallback)');
+      }
+    }
+  } else {
+    console.log(`❌ AzuraCast not connected, skipping metadata broadcast`);
+  }
+}
+
 // User status update function
 function updateUserStatus(service: 'opensubsonic' | 'stream', username: string, connected: boolean) {
   if (service === 'opensubsonic') {
@@ -245,12 +271,12 @@ function setPlayerState(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong | nu
     console.log(`?? Player ${side.toUpperCase()} started: "${song?.title}" at ${state.startTime}`);
     
     // Auto-update stream metadata when a new track starts
-    setTimeout(() => updateStreamMetadata(), 100); // Small delay to ensure state is updated
+    setTimeout(() => broadcastCurrentMetadata(true), 100); // Small delay to ensure state is updated
   } else if (!isPlaying && wasPlaying) {
     console.log(`?? Player ${side.toUpperCase()} stopped: "${song?.title}"`);
     
     // Auto-update stream metadata when a track stops (in case this was the priority track)
-    setTimeout(() => updateStreamMetadata(), 100);
+    setTimeout(() => broadcastCurrentMetadata(true), 100);
   }
 }
 
@@ -409,6 +435,49 @@ function clearPlayerDeck(side: 'a' | 'b' | 'c' | 'd') {
   console.log(`✅ Player ${side.toUpperCase()} deck cleared completely`);
 }
 
+// Get comprehensive deck state information
+function getDeckState(side: 'a' | 'b' | 'c' | 'd'): 'empty' | 'loading' | 'ready' | 'playing' | 'paused' | 'ended' | 'error' {
+  const audio = document.getElementById(`audio-${side}`) as HTMLAudioElement;
+  
+  if (!audio || !audio.src || audio.src === '') {
+    return 'empty';
+  }
+  
+  // Check for error states
+  if (audio.error) {
+    return 'error';
+  }
+  
+  // Check loading state
+  if (audio.readyState < 2) { // HAVE_CURRENT_DATA or less
+    return 'loading';
+  }
+  
+  // Check if track has ended
+  if (audio.ended || (audio.duration > 0 && audio.currentTime >= audio.duration)) {
+    return 'ended';
+  }
+  
+  // Check playing state
+  if (!audio.paused && audio.currentTime > 0) {
+    return 'playing';
+  }
+  
+  // Check paused state  
+  if (audio.paused && audio.currentTime > 0) {
+    return 'paused';
+  }
+  
+  // Track is loaded and ready to play
+  return 'ready';
+}
+
+// Check if deck is truly available for new content
+function isDeckAvailableForNewTrack(side: 'a' | 'b' | 'c' | 'd'): boolean {
+  const state = getDeckState(side);
+  return state === 'empty' || state === 'ended' || state === 'error';
+}
+
 // Debug function to show current player states
 function debugPlayerStates() {
   console.log('?? CURRENT PLAYER STATES DEBUG:');
@@ -425,12 +494,12 @@ function debugPlayerStates() {
 interface StreamConfig {
   serverUrl: string;
   serverType: 'icecast' | 'shoutcast';
-  mountPoint: string; // nur f�r Icecast und Shoutcast v2
+  mountPoint: string; // nur für Icecast und Shoutcast v2
   password: string;
   bitrate: number;
   format: 'mp3' | 'aac';
   sampleRate: number;
-  username?: string; // f�r manche Server
+  username?: string; // für manche Server
 }
 
 let streamConfig: StreamConfig = {
@@ -444,7 +513,7 @@ let streamConfig: StreamConfig = {
   username: ''
 };
 
-// Hilfsfunktion f�r Stream-Server-URL mit Proxy-Unterst�tzung
+// Hilfsfunktion für Stream-Server-URL mit Proxy-Unterstützung
 
 
 // AUDIO MIXING FUNCTIONS (Moved up for proper scoping)
@@ -479,12 +548,12 @@ async function initializeAudioMixing() {
     } catch (error) {
       console.warn('⚠️ Advanced audio features not available:', error);
     }
-    
-    // Log der tats�chlich verwendeten Sample Rate
+
+    // Log der tatsächlich verwendeten Sample Rate
     console.log(`?? AudioContext created with dynamic sample rate: ${audioContext.sampleRate} Hz`);
     console.log(`?? AudioContext state: ${audioContext.state}`);
-    
-    // Sample Rate Kompatibilit�t pr�fen
+
+    // Sample Rate Kompatibilität prüfen
     const supportedRates = [8000, 16000, 22050, 44100, 48000, 96000, 192000];
     const currentRate = audioContext.sampleRate;
     const isStandardRate = supportedRates.includes(currentRate);
@@ -504,12 +573,12 @@ async function initializeAudioMixing() {
       console.log('🎵 AudioContext resumed for player functionality');
     }
     
-    // Audio Context Policy: Andere Audio-Quellen nicht beeintr�chtigen
+    // Audio Context Policy: Andere Audio-Quellen nicht beeinträchtigen
     if ('audioWorklet' in audioContext) {
       console.log('?? Audio Context supports advanced features - using isolated mode');
     }
     
-    // Master Gain Node f�r Monitor-Ausgabe (Kopfh�rer/Lautsprecher) - NUR PLAYER DECKS
+    // Master Gain Node für Monitor-Ausgabe (Kopfhörer/Lautsprecher) - NUR PLAYER DECKS
     masterGainNode = audioContext.createGain();
     masterGainNode.gain.value = 0.99; // 99% Monitor-Volume
     masterGainNode.connect(audioContext.destination);
@@ -551,12 +620,12 @@ async function initializeAudioMixing() {
     
     // Microphone Gain Nodes
     microphoneGain = audioContext.createGain();
-    microphoneGain.gain.value = 0; // Standardm��ig stumm (wird �ber Button aktiviert)
+    microphoneGain.gain.value = 0; // Standardmäßig stumm (wird über Button aktiviert)
     
     // Microphone Monitor Gain (separate switch for self-monitoring)
     const microphoneMonitorGain = audioContext.createGain();
-    microphoneMonitorGain.gain.value = 0; // Standardm��ig aus (kein Selbsth�ren)
-    
+    microphoneMonitorGain.gain.value = 0; // Standardmäßig aus (kein Selbsthören)
+
     // MONITOR-ROUTING (Kopfhörer): Alle 4 Player Decks, KEIN Mikrofon standardmäßig
     if (crossfaderGain && masterGainNode) {
       crossfaderGain.a.connect(masterGainNode);
@@ -582,14 +651,14 @@ async function initializeAudioMixing() {
       dPlayerGain.connect(crossfaderGain.d);
     }
     
-    // Mikrofon Monitor (separater Schalter f�r Selbstabh�rung)
-    // Wird sp�ter mit separatem Button gesteuert
-    
+    // Mikrofon Monitor (separater Schalter für Selbstabhörung)
+    // Wird später mit separatem Button gesteuert
+
     console.log('??? Audio mixing system initialized with separated monitor and stream routing');
-    console.log('?? MONITOR (Kopfh�rer): Nur Player Decks');
+    console.log('?? MONITOR (Kopfhörer): Nur Player Decks');
     console.log('?? STREAM (AzuraCast): Player Decks + Mikrofon (wenn Button an)');
-    
-    // Speichere microphoneMonitorGain global f�r sp�tere Kontrolle
+
+    // Speichere microphoneMonitorGain global für spätere Kontrolle
     (window as any).microphoneMonitorGain = microphoneMonitorGain;
     
     // Volume Meter sofort nach Audio-Initialisierung starten
@@ -629,7 +698,7 @@ async function initializeAudioMixing() {
   }
 }
 
-// Audio-Quellen zu Mixing-System hinzuf�gen
+// Audio-Quellen zu Mixing-System hinzufügen
 function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'a' | 'b' | 'c' | 'd') {
   if (!audioContext) {
     console.error(`❌ AudioContext not initialized for ${side} player`);
@@ -673,7 +742,7 @@ function connectAudioToMixer(audioElement: HTMLAudioElement, side: 'a' | 'b' | '
     console.log(`🎚️ ${side} player: connecting to Web Audio API for monitoring`);
     
     // NUR BEIM STREAMING: Web Audio API verwenden
-    // WICHTIG: Audio Element Eigenschaften f�r bessere Browser-Kompatibilit�t setzen
+    // WICHTIG: Audio Element Eigenschaften für bessere Browser-Kompatibilität setzen
     audioElement.crossOrigin = 'anonymous';
     audioElement.preservesPitch = false; // Weniger CPU-intensiv
     
@@ -1626,7 +1695,7 @@ function loadWaveform(side: 'a' | 'b' | 'c' | 'd', audioUrl: string, trackDurati
   
   wavesurfer.on('loading', (percent: number) => {
     loadingProgress = percent;
-    console.log(`🌊 Waveform loading for ${side}: ${percent}%`);
+    // Removed waveform loading percentage from console log
     
     const loadingElement = document.getElementById(`waveform-loading-${side}`);
     if (loadingElement) {
@@ -1784,7 +1853,7 @@ function cleanupWaveSurferSync(side: 'a' | 'b' | 'c' | 'd') {
   }
 }
 
-// OpenSubsonic Client (wird sp�ter mit echten Credentials initialisiert)
+// OpenSubsonic Client (wird später mit echten Credentials initialisiert)
 let openSubsonicClient: SubsonicApiClient;
 let isOpenSubsonicLoggedIn = false;
 let autoLoginInProgress = false;
@@ -1794,20 +1863,48 @@ let currentSongs: OpenSubsonicSong[] = [];
 let currentAlbums: OpenSubsonicAlbum[] = [];
 let currentArtists: OpenSubsonicArtist[] = [];
 
-// Enhanced Queue System with Deck Tracking
+// Enhanced Queue System with Deck Tracking and Microphone Placeholders
 interface QueueItem {
-  song: OpenSubsonicSong;
+  song?: OpenSubsonicSong; // Optional for mic placeholders
+  type: 'song' | 'microphone'; // Type of queue item
   assignedToDeck?: 'a' | 'b' | 'c' | 'd' | null; // null = available, deck = loaded to that deck
   loadedAt?: Date; // When it was loaded to a deck
+  id: string; // Unique identifier for queue items
 }
 
 let queue: QueueItem[] = [];
 let autoQueueEnabled = true; // Auto-Queue standardmäßig aktiviert
 
+// Queue item helper functions
+function createSongQueueItem(song: OpenSubsonicSong): QueueItem {
+  return {
+    type: 'song',
+    song: song,
+    assignedToDeck: null,
+    id: `song-${song.id}-${Date.now()}`
+  };
+}
+
+function createMicrophoneQueueItem(): QueueItem {
+  return {
+    type: 'microphone',
+    assignedToDeck: null,
+    id: `mic-${Date.now()}`
+  };
+}
+
+function isSongQueueItem(item: QueueItem): item is QueueItem & { song: OpenSubsonicSong } {
+  return item.type === 'song' && !!item.song;
+}
+
+function isMicrophoneQueueItem(item: QueueItem): boolean {
+  return item.type === 'microphone';
+}
+
 // Auto-Queue System State
 let autoQueueConfig = {
-  deckPairAB: true,    // A+B Deck-Pair aktiv
-  deckPairCD: false,   // C+D Deck-Pair aktiv
+  deckPairAB: false,   // A+B Deck-Pair standardmäßig deaktiviert
+  deckPairCD: false,   // C+D Deck-Pair standardmäßig deaktiviert
   lastPlayedDeck: null as 'a' | 'b' | 'c' | 'd' | null,  // Letztes gespieltes Deck für Rotation
   playbackOrder: ['a', 'b', 'c', 'd'] as ('a' | 'b' | 'c' | 'd')[],  // Playback-Reihenfolge
   isAutoPlaying: false  // Verhindert mehrfache Auto-Plays
@@ -1821,8 +1918,8 @@ async function checkConfigurationAndInitialize() {
   const hasOpenSubsonicUrl = import.meta.env.VITE_OPENSUBSONIC_URL;
   const hasAzuraCastServers = import.meta.env.VITE_AZURACAST_SERVERS;
   const hasStreamConfig = import.meta.env.VITE_STREAM_BITRATE;
-  
-  console.log('� Environment variables check:', {
+
+  console.log('🔍 Environment variables check:', {
     hasOpenSubsonicUrl: !!hasOpenSubsonicUrl,
     hasAzuraCastServers: !!hasAzuraCastServers,
     hasStreamConfig: !!hasStreamConfig,
@@ -2158,7 +2255,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         case StreamButtonState.START_STREAMING:
           // If streaming is already active, show warning instead of triggering disconnect
           if (isLiveStreaming) {
-            console.log('� Stopping current stream to allow new stream');
+            console.log('🚫 Stopping current stream to allow new stream');
             showWarningMessage("stream is active!<br>press and hold for 5 seconds to disconnect");
             return;
           }
@@ -2512,6 +2609,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateUserStatus('stream', config.username, true);
         console.log('🔴 LIVE: Streaming to AzuraCast started!');
         
+        // Register metadata provider function for continuous updates
+        azuraCastWebcaster.setCurrentTrackProvider(() => getCurrentTrackMetadata());
+        
         // Send initial metadata if current track is playing
         const currentTrack = getCurrentTrackMetadata();
         if (currentTrack) {
@@ -2562,12 +2662,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Get current track metadata for AzuraCast - prioritize most recently started track
   function getCurrentTrackMetadata(): AzuraCastMetadata | null {
+    console.log(`🔍 getCurrentTrackMetadata() called`);
+    
     // Get all currently playing decks with their start times
     const playingDecks = ['a', 'b', 'c', 'd']
       .map(deck => {
-        const playBtn = document.getElementById(`play-${deck}`) as HTMLButtonElement;
-        const isPlaying = playBtn?.classList.contains('playing');
         const deckState = playerStates[deck as keyof typeof playerStates];
+        const isPlaying = deckState?.isPlaying || false;
+        
+        console.log(`🔍 Deck ${deck}: playing=${isPlaying}, startTime=${deckState?.startTime}, song=${!!deckSongs[deck as keyof typeof deckSongs]}`);
         
         return {
           deck,
@@ -2579,29 +2682,32 @@ document.addEventListener("DOMContentLoaded", async () => {
       .filter(info => info.isPlaying && info.song) // Only playing decks with songs
       .sort((a, b) => b.startTime - a.startTime); // Sort by start time DESC (most recent first)
     
+    console.log(`🔍 Found ${playingDecks.length} playing decks with songs`);
+    
     if (playingDecks.length > 0) {
       const mostRecentDeck = playingDecks[0];
       console.log(`🎵 Metadata priority: Deck ${mostRecentDeck.deck.toUpperCase()} (started: ${new Date(mostRecentDeck.startTime).toLocaleTimeString()})`);
       
       if (mostRecentDeck.song) {
-        return {
+        const metadata = {
           title: mostRecentDeck.song.title || 'Unknown Title',
           artist: mostRecentDeck.song.artist || 'Unknown Artist'
         };
+        console.log(`🎵 Returning metadata: ${metadata.artist} - ${metadata.title}`);
+        return metadata;
       }
     }
     
+    console.log(`❌ No current track metadata available`);
     return null;
   }
 
   // Auto-update metadata when tracks start/stop (AzuraCast style - once per track)
   function updateStreamMetadata() {
     if (azuraCastWebcaster?.getConnectionStatus()) {
-      const currentTrack = getCurrentTrackMetadata();
-      if (currentTrack) {
-        azuraCastWebcaster.sendMetadata(currentTrack);
-        console.log(`📊 Auto-updated stream metadata: ${currentTrack.artist} - ${currentTrack.title}`);
-      }
+      // Use immediate update to force refresh metadata
+      azuraCastWebcaster.updateMetadataImmediate();
+      console.log(`📊 Triggered immediate metadata update`);
     }
   }
   
@@ -2644,6 +2750,24 @@ document.addEventListener("DOMContentLoaded", async () => {
       micBtn.classList.remove("active");
       micBtn.innerHTML = '<span class="material-icons">mic</span> MICROPHONE';
       console.log("🎤 Microphone muted (stream still active)");
+      
+      // Auto-resume queue if auto-queue is enabled and we have songs available
+      const autoQueueEnabled = autoQueueConfig.deckPairAB || autoQueueConfig.deckPairCD;
+      if (autoQueueEnabled && queue.length > 0) {
+        // Check if all decks are stopped and we can resume auto-play
+        const playingDecks = countPlayingDecks();
+        if (playingDecks === 0) {
+          console.log("🔄 Microphone deactivated - resuming auto-queue");
+          
+          // Resume auto-queue by starting the next available deck
+          const nextAvailableDeck = getNextDeck(autoQueueConfig.lastPlayedDeck || 'a');
+          if (nextAvailableDeck) {
+            setTimeout(() => {
+              startNextDeckWithNewTrack(nextAvailableDeck);
+            }, 1000); // Small delay to ensure microphone is fully deactivated
+          }
+        }
+      }
     }
   });
 
@@ -2659,11 +2783,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   
 // Audio-Mixing-System initialisieren
-// Audio-Quellen zu Mixing-System hinzuf�gen
+// Audio-Quellen zu Mixing-System hinzufügen
 
 // CORS-Fehlermeldung anzeigen
 function showCORSErrorMessage() {
-  // Pr�fen ob bereits eine Fehlermeldung angezeigt wird
+  // Prüfen ob bereits eine Fehlermeldung angezeigt wird
   if (document.getElementById('cors-error-message')) return;
   
   const errorDiv = document.createElement('div');
@@ -2691,10 +2815,10 @@ function showCORSErrorMessage() {
     </div>
     <p style="margin: 8px 0;">Browser-Security (CORS) verhindert direkte Verbindungen zu Shoutcast-Servern.</p>
     <div style="margin-top: 12px; font-size: 12px; opacity: 0.9;">
-      <strong>L�sungen:</strong><br>
-      � Proxy-Server verwenden<br>
-      � Browser mit --disable-web-security starten<br>
-      � Server CORS-Header konfigurieren
+      <strong>Lösungen:</strong><br>
+      • Proxy-Server verwenden<br>
+      • Browser mit --disable-web-security starten<br>
+      • Server CORS-Header konfigurieren
     </div>
     <button onclick="this.parentElement.remove()" style="
       position: absolute;
@@ -2848,22 +2972,22 @@ async function setupMicrophone() {
     // DYNAMISCHE SAMPLE RATE: Verwende AudioContext Sample Rate für Kompatibilität
     const contextSampleRate = audioContext.sampleRate;
     console.log(`🎤 Setting up fresh microphone with dynamic sample rate: ${contextSampleRate} Hz`);
-    
-    // Mikrofon-Konfiguration f�r DJ-Anwendung (ALLE Audio-Effekte deaktiviert f�r beste Verst�ndlichkeit)
+
+    // Mikrofon-Konfiguration für DJ-Anwendung (ALLE Audio-Effekte deaktiviert für beste Verständlichkeit)
     const audioConstraints: MediaTrackConstraints = {
       // Device Selection - use selected device if available
       ...(selectedMicDeviceId && { deviceId: { exact: selectedMicDeviceId } }),
-      
-      // Basis-Audio-Einstellungen - ALLE Effekte AUS f�r nat�rliche Stimme
+
+      // Basis-Audio-Einstellungen - ALLE Effekte AUS für natürliche Stimme
       echoCancellation: false,          // Echo-Cancel AUS - verschlechtert oft DJ-Mikrofone
       noiseSuppression: false,          // Noise-Suppress AUS - kann Stimme verzerren
-      autoGainControl: false,           // AGC aus f�r manuelle Lautst�rke-Kontrolle
-        
+      autoGainControl: false,           // AGC aus für manuelle Lautstärke-Kontrolle
+
       // DYNAMISCHE Sample Rate - passt sich an AudioContext an
       sampleRate: { 
           ideal: contextSampleRate,       // Verwende AudioContext Sample Rate
-          min: 8000,                      // Minimum f�r Fallback
-          max: 192000                     // Maximum f�r High-End Mikrofone
+          min: 8000,                      // Minimum für Fallback
+          max: 192000                     // Maximum für High-End Mikrofone
       },
       sampleSize: { ideal: 16 },        // 16-bit Audio
       channelCount: { ideal: 1 },       // Mono für geringere Bandbreite
@@ -3061,7 +3185,7 @@ async function setupMicrophone() {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: false
-          // Keine Sample Rate Constraints ? Browser w�hlt automatisch
+          // Keine Sample Rate Constraints ? Browser wählt automatisch
         } 
       });
       
@@ -3247,7 +3371,7 @@ function initializeTabs() {
   });
 }
 
-// Search Funktionalit�t initialisieren
+// Suchfunktionalität initialisieren
 function initializeSearch() {
   const searchInput = document.getElementById('search-input') as HTMLInputElement;
   const searchBtn = document.getElementById('search-btn') as HTMLButtonElement;
@@ -3284,8 +3408,8 @@ function initializeSearch() {
       performSearch();
     }
   });
-  
-  // Bei Eingabe-�nderungen auch pr�fen
+
+  // Bei Eingabeänderungen auch prüfen
   searchInput?.addEventListener('input', () => {
     // Wenn Feld geleert wird, zeige No Search State
     if (!searchInput.value.trim()) {
@@ -3350,7 +3474,7 @@ async function loadAlbums() {
     
     albumsContainer.innerHTML = currentAlbums.map(album => createAlbumHTML(album)).join('');
     
-    // Hinzuf�gen der Click Listener f�r Albums
+    // Hinzufügen der Click Listener für Albums
     setTimeout(() => {
       addAlbumClickListeners(albumsContainer);
       console.log('Album click listeners added to albums grid');
@@ -3375,7 +3499,7 @@ async function loadArtists() {
     
     artistsContainer.innerHTML = currentArtists.map(artist => createArtistHTML(artist)).join('');
     
-    // Hinzuf�gen der Click Listener f�r Artists
+    // Hinzufügen der Click Listener für Artists
     setTimeout(() => {
       addArtistClickListeners(artistsContainer);
       console.log('Artist click listeners added to artists list');
@@ -3387,11 +3511,11 @@ async function loadArtists() {
 }
 
 // Song HTML erstellen
-// Song HTML als Einzeiler f�r einheitliche Darstellung erstellen
+// Song HTML als Einzelner für einheitliche Darstellung erstellen
 
 // Hilfsfunktion zum Erstellen von Artist-Links aus dem artists Array
 function createArtistLinks(song: OpenSubsonicSong): string {
-  // Verwende artists Array falls verf�gbar, sonst Fallback auf artist string
+  // Verwende artists Array falls verfügbar, sonst Fallback auf artist string
   if (song.artists && song.artists.length > 0) {
     if (song.artists.length === 1) {
       const artist = song.artists[0];
@@ -3405,10 +3529,81 @@ function createArtistLinks(song: OpenSubsonicSong): string {
       return `<span class="multi-artist">${artistLinks}</span>`;
     }
   } else {
-    // Fallback f�r alte API oder wenn artists Array nicht verf�gbar
+    // Fallback für alte API oder wenn artists Array nicht verfügbar
     return `<span class="clickable-artist" draggable="false" data-artist-name="${escapeHtml(song.artist)}" title="View artist details">${escapeHtml(song.artist)}</span>`;
   }
 }
+// Kompakte Song-Darstellung für Queue (Stream-Button Style)
+function createCompactQueueSongElement(song: OpenSubsonicSong): HTMLElement {
+  const songButton = document.createElement('div');
+  songButton.className = 'queue-song-button';
+  songButton.dataset.songId = song.id;
+  songButton.dataset.type = 'song';
+  
+  // Song-Informationen kompakt anzeigen
+  songButton.innerHTML = `
+    <span class="material-icons queue-song-icon">music_note</span>
+    <div class="queue-song-info">
+      <div class="queue-song-title">${escapeHtml(song.title)}</div>
+      <div class="queue-song-artist">${escapeHtml(song.artist)}</div>
+    </div>
+  `;
+  
+  // Drag and Drop aktivieren
+  songButton.draggable = true;
+  songButton.addEventListener('dragstart', (e) => {
+    console.log('🚀 DRAGSTART on queue item:', song.title, 'by', song.artist);
+    
+    if (e.dataTransfer) {
+      const dragData = {
+        type: 'song',
+        song: song,
+        sourceUrl: openSubsonicClient?.getStreamUrl(song.id)
+      };
+      
+      e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+      e.dataTransfer.setData('text/plain', song.id);
+      e.dataTransfer.effectAllowed = 'copy';
+    }
+  });
+  
+  return songButton;
+}
+
+// Kompakte Mikrofon-Platzhalter-Darstellung für Queue (Stream-Button Style)
+function createCompactQueueMicrophoneElement(): HTMLElement {
+  const micButton = document.createElement('div');
+  micButton.className = 'queue-mic-button';
+  micButton.dataset.type = 'microphone';
+  
+  // Mikrofon-Platzhalter anzeigen
+  micButton.innerHTML = `
+    <span class="material-icons queue-mic-icon">mic</span>
+    <div class="queue-mic-info">
+      <div class="queue-mic-title">MICROPHONE</div>
+      <div class="queue-mic-subtitle">Talk Break</div>
+    </div>
+  `;
+  
+  // Drag and Drop aktivieren
+  micButton.draggable = true;
+  micButton.addEventListener('dragstart', (e) => {
+    console.log('🚀 DRAGSTART on microphone placeholder');
+    
+    if (e.dataTransfer) {
+      const dragData = {
+        type: 'microphone-placeholder'
+      };
+      
+      e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+      e.dataTransfer.setData('text/plain', 'microphone');
+      e.dataTransfer.effectAllowed = 'copy';
+    }
+  });
+  
+  return micButton;
+}
+
 // Einheitliche Song-Darstellung für alle Bereiche (Search, Album-Details, Queue)
 function createUnifiedSongElement(song: OpenSubsonicSong, context: 'search' | 'album' | 'queue' = 'search'): HTMLElement {
   const trackItem = document.createElement('div');
@@ -3729,7 +3924,7 @@ function displaySearchResults(results: any, addToHistory: boolean = true) {
   console.log('Search results displayed with MediaContainer');
 }
 
-// Zur�ck zu den letzten Suchergebnissen
+// Zurück zu den letzten Suchergebnissen
 function returnToLastSearchResults() {
   if (lastSearchResults) {
     console.log('Returning to last search results:', lastSearchQuery);
@@ -3758,7 +3953,7 @@ function returnToLastSearchResults() {
   }
 }
 
-// Drag & Drop Listeners hinzuf�gen
+// Drag & Drop Listeners hinzufügen
 function addDragListeners(container: Element) {
   const trackItems = container.querySelectorAll('.track-item, .track-item-oneline, .song-row, .unified-song-item');
   const albumItems = container.querySelectorAll('.album-item-modern[draggable="true"]');
@@ -3817,7 +4012,7 @@ function addDragListeners(container: Element) {
   });
 }
 
-// Song-interne Click Listeners hinzuf�gen (f�r Artist und Album in Songs)
+// Song-interne Click Listeners hinzufügen (für Artist und Album in Songs)
 function addSongClickListeners(container: Element) {
   console.log('Adding song click listeners to container:', container);
   
@@ -3879,8 +4074,8 @@ function addSongClickListeners(container: Element) {
         console.error('No artist ID or name found, or OpenSubsonicClient not available');
       }
     });
-    
-    // Debug-Event f�r Mousedown
+
+    // Debug-Event für Mousedown
     element.addEventListener('mousedown', () => {
       console.log(`Artist mousedown: ${artistName}`);
     });
@@ -4007,7 +4202,7 @@ function addSongClickListeners(container: Element) {
   });
 }
 
-// Album Click Listeners hinzuf�gen
+// Album Click Listeners hinzufügen
 function addAlbumClickListeners(container: Element) {
   // Support both modern library and legacy album items
   const albumItems = container.querySelectorAll('.album-item, .album-item-modern, .album-card.clickable');
@@ -4051,14 +4246,14 @@ function addAlbumClickListeners(container: Element) {
       }
     });
     
-    // Zus�tzlicher Debug-Event
+    // Zusätzlicher Debug-Event
     clonedItem.addEventListener('mousedown', () => {
       console.log(`Album mousedown: ${albumId}`);
     });
   });
 }
 
-// Artist Click Listeners hinzuf�gen
+// Artist Click Listeners hinzufügen
 function addArtistClickListeners(container: Element) {
   const artistItems = container.querySelectorAll('.artist-item');
   console.log(`Adding artist click listeners to ${artistItems.length} artists`);
@@ -4086,7 +4281,7 @@ function addArtistClickListeners(container: Element) {
       }
     });
     
-    // Zus�tzlicher Debug-Event
+    // Zusätzlicher Debug-Event
     clonedItem.addEventListener('mousedown', () => {
       console.log(`Artist mousedown: ${artistId}`);
     });
@@ -4129,8 +4324,8 @@ async function showAlbumSongs(albumId: string, addToHistory: boolean = true) {
 // Show album songs from state (without adding to history)
 function showAlbumSongsFromState(data: { albumId: string, album: any, songs: OpenSubsonicSong[] }) {
   const { album, songs } = data;
-    
-    // Pr�fe ob wir in Search-View sind oder in der normalen Songs-Liste
+
+    // Prüfen ob wir in Search-View sind oder in der normalen Songs-Liste
     const searchContent = document.getElementById('search-content');
     const songsContainer = document.getElementById('songs-list');
     const targetContainer = searchContent?.style.display !== 'none' ? searchContent : songsContainer;
@@ -4217,10 +4412,10 @@ function escapeHtml(text: string): string {
 
 function showError(message: string) {
   console.error(message);
-  // Hier k�nnte eine Benutzeroberfl�che f�r Fehler implementiert werden
+  // Hier könnte eine Benutzeroberfläche für Fehler implementiert werden
 }
 
-// Status-Nachrichten anzeigen (f�r Bridge-Feedback)
+// Status-Nachrichten anzeigen (für Bridge-Feedback)
 function showStatusMessage(message: string, type: 'success' | 'error' | 'info' = 'info') {
   console.log(`[${type.toUpperCase()}]`, message);
   
@@ -4329,14 +4524,14 @@ function initializeQueuePermanent() {
       }
     };
     
-    // Event Listener hinzuf�gen
+    // Event Listener hinzufügen
     queueContainer.addEventListener('dragover', dragoverHandler);
     queueContainer.addEventListener('dragleave', dragleaveHandler);
     queueContainer.addEventListener('drop', dropHandler);
   });
 }
 
-// Song zur Queue hinzuf�gen
+// Song zur Queue hinzufügen
 async function addToQueue(songId: string): Promise<void>;
 async function addToQueue(song: OpenSubsonicSong): Promise<void>;
 async function addToQueue(songOrId: string | OpenSubsonicSong): Promise<void> {
@@ -4350,13 +4545,13 @@ async function addToQueue(songOrId: string | OpenSubsonicSong): Promise<void> {
     song = currentSongs.find(s => s.id === songId);
     
     if (!song) {
-      // Wenn nicht gefunden, versuche �ber Search Results zu finden
+      // WWenn nicht gefunden, versuche über Search Results zu finden
       const searchResults = document.querySelectorAll('.track-item, .song-row, .unified-song-item');
       for (const item of searchResults) {
         const element = item as HTMLElement;
         if (element.dataset.songId === songId) {
-          // Hier m�sste der Song aus der API abgerufen werden
-          // F�r jetzt nehmen wir den ersten verf�gbaren Song
+          // Hier müsste der Song aus der API abgerufen werden
+          // Für jetzt nehmen wir den ersten verfügbaren Song
           song = currentSongs[0];
           break;
         }
@@ -4368,20 +4563,25 @@ async function addToQueue(songOrId: string | OpenSubsonicSong): Promise<void> {
   }
   
   if (song) {
-    // Check if song already exists in queue
-    const existingIndex = queue.findIndex(item => item.song.id === song.id);
+    // ENHANCED: Check if song already exists in queue - prevent duplicates
+    const existingIndex = queue.findIndex(item => isSongQueueItem(item) && item.song?.id === song.id);
     if (existingIndex !== -1) {
-      console.log(`🔄 Song "${song.title}" already in queue, moving to end`);
-      // Remove existing and add to end
+      const existingItem = queue[existingIndex];
+      console.log(`⚠️ Song "${song.title}" already exists in queue at position ${existingIndex + 1}`);
+      
+      // If song is already assigned to a deck, don't add duplicate
+      if (existingItem.assignedToDeck) {
+        console.log(`❌ Cannot add duplicate - song is assigned to deck ${existingItem.assignedToDeck.toUpperCase()}`);
+        return;
+      }
+      
+      // If unassigned, remove existing and add new one at end
+      console.log(`🔄 Moving unassigned duplicate to end of queue`);
       queue.splice(existingIndex, 1);
     }
     
     // Create new queue item (not assigned to any deck yet)
-    const queueItem: QueueItem = {
-      song: song,
-      assignedToDeck: null,
-      loadedAt: undefined
-    };
+    const queueItem = createSongQueueItem(song);
     
     queue.push(queueItem);
     updateQueueDisplay();
@@ -4409,9 +4609,6 @@ function updateQueueDisplay() {
     queueContainer.innerHTML = '';
     
     queue.forEach((queueItem, index) => {
-      // Create unified song element from the song within the queue item
-      const songElement = createUnifiedSongElement(queueItem.song, 'queue');
-      
       // Add queue-specific wrapper
       const queueWrapper = document.createElement('div');
       queueWrapper.className = 'queue-item-wrapper';
@@ -4423,25 +4620,38 @@ function updateQueueDisplay() {
         queueWrapper.dataset.assignedDeck = queueItem.assignedToDeck;
       }
       
-      // Add queue number
-      const queueNumber = document.createElement('div');
-      queueNumber.className = 'queue-number';
-      queueNumber.textContent = (index + 1).toString();
+      // Create appropriate element based on type
+      let itemElement: HTMLElement;
+      if (isSongQueueItem(queueItem)) {
+        itemElement = createCompactQueueSongElement(queueItem.song);
+      } else if (isMicrophoneQueueItem(queueItem)) {
+        itemElement = createCompactQueueMicrophoneElement();
+      } else {
+        console.warn('Unknown queue item type:', queueItem);
+        return;
+      }
       
-      // Add remove button
+      // Create remove button in stream-button style
       const removeButton = document.createElement('button');
-      removeButton.className = 'queue-remove';
-      removeButton.innerHTML = '<span class="material-icons">close</span>';
+      removeButton.className = 'queue-song-remove';
+      removeButton.innerHTML = '<span class="material-icons">delete</span>';
       removeButton.title = 'Remove from queue';
       removeButton.onclick = () => removeFromQueue(index);
       
+      // Create container in stream-button-container style
+      const itemContainer = document.createElement('div');
+      itemContainer.className = isMicrophoneQueueItem(queueItem) ? 'queue-mic-container' : 'queue-song-container';
+      itemContainer.appendChild(itemElement);
+      itemContainer.appendChild(removeButton);
+      
       // Assemble wrapper
-      queueWrapper.appendChild(queueNumber);
-      queueWrapper.appendChild(songElement);
-      queueWrapper.appendChild(removeButton);
+      queueWrapper.appendChild(itemContainer);
       
       // Setup drag for queue item
       setupQueueItemDrag(queueWrapper, index);
+      
+      // Setup drop zone for reordering
+      setupQueueItemDropZone(queueWrapper, index);
       
       queueContainer.appendChild(queueWrapper);
     });
@@ -4477,16 +4687,19 @@ function setupQueueItemDrag(wrapper: HTMLElement, index: number) {
   wrapper.draggable = true;
   
   wrapper.addEventListener('dragstart', (e) => {
-    const song = queue[index];
-    if (!song) return;
+    const queueItem = queue[index];
+    if (!queueItem) return;
     
+    // Add visual feedback
     wrapper.style.opacity = '0.5';
+    wrapper.classList.add('dragging');
+    
     if (e.dataTransfer) {
-      // Store both song data and queue index for removal after successful drop
+      // Store queue reordering data
       e.dataTransfer.setData('application/json', JSON.stringify({
-        type: 'queue-song',
-        song: song,
-        queueIndex: index
+        type: 'queue-reorder',
+        queueIndex: index,
+        queueItem: queueItem
       }));
       e.dataTransfer.effectAllowed = 'move';
     }
@@ -4494,7 +4707,321 @@ function setupQueueItemDrag(wrapper: HTMLElement, index: number) {
   
   wrapper.addEventListener('dragend', () => {
     wrapper.style.opacity = '1';
+    wrapper.classList.remove('dragging');
+    // Remove all drop indicators
+    document.querySelectorAll('.queue-item-wrapper.drop-before, .queue-item-wrapper.drop-after').forEach(el => {
+      el.classList.remove('drop-before', 'drop-after');
+    });
   });
+}
+
+// Setup drop zones for queue reordering
+function setupQueueItemDropZone(wrapper: HTMLElement, index: number) {
+  wrapper.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const dragEvent = e as DragEvent;
+    
+    // Only handle queue reordering
+    const data = dragEvent.dataTransfer?.getData('application/json');
+    if (!data) return;
+    
+    try {
+      const dragData = JSON.parse(data);
+      if (dragData.type !== 'queue-reorder') return;
+      
+      // Don't allow dropping on self
+      if (dragData.queueIndex === index) return;
+      
+      // Determine drop position based on mouse position
+      const rect = wrapper.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const dropBefore = dragEvent.clientY < midpoint;
+      
+      // Clear previous indicators
+      document.querySelectorAll('.queue-item-wrapper.drop-before, .queue-item-wrapper.drop-after').forEach(el => {
+        el.classList.remove('drop-before', 'drop-after');
+      });
+      
+      // Add appropriate indicator
+      if (dropBefore) {
+        wrapper.classList.add('drop-before');
+      } else {
+        wrapper.classList.add('drop-after');
+      }
+      
+      dragEvent.dataTransfer!.dropEffect = 'move';
+    } catch (error) {
+      console.error('Error parsing drag data:', error);
+    }
+  });
+  
+  wrapper.addEventListener('dragleave', (e) => {
+    // Remove indicators when leaving
+    wrapper.classList.remove('drop-before', 'drop-after');
+  });
+  
+  wrapper.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const dragEvent = e as DragEvent;
+    
+    const data = dragEvent.dataTransfer?.getData('application/json');
+    if (!data) return;
+    
+    try {
+      const dragData = JSON.parse(data);
+      if (dragData.type !== 'queue-reorder') return;
+      
+      const sourceIndex = dragData.queueIndex;
+      if (sourceIndex === index) return; // Can't drop on self
+      
+      // Determine target position
+      const rect = wrapper.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const dropBefore = dragEvent.clientY < midpoint;
+      
+      let targetIndex = dropBefore ? index : index + 1;
+      
+      // Adjust target index if moving from before to after
+      if (sourceIndex < targetIndex) {
+        targetIndex--;
+      }
+      
+      console.log(`🔄 Reordering queue: moving item from position ${sourceIndex} to ${targetIndex}`);
+      
+      // Perform the reordering
+      reorderQueueItem(sourceIndex, targetIndex);
+      
+      // Clear indicators
+      wrapper.classList.remove('drop-before', 'drop-after');
+      
+    } catch (error) {
+      console.error('Error handling queue drop:', error);
+    }
+  });
+}
+
+// Reorder queue items and recalculate deck assignments  
+function reorderQueueItem(sourceIndex: number, targetIndex: number) {
+  if (sourceIndex === targetIndex || sourceIndex < 0 || targetIndex < 0) {
+    return; // No change needed
+  }
+  
+  if (sourceIndex >= queue.length || targetIndex > queue.length) {
+    console.error('Invalid queue indices for reordering');
+    return;
+  }
+  
+  // Check if we're trying to move an item before a currently playing song
+  const protection = protectCurrentlyPlayingSong(sourceIndex, targetIndex);
+  if (protection.blocked) {
+    console.log(`🚫 Reorder blocked: ${protection.reason}`);
+    targetIndex = protection.adjustedTarget;
+  }
+  
+  // Perform the reordering
+  const [movedItem] = queue.splice(sourceIndex, 1);
+  queue.splice(targetIndex, 0, movedItem);
+  
+  console.log(`✅ Queue reordered: moved "${getQueueItemDisplayName(movedItem)}" from position ${sourceIndex} to ${targetIndex}`);
+  
+  // Recalculate deck assignments based on new order
+  recalculateDeckAssignments();
+  
+  // Update display
+  updateQueueDisplay();
+}
+
+// Setup queue drop zones for reordering
+function setupQueueDropZones() {
+  const queueContainer = document.getElementById('queue-items');
+  if (!queueContainer) return;
+  
+  // Add drop zones between queue items
+  const addDropZones = () => {
+    // Remove existing drop zones
+    queueContainer.querySelectorAll('.queue-drop-zone').forEach(zone => zone.remove());
+    
+    const queueItems = queueContainer.children;
+    
+    // Add drop zone at the beginning (unless auto-queue is active and first item is playing)
+    if (!isAutoQueueActive() || queue.length === 0) {
+      const topDropZone = document.createElement('div');
+      topDropZone.className = 'queue-drop-zone';
+      topDropZone.dataset.dropIndex = '0';
+      queueContainer.insertBefore(topDropZone, queueContainer.firstChild);
+    }
+    
+    // Add drop zones between items and at the end
+    for (let i = 0; i < queueItems.length; i++) {
+      const dropZone = document.createElement('div');
+      dropZone.className = 'queue-drop-zone';
+      dropZone.dataset.dropIndex = (i + 1).toString();
+      
+      if (i === queueItems.length - 1) {
+        // Last drop zone (at the end)
+        queueContainer.appendChild(dropZone);
+      } else {
+        // Drop zone between items
+        queueContainer.insertBefore(dropZone, queueItems[i + 1]);
+      }
+      
+      // Add drop event listeners
+      dropZone.addEventListener('dragover', handleQueueDragOver);
+      dropZone.addEventListener('dragleave', handleQueueDragLeave);
+      dropZone.addEventListener('drop', handleQueueDrop);
+    }
+  };
+  
+  // Initial setup
+  addDropZones();
+  
+  // Update drop zones when queue changes
+  const observer = new MutationObserver(() => {
+    setTimeout(addDropZones, 10); // Small delay to ensure DOM updates are complete
+  });
+  
+  observer.observe(queueContainer, { childList: true });
+}
+
+// Queue drag & drop event handlers
+function handleQueueDragOver(e: DragEvent) {
+  e.preventDefault();
+  const dropZone = e.currentTarget as HTMLElement;
+  dropZone.classList.add('drag-over');
+}
+
+function handleQueueDragLeave(e: DragEvent) {
+  const dropZone = e.currentTarget as HTMLElement;
+  dropZone.classList.remove('drag-over');
+}
+
+function handleQueueDrop(e: DragEvent) {
+  e.preventDefault();
+  const dropZone = e.currentTarget as HTMLElement;
+  dropZone.classList.remove('drag-over');
+  
+  const draggedIndex = parseInt(e.dataTransfer?.getData('text/queue-index') || '-1');
+  const targetIndex = parseInt(dropZone.dataset.dropIndex || '-1');
+  
+  if (draggedIndex >= 0 && targetIndex >= 0 && draggedIndex !== targetIndex) {
+    // Adjust target index if dragging downward
+    const adjustedTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    reorderQueueItem(draggedIndex, adjustedTargetIndex);
+  }
+}
+
+// Protect currently playing songs from being reordered
+function protectCurrentlyPlayingSong(sourceIndex: number, targetIndex: number): {blocked: boolean, reason?: string, adjustedTarget: number} {
+  // If auto-queue is not active, no protection needed
+  if (!autoQueueConfig.deckPairAB && !autoQueueConfig.deckPairCD) {
+    return { blocked: false, adjustedTarget: targetIndex };
+  }
+  
+  // Find currently playing song in queue
+  const currentlyPlayingQueueIndex = findCurrentlyPlayingQueueIndex();
+  
+  if (currentlyPlayingQueueIndex === -1) {
+    // No currently playing song found in queue, no protection needed
+    return { blocked: false, adjustedTarget: targetIndex };
+  }
+  
+  // Prevent moving items before the currently playing song (position 0 in effective queue)
+  if (targetIndex <= currentlyPlayingQueueIndex && sourceIndex > currentlyPlayingQueueIndex) {
+    return { 
+      blocked: true, 
+      reason: `Cannot move item before currently playing song. Moving to position ${currentlyPlayingQueueIndex + 1} instead.`,
+      adjustedTarget: currentlyPlayingQueueIndex + 1 
+    };
+  }
+  
+  // Prevent moving the currently playing song itself
+  if (sourceIndex === currentlyPlayingQueueIndex) {
+    return { 
+      blocked: true, 
+      reason: `Cannot move currently playing song. Keeping at position ${currentlyPlayingQueueIndex}.`,
+      adjustedTarget: currentlyPlayingQueueIndex 
+    };
+  }
+  
+  return { blocked: false, adjustedTarget: targetIndex };
+}
+
+// Find the index of currently playing song in the queue
+function findCurrentlyPlayingQueueIndex(): number {
+  // Check all decks for currently playing songs
+  const playingDecks = ['a', 'b', 'c', 'd'].filter(deck => {
+    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
+    return audio && !audio.paused && audio.currentTime > 0;
+  });
+  
+  if (playingDecks.length === 0) {
+    return -1; // No song currently playing
+  }
+  
+  // Find the queue item assigned to one of the playing decks
+  for (let i = 0; i < queue.length; i++) {
+    const queueItem = queue[i];
+    if (queueItem.assignedToDeck && playingDecks.includes(queueItem.assignedToDeck)) {
+      return i;
+    }
+  }
+  
+  return -1; // Playing song not found in queue (manually loaded)
+}
+
+// Recalculate deck assignments after queue reordering
+function recalculateDeckAssignments() {
+  console.log('🔄 Recalculating deck assignments after queue reorder...');
+  
+  // Clear all existing assignments first
+  queue.forEach(item => {
+    item.assignedToDeck = undefined;
+  });
+  
+  // Only reassign if auto-queue is active
+  if (!autoQueueConfig.deckPairAB && !autoQueueConfig.deckPairCD) {
+    console.log('📝 Auto-queue inactive, no deck assignments needed');
+    return;
+  }
+  
+  // Get available decks based on active pairs
+  const availableDecks: ('a' | 'b' | 'c' | 'd')[] = [];
+  if (autoQueueConfig.deckPairAB) {
+    availableDecks.push('a', 'b');
+  }
+  if (autoQueueConfig.deckPairCD) {
+    availableDecks.push('c', 'd');
+  }
+  
+  // Assign songs to decks in alternating pattern, skipping microphone placeholders
+  let deckIndex = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const queueItem = queue[i];
+    
+    // Skip microphone placeholders for deck assignment
+    if (isMicrophoneQueueItem(queueItem)) {
+      console.log(`🎤 Skipping microphone placeholder at position ${i}`);
+      continue;
+    }
+    
+    // Assign to next available deck
+    const targetDeck = availableDecks[deckIndex % availableDecks.length];
+    queueItem.assignedToDeck = targetDeck;
+    
+    console.log(`📍 Assigned "${getQueueItemDisplayName(queueItem)}" to deck ${targetDeck.toUpperCase()}`);
+    
+    deckIndex++;
+  }
+}
+
+// Get display name for queue item (for logging)
+function getQueueItemDisplayName(queueItem: QueueItem): string {
+  if (isSongQueueItem(queueItem) && queueItem.song) {
+    return `${queueItem.song.title} - ${queueItem.song.artist}`;
+  } else if (isMicrophoneQueueItem(queueItem)) {
+    return 'Microphone Placeholder';
+  }
+  return 'Unknown Item';
 }
 
 // Setup Queue as Drop Zone
@@ -4608,10 +5135,14 @@ function setupAutoQueueControls() {
     
     if (autoQueueConfig.deckPairAB) {
       console.log('🎵 Auto-Queue enabled for Deck A+B');
+      // Synchronize loaded deck tracks with queue
+      synchronizeDecksWithQueue(['a', 'b']);
       // Immediate preparation: check if A or B is playing and prepare the other
       prepareDecksOnActivation(['a', 'b']);
     } else {
       console.log('⏸️ Auto-Queue disabled for Deck A+B');
+      // Reset deck assignments for A+B when disabled
+      resetDeckAssignments(['a', 'b']);
     }
   });
   
@@ -4622,42 +5153,247 @@ function setupAutoQueueControls() {
     
     if (autoQueueConfig.deckPairCD) {
       console.log('🎵 Auto-Queue enabled for Deck C+D');
+      // Synchronize loaded deck tracks with queue
+      synchronizeDecksWithQueue(['c', 'd']);
       // Immediate preparation: check if C or D is playing and prepare the other
       prepareDecksOnActivation(['c', 'd']);
     } else {
       console.log('⏸️ Auto-Queue disabled for Deck C+D');
+      // Reset deck assignments for C+D when disabled
+      resetDeckAssignments(['c', 'd']);
     }
   });
   
   // Initial state update
   updateButtonStates();
+  
+  // Microphone Add Button
+  const micAddButton = document.getElementById('queue-mic-add-btn') as HTMLButtonElement;
+  micAddButton?.addEventListener('click', () => {
+    addMicrophoneToQueue();
+  });
+}
+
+// ENHANCED: Synchronize loaded deck tracks with queue when auto-queue is enabled
+function synchronizeDecksWithQueue(deckPair: ('a' | 'b' | 'c' | 'd')[]) {
+  console.log(`🔄 Enhanced synchronization for decks: [${deckPair.join(', ').toUpperCase()}]`);
+  
+  deckPair.forEach(deck => {
+    const loadedSong = getCurrentLoadedSong(deck);
+    if (loadedSong) {
+      console.log(`🔍 Checking deck ${deck.toUpperCase()} loaded song: "${loadedSong.title}"`);
+      
+      // Check if this song already exists in queue
+      const existingQueueItemIndex = queue.findIndex(item => 
+        isSongQueueItem(item) && 
+        item.song?.id === loadedSong.id
+      );
+      
+      if (existingQueueItemIndex !== -1) {
+        const queueItem = queue[existingQueueItemIndex];
+        console.log(`📌 Found "${loadedSong.title}" in queue at position ${existingQueueItemIndex + 1}`);
+        
+        // Update assignment to current deck
+        const oldAssignment = queueItem.assignedToDeck;
+        queueItem.assignedToDeck = deck;
+        queueItem.loadedAt = new Date();
+        
+        // Move to correct position based on deck state
+        const deckState = getDeckState(deck);
+        if (deckState === 'playing') {
+          console.log(`▶️ Moving currently playing song to top of queue`);
+          const item = queue.splice(existingQueueItemIndex, 1)[0];
+          queue.unshift(item);
+        }
+        
+        console.log(`✅ Synchronized "${loadedSong.title}" with deck ${deck.toUpperCase()}${oldAssignment ? ` (was assigned to ${oldAssignment.toUpperCase()})` : ''}`);
+      } else {
+        // Song not in queue - add it if we want to track all loaded songs
+        console.log(`⚠️ Loaded song "${loadedSong.title}" not found in queue`);
+        
+        // Optional: Add loaded song to queue for consistency
+        // const newSongItem = createSongQueueItem(loadedSong);
+        // newSongItem.assignedToDeck = deck;
+        // newSongItem.loadedAt = new Date();
+        // queue.unshift(newSongItem); // Add at top since it's currently loaded
+        // console.log(`➕ Added loaded song "${loadedSong.title}" to queue`);
+      }
+    }
+  });
+  
+  // Remove any duplicate assignments and clean up
+  removeDuplicateQueueAssignments();
+  
+  // Reassign remaining unassigned songs optimally
+  reassignQueueToDecks();
+  
+  // Prepare any available decks
+  prepareAllAvailableDecks();
+  
+  // Update queue display to show new assignments
+  updateQueueDisplay();
+}
+
+// Remove duplicate queue assignments - ensure each song is only assigned once
+function removeDuplicateQueueAssignments() {
+  const assignedSongs = new Set<string>();
+  
+  queue.forEach(item => {
+    if (isSongQueueItem(item) && item.song && item.assignedToDeck) {
+      const songId = item.song.id;
+      
+      if (assignedSongs.has(songId)) {
+        // Duplicate found - remove assignment from this item
+        console.log(`🔄 Removing duplicate assignment for "${item.song.title}" from deck ${item.assignedToDeck.toUpperCase()}`);
+        item.assignedToDeck = null;
+      } else {
+        assignedSongs.add(songId);
+      }
+    }
+  });
+}
+
+// Reassign all unassigned queue items to optimal deck positions
+function reassignQueueToDecks() {
+  console.log(`🎯 Reassigning unassigned queue items to optimal deck positions`);
+  
+  // Get all active deck pairs
+  const availableDecks: ('a' | 'b' | 'c' | 'd')[] = [];
+  if (autoQueueConfig.deckPairAB) {
+    availableDecks.push('a', 'b');
+  }
+  if (autoQueueConfig.deckPairCD) {
+    availableDecks.push('c', 'd');
+  }
+  
+  if (availableDecks.length === 0) {
+    console.log('⏸️ No active deck pairs for reassignment');
+    return;
+  }
+  
+  // Get unassigned song items
+  const unassignedSongs = queue.filter(item => 
+    isSongQueueItem(item) && 
+    item.song && 
+    item.assignedToDeck === null
+  );
+  
+  console.log(`📋 Found ${unassignedSongs.length} unassigned songs to reassign`);
+  
+  // Assign songs to decks in alternating pattern
+  let deckIndex = 0;
+  unassignedSongs.forEach((songItem, index) => {
+    const targetDeck = availableDecks[deckIndex % availableDecks.length];
+    songItem.assignedToDeck = targetDeck;
+    
+    const songTitle = songItem.song?.title || 'Unknown';
+    console.log(`📌 Reassigned "${songTitle}" to deck ${targetDeck.toUpperCase()}`);
+    
+    deckIndex++;
+  });
+  
+  console.log(`✅ Reassigned ${unassignedSongs.length} songs to decks`);
+}
+
+// Reset deck assignments when queue pair is disabled
+function resetDeckAssignments(deckPair: ('a' | 'b' | 'c' | 'd')[]) {
+  console.log(`🔄 Resetting deck assignments for: [${deckPair.join(', ').toUpperCase()}]`);
+  
+  // Clear assignments for the specified decks
+  queue.forEach(queueItem => {
+    if (queueItem.assignedToDeck && deckPair.includes(queueItem.assignedToDeck)) {
+      const songTitle = isSongQueueItem(queueItem) && queueItem.song ? queueItem.song.title : 'Item';
+      console.log(`🔄 Clearing assignment: ${songTitle} from Deck ${queueItem.assignedToDeck.toUpperCase()}`);
+      queueItem.assignedToDeck = null;
+    }
+  });
+  
+  // Update queue display to remove coloring
+  updateQueueDisplay();
 }
 
 // Prepare decks immediately when auto-queue is activated
-function prepareDecksOnActivation(deckPair: ('a' | 'b' | 'c' | 'd')[]) {
+async function prepareDecksOnActivation(deckPair: ('a' | 'b' | 'c' | 'd')[]) {
+  console.log(`🎵 Preparing decks on activation: [${deckPair.join(', ').toUpperCase()}]`);
+  
   // Check if any deck in the pair is currently playing
+  let hasPlayingDeck = false;
   for (const deck of deckPair) {
-    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
-    
-    if (audio && !audio.paused && !audio.ended) {
-      // This deck is playing - preparation handled automatically in Auto-Queue
-      console.log(`🎵 Deck ${deck.toUpperCase()} is playing`);
-      return; // Only prepare one deck
+    const deckState = playerStates[deck as keyof typeof playerStates];
+    if (deckState?.isPlaying) {
+      console.log(`🎵 Deck ${deck.toUpperCase()} is already playing`);
+      hasPlayingDeck = true;
+      break;
     }
   }
   
-  // If no deck is playing, check if any deck has a loaded track
+  // Check if any deck has a loaded track
+  let hasLoadedDeck = false;
   for (const deck of deckPair) {
     const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
-    
     if (audio && audio.src && audio.readyState >= 1) {
-      // This deck has a track loaded - preparation handled automatically
       console.log(`🎵 Deck ${deck.toUpperCase()} has a track loaded`);
-      return; // Only prepare one deck
+      hasLoadedDeck = true;
+      break;
     }
   }
   
-  console.log(`📋 No active tracks in deck pair [${deckPair.join(', ').toUpperCase()}], waiting for manual start`);
+  // If no decks are prepared and we have queue items, prepare them
+  if (!hasPlayingDeck && !hasLoadedDeck && queue.length > 0) {
+    console.log(`📋 Auto-filling empty decks from queue (${queue.length} items available)`);
+    
+    // Find first unassigned song in queue for this deck pair
+    const firstAvailableSong = queue.find(item => !item.assignedToDeck);
+    const firstDeck = deckPair[0];
+    
+    if (firstAvailableSong && isSongQueueItem(firstAvailableSong) && firstAvailableSong.song) {
+      try {
+        console.log(`📋 Loading first available song to Deck ${firstDeck.toUpperCase()}: ${firstAvailableSong.song.title}`);
+        
+        // Load the song to the deck
+        loadTrackToPlayer(firstDeck, firstAvailableSong.song, false);
+        
+        // Mark as assigned to deck
+        firstAvailableSong.assignedToDeck = firstDeck;
+        
+        // Auto-start playback if no other deck is playing
+        if (!hasPlayingDeck) {
+          console.log(`🎵 Auto-starting playback on Deck ${firstDeck.toUpperCase()}`);
+          const playButton = document.querySelector(`[data-deck="${firstDeck}"] .play-pause-btn`) as HTMLButtonElement;
+          if (playButton) {
+            playButton.click();
+          }
+        }
+        
+        // Update queue display
+        updateQueueDisplay();
+        
+      } catch (error) {
+        console.error(`❌ Failed to auto-load song to deck ${firstDeck.toUpperCase()}:`, error);
+      }
+    }
+  }
+  
+  // If we have more queued songs, prepare the next deck in the pair
+  const secondDeck = deckPair[1];
+  const secondAvailableSong = queue.find(item => !item.assignedToDeck);
+  
+  if (secondAvailableSong && isSongQueueItem(secondAvailableSong) && secondAvailableSong.song) {
+    // Check if second deck is empty
+    const secondAudio = document.getElementById(`audio-${secondDeck}`) as HTMLAudioElement;
+    const secondDeckEmpty = !secondAudio || !secondAudio.src || secondAudio.readyState < 1;
+    
+    if (secondDeckEmpty) {
+      try {
+        console.log(`📋 Pre-loading next song to Deck ${secondDeck.toUpperCase()}: ${secondAvailableSong.song.title}`);
+        loadTrackToPlayer(secondDeck, secondAvailableSong.song, false);
+        secondAvailableSong.assignedToDeck = secondDeck;
+        updateQueueDisplay();
+      } catch (error) {
+        console.error(`❌ Failed to pre-load song to deck ${secondDeck.toUpperCase()}:`, error);
+      }
+    }
+  }
 }
 
 // Update radio stream display with station info
@@ -5287,6 +6023,39 @@ function handleAutoQueue(finishedDeck: 'a' | 'b' | 'c' | 'd') {
   const finishedSong = getCurrentLoadedSong(finishedDeck);
   if (finishedSong) {
     removeQueueItemBySong(finishedSong);
+    console.log(`🗑️ Removed finished song from queue: ${finishedSong.title}`);
+  }
+  
+  // 🎤 CRITICAL: Check if microphone is next in queue BEFORE continuing auto-play
+  const microphoneItem = shouldActivateMicrophoneNow();
+  if (microphoneItem) {
+    console.log(`🎤 Microphone placeholder found at queue position - activating microphone and pausing auto-play`);
+    
+    // Mark microphone item as processed and remove from queue
+    const micIndex = queue.findIndex(item => item.id === microphoneItem.id);
+    if (micIndex !== -1) {
+      queue.splice(micIndex, 1);
+      updateQueueDisplay();
+      console.log(`🗑️ Removed microphone placeholder from queue`);
+    }
+    
+    // Stop auto-queue to pause playback until microphone is deactivated
+    autoQueueConfig.isAutoPlaying = false;
+    console.log(`⏸️ Auto-play paused for microphone activation`);
+    
+    // Activate microphone automatically if not already active
+    if (!micActive) {
+      const micBtn = document.getElementById("mic-toggle") as HTMLButtonElement;
+      if (micBtn) {
+        micBtn.click(); // Trigger the microphone activation
+        console.log(`🎤 Microphone automatically activated`);
+      }
+    } else {
+      console.log(`🎤 Microphone already active`);
+    }
+    
+    // Do NOT continue with auto-queue - wait for microphone to be deactivated
+    return;
   }
   
   // Prevent multiple simultaneous auto-plays
@@ -5295,78 +6064,61 @@ function handleAutoQueue(finishedDeck: 'a' | 'b' | 'c' | 'd') {
     return;
   }
   
-  // Check if queue has available songs for next track
-  const availableItem = getNextAvailableQueueItem();
-  if (!availableItem) {
-    console.log('📭 No available songs in queue, no auto-play possible');
+  // Check if we should try to start the next track
+  if (!isAutoQueueActiveForDeck(finishedDeck)) {
+    console.log(`⏸️ Auto-queue not active for deck ${finishedDeck.toUpperCase()}`);
+    return;
+  }
+  
+  // Determine next deck based on configuration
+  const nextDeck = getNextDeck(finishedDeck);
+  if (!nextDeck) {
+    console.log('⏸️ No valid next deck found (all deck pairs disabled)');
     return;
   }
   
   autoQueueConfig.isAutoPlaying = true;
   autoQueueConfig.lastPlayedDeck = finishedDeck;
   
-  // STEP 1: Stop all other playing tracks immediately
-  console.log('⏹️ Stopping all other decks...');
-  stopAllOtherDecks(finishedDeck);
+  console.log(`🎯 Auto-Queue: ${finishedDeck.toUpperCase()} → ${nextDeck.toUpperCase()}`);
   
-  // STEP 2: Wait a moment for stops to complete, then start next deck
-  setTimeout(() => {
-    try {
-      // Determine next deck based on configuration
-      const nextDeck = getNextDeck(finishedDeck);
+  // Check if next deck is ready to play or needs a new track
+  const nextDeckState = getDeckState(nextDeck);
+  console.log(`🔍 Next deck ${nextDeck.toUpperCase()} state: ${nextDeckState}`);
+  
+  try {
+    if (nextDeckState === 'ready') {
+      // Deck already has a track loaded, just start playing it
+      console.log(`▶️ Starting prepared track on deck ${nextDeck.toUpperCase()}`);
+      simulatePlayButtonClick(nextDeck);
+    } else {
+      // Deck needs a new track loaded
+      console.log(`🔄 Loading new track to deck ${nextDeck.toUpperCase()}`);
+      startNextDeckWithNewTrack(nextDeck);
+    }
+    
+    // Prepare the deck after the next deck (for seamless transitions)
+    setTimeout(() => {
+      const playingCount = countPlayingDecks();
+      console.log(`🔢 Playing decks after starting ${nextDeck.toUpperCase()}: ${playingCount}`);
       
-      if (!nextDeck) {
-        console.log('⏸️ No valid next deck found (all deck pairs disabled)');
-        autoQueueConfig.isAutoPlaying = false;
-        return;
+      if (playingCount <= 1) {
+        prepareNextDeckInSequence(nextDeck);
+      } else {
+        console.log('⚠️ Multiple decks playing, skipping preparation');
       }
       
-      // Start the next deck (load and play)
-      console.log(`🎯 Auto-Queue: ${finishedDeck.toUpperCase()} → ${nextDeck.toUpperCase()}`);
-      startNextDeckWithNewTrack(nextDeck);
-      
-      // STEP 3: Wait 2 seconds before preparing next deck to avoid race conditions
-      setTimeout(() => {
-        // Verify only one deck is playing before preparing next
-        if (countPlayingDecks() <= 1) {
-          prepareNextDeckInSequence(nextDeck);
-        } else {
-          console.log('⚠️ Multiple decks playing, skipping preparation');
-        }
-        
-        // Reset auto-playing flag after everything is done
-        autoQueueConfig.isAutoPlaying = false;
-      }, 2000); // 2 second delay
-      
-    } catch (error) {
-      console.error('❌ Error in Auto-Queue:', error);
       autoQueueConfig.isAutoPlaying = false;
-    }
-  }, 500); // 0.5 second delay for stop operations to complete
+    }, 1000); // 1 second delay
+    
+  } catch (error) {
+    console.error('❌ Error in Auto-Queue:', error);
+    autoQueueConfig.isAutoPlaying = false;
+  }
 }
 
-// Stop all decks except the specified one
-function stopAllOtherDecks(exceptDeck: 'a' | 'b' | 'c' | 'd') {
-  const allDecks: ('a' | 'b' | 'c' | 'd')[] = ['a', 'b', 'c', 'd'];
-  
-  allDecks.forEach(deck => {
-    if (deck === exceptDeck) return; // Skip the finished deck
-    
-    const audio = document.getElementById(`audio-${deck}`) as HTMLAudioElement;
-    if (audio && !audio.paused) {
-      console.log(`⏹️ Stopping deck ${deck.toUpperCase()} for Auto-Queue`);
-      audio.pause();
-      
-      // Update UI
-      const playPauseBtn = document.getElementById(`play-pause-${deck}`) as HTMLButtonElement;
-      if (playPauseBtn) {
-        const icon = playPauseBtn.querySelector('.material-icons');
-        if (icon) icon.textContent = 'play_arrow';
-        playPauseBtn.classList.remove('playing');
-      }
-    }
-  });
-}
+// Stop all decks except the specified one (REMOVED - was causing issues with deck alternation)
+// The auto-queue system should work by natural deck alternation, not by forcibly stopping other decks
 
 // Count how many decks are currently playing
 function countPlayingDecks(): number {
@@ -5390,33 +6142,136 @@ function getNextAvailableQueueItem(): QueueItem | null {
   return queue.find(item => item.assignedToDeck === null) || null;
 }
 
+// Get the next item in queue order (respecting sequence)
+function getNextQueueItemInOrder(): QueueItem | null {
+  // Find the first unassigned item in queue order
+  return queue.find(item => item.assignedToDeck === null) || null;
+}
+
+// Check if the next item in queue is a microphone placeholder that should be activated now
+function shouldActivateMicrophoneNow(): QueueItem | null {
+  // Get the first item in queue order (not necessarily unassigned)
+  const nextItemInOrder = getNextQueueItemInOrder();
+  
+  if (nextItemInOrder && isMicrophoneQueueItem(nextItemInOrder)) {
+    const microphoneIndex = queue.findIndex(item => item.id === nextItemInOrder.id);
+    console.log(`🎤 Next item in queue order is microphone at position ${microphoneIndex + 1} - ready to activate`);
+    return nextItemInOrder;
+  }
+  
+  // Also check if the very next item after assigned items is a microphone
+  const nextUnassignedItem = queue.find(item => item.assignedToDeck === null);
+  if (nextUnassignedItem && isMicrophoneQueueItem(nextUnassignedItem)) {
+    // Check if all items before this microphone are already assigned/finished
+    const microphoneIndex = queue.findIndex(item => item.id === nextUnassignedItem.id);
+    const itemsBeforeMic = queue.slice(0, microphoneIndex);
+    const playingDecks = countPlayingDecks();
+    
+    console.log(`🎤 Checking microphone at position ${microphoneIndex + 1}: ${itemsBeforeMic.length} items before, ${playingDecks} decks playing`);
+    
+    // If no decks are playing and all items before microphone are processed, activate
+    if (playingDecks === 0) {
+      console.log(`🎤 No decks playing - microphone at position ${microphoneIndex + 1} ready to activate`);
+      return nextUnassignedItem;
+    }
+  }
+  
+  return null;
+}
+
 // Mark queue item as assigned to a deck
 function assignQueueItemToDeck(queueItem: QueueItem, deck: 'a' | 'b' | 'c' | 'd') {
   queueItem.assignedToDeck = deck;
   queueItem.loadedAt = new Date();
-  console.log(`📌 Assigned "${queueItem.song.title}" to deck ${deck.toUpperCase()}`);
+  const itemTitle = isSongQueueItem(queueItem) && queueItem.song ? queueItem.song.title : 'Item';
+  console.log(`📌 Assigned "${itemTitle}" to deck ${deck.toUpperCase()}`);
   updateQueueDisplay();
 }
 
 // Remove queue item by song (when track finishes or gets ejected)
 function removeQueueItemBySong(song: OpenSubsonicSong) {
-  const index = queue.findIndex(item => item.song.id === song.id);
+  const index = queue.findIndex(item => isSongQueueItem(item) && item.song?.id === song.id);
   if (index !== -1) {
     const removedItem = queue.splice(index, 1)[0];
-    console.log(`🗑️ Removed "${removedItem.song.title}" from queue`);
+    const itemTitle = isSongQueueItem(removedItem) && removedItem.song ? removedItem.song.title : 'Item';
+    console.log(`🗑️ Removed "${itemTitle}" from queue`);
+    
+    // CRITICAL: Auto-adjust queue order after removal
+    autoAdjustQueueOrder();
+    
     updateQueueDisplay();
     return removedItem;
   }
   return null;
 }
 
+// Auto-adjust queue order when songs are removed - reassign affected deck tracks
+function autoAdjustQueueOrder() {
+  console.log(`🔄 Auto-adjusting queue order after song removal`);
+  
+  // Get all active deck pairs
+  const availableDecks: ('a' | 'b' | 'c' | 'd')[] = [];
+  if (autoQueueConfig.deckPairAB) {
+    availableDecks.push('a', 'b');
+  }
+  if (autoQueueConfig.deckPairCD) {
+    availableDecks.push('c', 'd');
+  }
+  
+  if (availableDecks.length === 0) {
+    console.log('⏸️ No active deck pairs - no adjustment needed');
+    return;
+  }
+  
+  // Reset assignments for all non-playing/loading decks
+  queue.forEach(item => {
+    if (item.assignedToDeck) {
+      const deckState = getDeckState(item.assignedToDeck);
+      // Only reset if deck is not playing or loading - preserve active assignments
+      if (deckState === 'empty' || deckState === 'ended' || deckState === 'error') {
+        const oldDeck = item.assignedToDeck;
+        item.assignedToDeck = null;
+        console.log(`🔄 Reset assignment for deck ${oldDeck?.toUpperCase()} (state: ${deckState})`);
+      }
+    }
+  });
+  
+  // Reassign songs to decks in optimal order
+  reassignQueueToDecks();
+  
+  // Try to prepare any newly available decks
+  prepareAllAvailableDecks();
+}
+
 // Start next deck with a new track from queue
 function startNextDeckWithNewTrack(targetDeck: 'a' | 'b' | 'c' | 'd') {
-  // Get next available queue item (not assigned to any deck)
-  const nextQueueItem = getNextAvailableQueueItem();
+  // Note: Microphone check is now handled in handleAutoQueue() BEFORE this function is called
+  
+  // Get next available song item (not assigned to any deck)
+  const nextQueueItem = getNextQueueItemInOrder();
   if (!nextQueueItem) {
-    console.log(`📭 No available songs in queue to load onto deck ${targetDeck.toUpperCase()}`);
+    console.log(`📭 No available items in queue to load onto deck ${targetDeck.toUpperCase()}`);
     return;
+  }
+  
+  // Microphone placeholders are handled in handleAutoQueue() before this function is called
+  
+  // Check if target deck is actually available for new content
+  if (!isDeckAvailableForNewTrack(targetDeck)) {
+    const targetState = getDeckState(targetDeck);
+    console.log(`⚠️ Target deck ${targetDeck.toUpperCase()} not available (state: ${targetState})`);
+    
+    // If deck is still playing, wait for it to end
+    if (targetState === 'playing') {
+      console.log(`⏸️ Waiting for deck ${targetDeck.toUpperCase()} to finish before loading new track`);
+      return;
+    }
+    
+    // If deck ended, clear it first
+    if (targetState === 'ended') {
+      console.log(`🔄 Clearing ended deck ${targetDeck.toUpperCase()} before loading new track`);
+      clearPlayerDeck(targetDeck);
+    }
   }
   
   // Double-check that no other deck is playing before starting
@@ -5431,6 +6286,12 @@ function startNextDeckWithNewTrack(targetDeck: 'a' | 'b' | 'c' | 'd') {
     return;
   }
   
+  // Ensure we have a song item with a valid song
+  if (!isSongQueueItem(nextQueueItem) || !nextQueueItem.song) {
+    console.error(`❌ Invalid song queue item for deck ${targetDeck.toUpperCase()}`);
+    return;
+  }
+  
   console.log(`🔄 Loading and starting "${nextQueueItem.song.title}" on deck ${targetDeck.toUpperCase()}`);
   
   // Mark queue item as assigned to this deck
@@ -5442,33 +6303,74 @@ function startNextDeckWithNewTrack(targetDeck: 'a' | 'b' | 'c' | 'd') {
   console.log(`✅ Successfully started deck ${targetDeck.toUpperCase()}`);
 }
 
-// Prepare the next deck in sequence for seamless transitions
+// Prepare the next deck in sequence for seamless transitions - IMPROVED VERSION
 function prepareNextDeckInSequence(currentDeck: 'a' | 'b' | 'c' | 'd') {
-  // Only prepare if we have available songs in queue
-  const availableItem = getNextAvailableQueueItem();
-  if (!availableItem) {
-    console.log('📭 No available songs in queue to prepare');
+  console.log(`🎯 Starting deck preparation after ${currentDeck.toUpperCase()}`);
+  
+  // Use the comprehensive preparation function to maximize deck usage
+  prepareAllAvailableDecks();
+}
+
+// IMPROVED: Prepare all available decks with maximum efficiency
+function prepareAllAvailableDecks() {
+  console.log(`🎵 Comprehensive deck preparation - maximizing deck usage`);
+  
+  // Get all active deck pairs
+  const availableDecks: ('a' | 'b' | 'c' | 'd')[] = [];
+  if (autoQueueConfig.deckPairAB) {
+    availableDecks.push('a', 'b');
+  }
+  if (autoQueueConfig.deckPairCD) {
+    availableDecks.push('c', 'd');
+  }
+  
+  if (availableDecks.length === 0) {
+    console.log('⏸️ No active deck pairs for preparation');
     return;
   }
   
-  // Determine what the next deck would be after current
-  const nextDeck = getNextDeck(currentDeck);
-  if (!nextDeck) return;
+  // Get all songs that need preparation (skip microphones, get assigned but not loaded songs)
+  const songsNeedingPreparation = queue.filter(item => 
+    isSongQueueItem(item) && 
+    item.song && 
+    (item.assignedToDeck === null || (item.assignedToDeck && !getCurrentLoadedSong(item.assignedToDeck)))
+  );
   
-  // Check if the next deck is empty
-  const audio = document.getElementById(`audio-${nextDeck}`) as HTMLAudioElement;
-  if (audio && audio.src) {
-    console.log(`🎵 Deck ${nextDeck.toUpperCase()} already has a track, no preparation needed`);
-    return;
+  console.log(`📋 Found ${songsNeedingPreparation.length} songs needing preparation`);
+  
+  // Find available decks (empty, ended, or error state)
+  const availableForPreparation = availableDecks.filter(deck => isDeckAvailableForNewTrack(deck));
+  
+  console.log(`�️ Available decks for preparation: [${availableForPreparation.map(d => d.toUpperCase()).join(', ')}]`);
+  
+  // Prepare decks with available songs
+  let preparationCount = 0;
+  for (let i = 0; i < Math.min(availableForPreparation.length, songsNeedingPreparation.length); i++) {
+    const deck = availableForPreparation[i];
+    const songItem = songsNeedingPreparation[i];
+    
+    if (songItem.song) {
+      console.log(`🔄 Preparing "${songItem.song.title}" on deck ${deck.toUpperCase()}`);
+      
+      // Assign and load
+      assignQueueItemToDeck(songItem, deck);
+      loadTrackToPlayer(deck, songItem.song, false);
+      preparationCount++;
+    }
   }
   
-  console.log(`🔄 Preparing "${availableItem.song.title}" on deck ${nextDeck.toUpperCase()}`);
-  
-  // Mark queue item as assigned to the next deck
-  assignQueueItemToDeck(availableItem, nextDeck);
-  
-  // Load track without playing
-  loadTrackToPlayer(nextDeck, availableItem.song, false);
+  console.log(`✅ Prepared ${preparationCount} decks successfully`);
+}
+
+// Get the next song item for deck preparation (skipping microphone placeholders)
+function getNextSongForPreparation(): QueueItem | null {
+  // Look for the next unassigned song item in queue order
+  for (const item of queue) {
+    if (item.assignedToDeck === null && isSongQueueItem(item) && item.song) {
+      return item;
+    }
+  }
+  return null;
 }
 
 // Determine the next deck based on configuration and rotation
@@ -5502,6 +6404,23 @@ function getNextDeck(finishedDeck: 'a' | 'b' | 'c' | 'd'): 'a' | 'b' | 'c' | 'd'
   return rotationMap[finishedDeck];
 }
 
+// Simulate play button click to ensure all UI updates work correctly
+function simulatePlayButtonClick(deck: 'a' | 'b' | 'c' | 'd'): boolean {
+  const playPauseBtn = document.getElementById(`play-pause-${deck}`) as HTMLButtonElement;
+  if (playPauseBtn) {
+    playPauseBtn.click();
+    console.log(`🎮 Simulated play button click for deck ${deck.toUpperCase()}`);
+    return true;
+  }
+  console.error(`❌ Play button not found for deck ${deck.toUpperCase()}`);
+  return false;
+}
+
+// Check if auto-queue is active (either deck pair)
+function isAutoQueueActive(): boolean {
+  return autoQueueConfig.deckPairAB || autoQueueConfig.deckPairCD;
+}
+
 // Check if auto-queue is active for a specific deck
 function isAutoQueueActiveForDeck(deck: 'a' | 'b' | 'c' | 'd'): boolean {
   switch (deck) {
@@ -5516,16 +6435,27 @@ function isAutoQueueActiveForDeck(deck: 'a' | 'b' | 'c' | 'd'): boolean {
   }
 }
 
+function addMicrophoneToQueue() {
+  const micItem = createMicrophoneQueueItem();
+  queue.push(micItem);
+  console.log('🎤 Microphone placeholder added to queue');
+  updateQueueDisplay();
+}
+
 // Song aus Queue entfernen (manual removal by user)
 function removeFromQueue(index: number) {
   if (index >= 0 && index < queue.length) {
     const removedItem = queue.splice(index, 1)[0];
     updateQueueDisplay();
-    console.log(`Song "${removedItem.song.title}" removed from queue`);
+    if (isSongQueueItem(removedItem)) {
+      console.log(`Song "${removedItem.song.title}" removed from queue`);
+    } else if (isMicrophoneQueueItem(removedItem)) {
+      console.log('🎤 Microphone placeholder removed from queue');
+    }
   }
 }
 
-// Globale Funktion f�r HTML onclick
+// Globale Funktion für HTML onclick
 (window as any).removeFromQueue = removeFromQueue;
 
 // OpenSubsonic Login initialisieren - Dynamic field visibility
@@ -5951,10 +6881,13 @@ function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) 
     }
     
     // Auto-Queue preparation now handled in handleAutoQueue
+    
+    // Broadcast current metadata to stream
+    setTimeout(() => broadcastCurrentMetadata(true), 100);
   });
   
   audio.addEventListener('pause', () => {
-    console.log(`?? Player ${side.toUpperCase()} paused`);
+    console.log(`⏸️ Player ${side.toUpperCase()} paused`);
     if (playerDeck) {
       playerDeck.classList.remove('playing');
     }
@@ -5964,10 +6897,20 @@ function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) 
     if (song) {
       setPlayerState(side, song, false);
     }
+    
+    // Broadcast current metadata to stream (might fall back to username@SubCaster if no tracks playing)
+    setTimeout(() => broadcastCurrentMetadata(true), 100);
   });
   
   audio.addEventListener('ended', () => {
     console.log(`🏁 Player ${side} finished playing`);
+    
+    // Remove finished song from queue BEFORE clearing deck
+    const finishedSong = getCurrentLoadedSong(side);
+    if (finishedSong) {
+      removeQueueItemBySong(finishedSong);
+      console.log(`🗑️ Removed finished song "${finishedSong.title}" from queue`);
+    }
     
     // PLAYER STATE: Track finished - clear player
     setPlayerState(side, null, false);
@@ -5986,6 +6929,9 @@ function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) 
       playPauseBtn.classList.remove('playing');
     }
     
+    // Broadcast current metadata to stream (will probably fall back to username@SubCaster)
+    setTimeout(() => broadcastCurrentMetadata(true), 100);
+    
     if (playerDeck) {
       playerDeck.classList.remove('playing');
     }
@@ -5993,12 +6939,11 @@ function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) 
     // Auto-Queue functionality (legacy - new system uses handleAutoQueue)
     if (autoQueueEnabled) {
       const availableItem = getNextAvailableQueueItem();
-      if (availableItem) {
-        console.log(`?? Auto-Queue enabled: Loading next track to Player ${side.toUpperCase()}`);
-        assignQueueItemToDeck(availableItem, side);
-        loadTrackToPlayer(side, availableItem.song, true); // Auto-play next track
+      if (availableItem && isSongQueueItem(availableItem) && availableItem.song) {
+        console.log(`⚠️ Legacy Auto-Queue system bypassed - using new handleAutoQueue system instead`);
+        // Disabled to prevent conflicts with new auto-queue system
       } else {
-        console.log(`? Auto-Queue: No available tracks in queue for Player ${side.toUpperCase()}`);
+        console.log(`📭 Auto-Queue: No available song tracks in queue for Player ${side.toUpperCase()}`);
       }
     } else {
       console.log(`? Auto-Queue disabled on Player ${side.toUpperCase()}`);
@@ -6128,8 +7073,8 @@ function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) 
     } else if (side === 'd' && dPlayerGain) {
       dPlayerGain.gain.value = volume;
     }
-    
-    // HTML Audio Element auch setzen (f�r direkte Abh�rung ohne Web Audio)
+
+    // HTML Audio Element auch setzen (für direkte Abhörung ohne Web Audio)
     audio.volume = volume;
     
     // NUR EINMAL loggen
@@ -6148,7 +7093,7 @@ function setupAudioPlayer(side: 'a' | 'b' | 'c' | 'd', audio: HTMLAudioElement) 
     }
   });
   
-  // Initial volume setting - sowohl f�r HTML Audio als auch Web Audio API
+  // Initial volume setting - sowohl für HTML Audio als auch Web Audio API
   if (volumeSlider) {
     const initialVolume = parseInt(volumeSlider.value) / 100;
     audio.volume = initialVolume;
@@ -6298,8 +7243,8 @@ function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, 
   
   // Reset WaveSurfer first (bevor neuer Track geladen wird)
   resetWaveform(side);
-  
-  // Vorherigen Track stoppen und zur�cksetzen
+
+  // Vorherigen Track stoppen und zurücksetzen
   audio.pause();
   audio.currentTime = 0;
   
@@ -6339,8 +7284,8 @@ function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, 
   
   // Album Cover aktualisieren
   updateAlbumCover(side, song);
-  
-  // Play-Button zur�cksetzen (Track ist gestoppt)
+
+  // Play-Button zurücksetzen (Track ist gestoppt)
   const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
   const icon = playPauseBtn?.querySelector('.material-icons');
   if (icon) icon.textContent = 'play_arrow';
@@ -6372,33 +7317,21 @@ function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, 
   const playerRating = document.getElementById(`player-rating-${side}`);
   if (playerRating) {
     playerRating.innerHTML = createStarRating(song.userRating || 0, song.id);
-    
-    // Rating async nachladen f�r bessere Performance
+
+    // Rating async nachladen für bessere Performance
     loadRatingAsync(song.id);
   }
-  
-  // Auto-Play wenn gew�nscht
+
+  // Auto-Play wenn gewünscht
   if (autoPlay) {
     // Warte bis Track geladen ist, dann spiele ab
     audio.addEventListener('loadeddata', () => {
-      audio.play().then(() => {
-        console.log(`?? Player ${side.toUpperCase()}: "${song.title}" is now playing`);
-        
-        // PLAYER STATE: Auto-play started
-        setPlayerState(side, song, true);
-        
-        // Update play button state
-        const playPauseBtn = document.getElementById(`play-pause-${side}`) as HTMLButtonElement;
-        if (playPauseBtn) {
-          playPauseBtn.textContent = '??';
-          playPauseBtn.classList.add('playing');
-        }
-        
-      }).catch((error: any) => {
-        console.error(`? Auto-play failed on Player ${side.toUpperCase()}:`, error);
-        showError(`Auto-play failed on Player ${side.toUpperCase()}: ${error.message}`);
-      });
-    }, { once: true }); // Event listener nur einmal ausf�hren
+      console.log(`▶️ Auto-playing "${song.title}" on Player ${side.toUpperCase()} via play button simulation`);
+      
+      // Simulate play button click to ensure all UI updates work correctly
+      simulatePlayButtonClick(side);
+      
+    }, { once: true }); // Event listener nur einmal ausführen
   }
   
   // Crossfader anwenden falls aktiv
@@ -6407,7 +7340,7 @@ function loadTrackToPlayer(side: 'a' | 'b' | 'c' | 'd', song: OpenSubsonicSong, 
   console.log(`Player ${side.toUpperCase()}: "${song.title}" loaded successfully`);
 }
 
-// Crossfader anwenden (f�r neue Tracks)
+// Crossfader anwenden (für neue Tracks)
 function applyCrossfader() {
   const crossfader = document.getElementById('crossfader') as HTMLInputElement;
   if (crossfader) {
@@ -6430,7 +7363,7 @@ function initializeCrossfader() {
     // Konvertiere Crossfader-Position (0-100) zu Audio-Pipeline-Position (0-1)
     const position = value / 100;
     
-    // Audio-Pipeline Crossfader setzen falls verf�gbar
+    // Audio-Pipeline Crossfader setzen falls verfügbar
     if (crossfaderGain) {
       // Position zwischen 0 und 1 begrenzen
       const clampedPosition = Math.max(0, Math.min(1, position));
@@ -6449,7 +7382,7 @@ function initializeCrossfader() {
     
     // Fallback: Direkte Audio-Element-Kontrolle
     // Crossfader: 0 = nur links, 50 = beide gleich, 100 = nur rechts
-    // Korrekte Berechnung f�r flie�enden �bergang
+    // Korrekte Berechnung für fließenden Übergang
     let leftVolume, rightVolume;
     
     if (value <= 50) {
@@ -7263,7 +8196,7 @@ function initializePlayerDropZone(side: 'a' | 'b' | 'c' | 'd') {
   });
 }
 
-// Song nach ID in allen verf�gbaren Listen finden
+// Song nach ID in allen verfügbaren Listen finden
 function findSongById(songId: string): OpenSubsonicSong | null {
   // Suche in aktuellen Songs
   let song = currentSongs.find(s => s.id === songId);
@@ -7274,8 +8207,8 @@ function findSongById(songId: string): OpenSubsonicSong | null {
   for (const item of searchResults) {
     const element = item as HTMLElement;
     if (element.dataset.songId === songId) {
-      
-      // F�r neue einzeilige Track-Items
+
+      // Für neue einzeilige Track-Items
       if (element.classList.contains('track-item-oneline')) {
         const titleElement = element.querySelector('.track-title');
         const artistElement = element.querySelector('.track-artist');
@@ -7296,8 +8229,8 @@ function findSongById(songId: string): OpenSubsonicSong | null {
           };
         }
       }
-      
-      // F�r alte Track-Items (Fallback)
+
+      // Für alte Track-Items (Fallback)
       const titleElement = element.querySelector('h4');
       const infoElement = element.querySelector('p');
       const coverArt = element.dataset.coverArt || undefined;
@@ -7316,7 +8249,7 @@ function findSongById(songId: string): OpenSubsonicSong | null {
           size: 0,
           suffix: 'mp3',
           bitRate: 0,
-          coverArt: coverArt // Cover Art auch f�r alte Items
+          coverArt: coverArt // Cover Art auch für alte Items
         };
       }
     }
@@ -7481,7 +8414,7 @@ function resetStarHighlight(songId: string) {
   });
 }
 
-// Rating asynchron laden (f�r bessere Performance)
+// Rating asynchron laden (für bessere Performance)
 async function loadRatingAsync(songId: string) {
   if (!openSubsonicClient) return;
   
@@ -7495,7 +8428,7 @@ async function loadRatingAsync(songId: string) {
   }
 }
 
-// Audio Level Monitoring f�r Volume Meter
+// Audio Level Monitoring für Volume Meter
 let volumeMeterIntervals: { [key: string]: NodeJS.Timeout } = {};
 
 function startVolumeMeter(side: 'a' | 'b' | 'c' | 'd' | 'mic') {
@@ -7766,7 +8699,7 @@ function stopVolumeMeter(side: 'a' | 'b' | 'mic') {
 
 // Audio Event Listeners Setup
 function setupAudioEventListeners(audio: HTMLAudioElement, side: 'a' | 'b' | 'c' | 'd') {
-  // Audio zu Mixing-System hinzuf�gen f�r Live-Streaming
+  // Audio zu Mixing-System hinzufügen für Live-Streaming
   audio.addEventListener('loadeddata', () => {
     console.log(`?? TRACK LOADED: ${side} player audio element src: ${audio.src}`);
     setTimeout(async () => {
@@ -7788,8 +8721,8 @@ function setupAudioEventListeners(audio: HTMLAudioElement, side: 'a' | 'b' | 'c'
       }
     }, 0);
   });
-  
-  // ZUS�TZLICH: Sicherstellen dass Verbindung bei Play-Event existiert
+
+  // Zusätzlich: Sicherstellen dass Verbindung bei Play-Event existiert
   audio.addEventListener('play', () => {
     console.log(`🎵 PLAY EVENT: ${side} player starting playback`);
     // Nur verbinden wenn noch nicht verbunden
@@ -8718,7 +9651,7 @@ function applyProgressiveTimerEffects(overlay: HTMLElement, seconds: number) {
   }
 }
 
-// Recent Albums Funktion entfernt - wird nicht mehr ben�tigt
+// Recent Albums Funktion entfernt - wird nicht mehr benötigt
 
 // ======= MEDIA LIBRARY FUNCTIONS =======
 
@@ -10720,7 +11653,7 @@ async function loadRecentAlbums() {
 
   try {
     const albums = await openSubsonicClient.getNewestAlbums(20);
-    console.log(`� Recent albums loaded: ${albums.length} albums`);
+    console.log(`🔍 Recent albums loaded: ${albums.length} albums`);
     
     const mediaItems: MediaItem[] = albums.map((album: OpenSubsonicAlbum) => ({
       id: album.id,

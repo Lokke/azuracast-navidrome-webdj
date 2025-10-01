@@ -357,15 +357,17 @@ export class AzuraCastWebcaster {
     console.log(`   Title: "${metadata.title}"`);
     console.log(`   Station: ${this.config.stationId} (${this.config.serverUrl})`);
 
-    // Send metadata via established WebSocket connection (same as audio streaming)
+    // Try WebSocket first
     if (this.isConnected && this.socket) {
       this.socket.send(JSON.stringify({
         type: "metadata",
         data: metadata
       }));
-      console.log(`📡 [${timestamp}] Sent via WebSocket: ${metadataString}`);
+      console.log(`[${timestamp}] Sent via WebSocket: ${metadataString}`);
     } else {
-      console.log(`❌ [${timestamp}] WebSocket unavailable - metadata not sent (no audio connection)`);
+      // Fallback to HTTP API if available
+      console.log(`🌐 [${timestamp}] WebSocket unavailable, using HTTP API`);
+      this.sendMetadataViaHTTP(metadata);
     }
   }
 

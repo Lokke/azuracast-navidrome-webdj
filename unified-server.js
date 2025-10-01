@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3002;
 
 // Debug: Environment Variables
 console.log('🔍 Environment Debug:');
@@ -169,6 +169,86 @@ app.get('/api/opensubsonic-cover', async (req, res) => {
     } catch (error) {
         console.error(`❌ Cover Art Proxy Error:`, error.message);
         res.status(500).json({ error: 'Proxy Error', details: error.message });
+    }
+});
+
+// AzuraCast Liquidsoap Telnet Proxy für Metadata Updates
+app.post('/api/azuracast-telnet', async (req, res) => {
+    const { serverUrl, stationId, apiKey, command } = req.body;
+    
+    if (!serverUrl || !stationId || !apiKey || !command) {
+        return res.status(400).json({ 
+            error: 'Missing required parameters', 
+            required: ['serverUrl', 'stationId', 'apiKey', 'command'] 
+        });
+    }
+    
+    console.log(`🎭 AzuraCast Telnet Request: Station ${stationId}, Command: ${command}`);
+    
+    try {
+        // Port-Berechnung basierend auf AzuraCast-Logik
+        // Frontend Port = 8000 + ((station_id - 1) * 10)
+        // Stream Port = Frontend Port + 5  
+        // HTTP API Port = Stream Port - 1
+        const frontendPort = 8000 + ((stationId - 1) * 10);
+        const streamPort = frontendPort + 5;
+        const httpApiPort = streamPort - 1;
+        
+        console.log(`📊 Port-Berechnung: Frontend=${frontendPort}, Stream=${streamPort}, HTTP API=${httpApiPort}`);
+        
+        const fetch = (await import('node-fetch')).default;
+        
+        // URL konstruieren - sowohl HTTP als auch HTTPS versuchen
+        const urls = [
+            `${serverUrl.replace(/\/$/, '')}:${httpApiPort}/telnet`,
+            `${serverUrl.replace(/^https?:\/\//, 'http://')}:${httpApiPort}/telnet`,
+            `${serverUrl.replace(/^https?:\/\//, 'https://')}:${httpApiPort}/telnet`
+        ];
+        
+        let lastError = null;
+        
+        for (const targetUrl of urls) {
+            try {
+                console.log(`🔗 Versuche Liquidsoap HTTP API: ${targetUrl}`);
+                
+                const response = await fetch(targetUrl, {
+                    method: 'POST',
+                    headers: {
+                        'x-liquidsoap-api-key': apiKey,
+                        'Content-Type': 'text/plain',
+                        'User-Agent': 'WebDJ-SubCaster-Proxy'
+                    },
+                    body: command,
+                    timeout: 5000
+                });
+                
+                const responseText = await response.text();
+                
+                console.log(`✅ Liquidsoap Response (${response.status}): ${responseText.slice(0, 100)}`);
+                
+                return res.json({
+                    success: response.ok,
+                    status: response.status,
+                    response: responseText,
+                    usedUrl: targetUrl
+                });
+                
+            } catch (error) {
+                lastError = error;
+                console.log(`❌ Liquidsoap API failed for ${targetUrl}: ${error.message}`);
+                continue;
+            }
+        }
+        
+        // Alle URLs fehlgeschlagen
+        throw new Error(`Alle Liquidsoap HTTP API URLs fehlgeschlagen. Letzter Fehler: ${lastError?.message}`);
+        
+    } catch (error) {
+        console.error(`❌ AzuraCast Telnet Proxy Error:`, error.message);
+        res.status(500).json({ 
+            error: 'AzuraCast Telnet Proxy Error', 
+            details: error.message 
+        });
     }
 });
 
@@ -346,12 +426,37 @@ app.get('/api/setup-status', async (req, res) => {
         try {
             const envContent = await fs.readFile(envPath, 'utf8');
             const hasContent = envContent.trim().length > 0;
-            const hasOpenSubsonic = envContent.includes('VITE_OPENSUBSONIC_URL');
-            const hasAzuraCast = envContent.includes('VITE_AZURACAST_SERVERS');
-            const hasStreaming = envContent.includes('STREAM_SERVER');
+            
+            // Parse env content to check for actual values
+            const envLines = envContent.split('\n');
+            const envVars = {};
+            envLines.forEach(line => {
+                const match = line.match(/^([^#=]+)=(.*)$/);
+                if (match) {
+                    envVars[match[1].trim()] = match[2].trim();
+                }
+            });
+            
+            // Check if services have basic configuration (URLs/servers configured, credentials can be empty)
+            const hasOpenSubsonic = !!(envVars['VITE_OPENSUBSONIC_URL']);
+                                       
+            const hasAzuraCast = !!(envVars['VITE_AZURACAST_SERVERS']);
+                                   
+            const hasStreaming = !!(envVars['STREAM_SERVER']);
+            
+            // Check if any service URL/server is configured (credentials optional for runtime login)
+            const isConfigured = hasOpenSubsonic || hasAzuraCast || hasStreaming;
+            
+            console.log(`🔍 Setup Status Check:`, {
+                hasContent,
+                opensubsonic: hasOpenSubsonic,
+                azuracast: hasAzuraCast,
+                streaming: hasStreaming,
+                isConfigured
+            });
             
             res.json({
-                configExists: true,
+                configExists: isConfigured,
                 hasEnvFile: true,
                 hasContent,
                 services: {
@@ -444,10 +549,24 @@ app.use(express.static(path.join(__dirname, 'dist'), {
     }
 }));
 
-app.listen(PORT, '0.0.0.0', () => {
+// Error handling
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌐 Unified SubCaster Server running on Port ${PORT}`);
     console.log(`🎯 Target: ${process.env.STREAM_SERVER || 'funkturm.radio-endstation.de'}:${process.env.STREAM_PORT || '8015'}`);
     console.log(`📡 CORS Proxy: /api/opensubsonic-stream, /api/opensubsonic-cover`);
     console.log(`🔄 Harbor Stream: /api/stream`);
     console.log(`🔄 Mount-Points: ${MOUNT_POINTS.join(', ')}`);
+    console.log(`🚀 Server ready and listening...`);
+});
+
+server.on('error', (error) => {
+    console.error('❌ Server error:', error);
 });

@@ -4672,6 +4672,95 @@ body {
   color: white;
 }
 
+/* Queue Microphone Add Button */
+.queue-mic-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 87, 34, 0.2);
+  padding: 0.2rem 0.4rem;
+  border: 2px solid #FF5722;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  color: #FF5722;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  outline: none;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  min-width: 28px;
+  height: 24px;
+}
+
+.queue-mic-add-btn:hover {
+  border-color: #FF7043;
+  background: rgba(255, 87, 34, 0.3);
+  color: #FF7043;
+  transform: translateY(-1px);
+}
+
+.queue-mic-add-btn:active {
+  transform: translateY(0px);
+  background: rgba(255, 87, 34, 0.4);
+}
+
+.queue-mic-add-btn .material-icons {
+  font-size: 14px;
+  color: inherit;
+}
+
+/* Queue Drag & Drop Styles */
+.queue-drop-indicator {
+  height: 3px;
+  background: linear-gradient(90deg, #00e5ff, #00b0ff);
+  margin: 2px 0;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+.queue-drop-indicator.active {
+  opacity: 1;
+  animation: pulse-drop 1s infinite;
+}
+
+@keyframes pulse-drop {
+  0%, 100% { opacity: 1; transform: scaleY(1); }
+  50% { opacity: 0.7; transform: scaleY(1.5); }
+}
+
+.queue-song-element.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+  z-index: 1000;
+}
+
+.queue-mic-container.dragging {
+  opacity: 0.5;
+  transform: rotate(-2deg);
+  z-index: 1000;
+}
+
+.queue-items-container {
+  position: relative;
+}
+
+.queue-drop-zone {
+  min-height: 2px;
+  transition: all 0.2s ease;
+}
+
+.queue-drop-zone.drag-over {
+  min-height: 20px;
+  background: rgba(0, 229, 255, 0.1);
+  border: 2px dashed #00e5ff;
+  border-radius: 8px;
+  margin: 4px 0;
+}
+
 .queue-items {
   flex: 1;
   overflow-y: auto;
@@ -4680,107 +4769,321 @@ body {
   max-height: 100%;
 }
 
-/* Queue Item Wrapper - contains unified song element + queue controls */
+/* Queue Item Wrapper - Neues kompaktes Design */
 .queue-item-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem;
   margin: 0.125rem 0;
-  border-radius: 3px;
-  transition: background-color 0.2s ease;
-  cursor: grab;
-}
-
-.queue-item-wrapper:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.queue-item-wrapper:active {
-  cursor: grabbing;
-}
-
-.queue-number {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  color: #888;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-radius: 50%;
-}
-
-.queue-item-wrapper .music-card {
-  flex: 1;
-  margin: 0;
-  padding: 0.25rem;
-}
-
-.queue-remove {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: #666;
-  cursor: pointer;
-  border-radius: 50%;
+  padding: 0;
   transition: all 0.2s ease;
 }
 
-.queue-remove:hover {
-  background: rgba(255, 0, 0, 0.2);
-  color: #ff4444;
+.queue-item-wrapper:hover {
+  transform: translateY(-1px);
 }
 
-/* Queue Item Deck Assignment Indicator */
-.queue-item-wrapper.assigned-to-deck {
-  border-left: 4px solid #64FFDA;
-  background: rgba(100, 255, 218, 0.05);
+/* Queue Song Container - Stream-Button Style */
+.queue-song-container,
+.queue-mic-container {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
-.queue-item-wrapper.assigned-to-deck::before {
-  content: attr(data-assigned-deck);
-  position: absolute;
-  left: -2px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: #64FFDA;
-  color: #000;
-  padding: 2px 6px;
-  border-radius: 0 12px 12px 0;
-  font-size: 10px;
-  font-weight: bold;
+/* Queue Song Button - Basiert auf stream-live-indicator */
+.queue-song-button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0.3rem 0.6rem;
+  border: 2px solid #444;
+  border-radius: 2px;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: grab;
+  transition: all 0.2s ease;
+  position: relative;
+  outline: none;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.queue-song-button:hover {
+  border-color: #666;
+  background: rgba(0, 0, 0, 0.85);
+  transform: translateY(-1px);
+}
+
+.queue-song-button:active {
+  cursor: grabbing;
+  transform: translateY(0);
+}
+
+.queue-song-button.dragging {
+  opacity: 0.6;
+  transform: rotate(2deg);
+}
+
+/* Queue Song Icon */
+.queue-song-icon {
+  font-size: 14px;
+  color: #888;
+  flex-shrink: 0;
+}
+
+/* Queue Song Info Container */
+.queue-song-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Queue Song Title */
+.queue-song-title {
+  color: #fff;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+/* Queue Song Artist */
+.queue-song-artist {
+  color: #aaa;
+  font-weight: 400;
+  font-size: 9px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-transform: uppercase;
-  z-index: 10;
+  letter-spacing: 0.4px;
 }
 
-.queue-item-wrapper.assigned-to-deck[data-assigned-deck="a"]::before {
-  background: var(--player-a-color, #64FFDA);
+/* Queue Song Remove Button - Stream-Reset-Button Style */
+.queue-song-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  background: rgba(40, 10, 10, 0.9);
+  padding: 0.2rem 0.3rem;
+  border: 2px solid #664444;
+  border-left: none;
+  clip-path: polygon(0% 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  color: #cc6666;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  outline: none;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  margin-left: -8px;
 }
 
-.queue-item-wrapper.assigned-to-deck[data-assigned-deck="b"]::before {
-  background: var(--player-b-color, #FF6B6B);
+.queue-song-remove:hover {
+  border-color: #886666;
+  background: rgba(60, 15, 15, 0.95);
+  color: #ff4444;
+  transform: translateY(-1px);
 }
 
-.queue-item-wrapper.assigned-to-deck[data-assigned-deck="c"]::before {
-  background: var(--player-c-color, #4ECDC4);
+.queue-song-remove:active {
+  transform: translateY(0px);
+  background: rgba(30, 8, 8, 0.95);
 }
 
-.queue-item-wrapper.assigned-to-deck[data-assigned-deck="d"]::before {
-  background: var(--player-d-color, #45B7D1);
+.queue-song-remove .material-icons {
+  font-size: 12px;
+  color: inherit;
+}
+
+/* Queue Microphone Button - Special Style */
+.queue-mic-button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 87, 34, 0.2);
+  padding: 0.3rem 0.6rem;
+  border: 2px solid #FF5722;
+  border-radius: 2px;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: grab;
+  transition: all 0.2s ease;
+  position: relative;
+  outline: none;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.queue-mic-button:hover {
+  border-color: #FF7043;
+  background: rgba(255, 87, 34, 0.3);
+  transform: translateY(-1px);
+}
+
+.queue-mic-button:active {
+  cursor: grabbing;
+  transform: translateY(0);
+}
+
+.queue-mic-button.dragging {
+  opacity: 0.6;
+  transform: rotate(2deg);
+}
+
+/* Queue Microphone Icon */
+.queue-mic-icon {
+  font-size: 14px;
+  color: #FF5722;
+  flex-shrink: 0;
+}
+
+/* Queue Microphone Info Container */
+.queue-mic-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Queue Microphone Title */
+.queue-mic-title {
+  color: #FF5722;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* Queue Microphone Subtitle */
+.queue-mic-subtitle {
+  color: #FF8A65;
+  font-weight: 400;
+  font-size: 9px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Queue Drag States */
+.queue-item-wrapper[draggable="true"] {
+  cursor: grab;
+}
+
+.queue-item-wrapper[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.queue-item-wrapper.dragging .queue-song-button {
+  opacity: 0.6;
+  transform: rotate(2deg) scale(0.98);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Queue Item Deck Assignment Indicator - Neues Design für Stream-Button Style */
+.queue-item-wrapper.assigned-to-deck .queue-song-button {
+  border-color: #64FFDA;
+  background: rgba(100, 255, 218, 0.15);
+}
+
+.queue-item-wrapper.assigned-to-deck .queue-song-icon {
+  color: #64FFDA;
+}
+
+.queue-item-wrapper.assigned-to-deck .queue-song-title {
+  color: #64FFDA;
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="a"] .queue-song-button {
+  border-color: var(--player-a-color, #64FFDA);
+  background: rgba(100, 255, 218, 0.15);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="a"] .queue-song-icon,
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="a"] .queue-song-title {
+  color: var(--player-a-color, #64FFDA);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="b"] .queue-song-button {
+  border-color: var(--player-b-color, #FF6B6B);
+  background: rgba(255, 107, 107, 0.15);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="b"] .queue-song-icon,
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="b"] .queue-song-title {
+  color: var(--player-b-color, #FF6B6B);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="c"] .queue-song-button {
+  border-color: var(--player-c-color, #4ECDC4);
+  background: rgba(78, 205, 196, 0.15);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="c"] .queue-song-icon,
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="c"] .queue-song-title {
+  color: var(--player-c-color, #4ECDC4);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="d"] .queue-song-button {
+  border-color: var(--player-d-color, #45B7D1);
+  background: rgba(69, 183, 209, 0.15);
+}
+
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="d"] .queue-song-icon,
+.queue-item-wrapper.assigned-to-deck[data-assigned-deck="d"] .queue-song-title {
+  color: var(--player-d-color, #45B7D1);
 }
 
 .queue-items.drag-over {
   border: 2px dashed #00ff88;
   background: rgba(0, 255, 136, 0.1);
+}
+
+/* Queue Drag & Drop Reordering Indicators */
+.queue-item-wrapper.drop-before {
+  border-top: 3px solid #ff6b35;
+  margin-top: 3px;
+  box-shadow: 0 -3px 10px rgba(255, 107, 53, 0.4);
+}
+
+.queue-item-wrapper.drop-after {
+  border-bottom: 3px solid #ff6b35;
+  margin-bottom: 3px;
+  box-shadow: 0 3px 10px rgba(255, 107, 53, 0.4);
+}
+
+.queue-item-wrapper.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  transition: all 0.2s ease;
 }
 
 .queue-empty {
