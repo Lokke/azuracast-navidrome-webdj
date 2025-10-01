@@ -11970,3 +11970,227 @@ document.addEventListener('keydown', (e) => {
 });
 
 console.log('🎧 SubCaster initialized successfully!');
+
+// =====================================
+// GITHUB CAT WITH CRT EFFECTS
+// =====================================
+
+class GitHubCat {
+  private catElement: HTMLElement | null = null;
+  private isAnimating: boolean = false;
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private dataArray: Uint8Array | null = null;
+  private animationFrame: number = 0;
+
+  constructor() {
+    this.initializeCat();
+  }
+
+  private initializeCat() {
+    this.catElement = document.getElementById('github-cat');
+    if (!this.catElement) return;
+
+    // Click handler to open GitHub repository
+    this.catElement.addEventListener('click', () => {
+      window.open('https://github.com/Lokke/subcaster', '_blank');
+    });
+
+    // Start monitoring audio activity
+    this.monitorAudioActivity();
+  }
+
+  private async monitorAudioActivity() {
+    try {
+      // Get audio context from any active deck
+      const playerA = document.getElementById('player-a-audio') as HTMLAudioElement;
+      const playerB = document.getElementById('player-b-audio') as HTMLAudioElement;
+      const playerC = document.getElementById('player-c-audio') as HTMLAudioElement;
+      const playerD = document.getElementById('player-d-audio') as HTMLAudioElement;
+
+      // Monitor all players for audio activity
+      const players = [playerA, playerB, playerC, playerD].filter(p => p);
+      
+      players.forEach(player => {
+        if (player) {
+          player.addEventListener('play', () => this.startAnimation());
+          player.addEventListener('pause', () => this.checkStopAnimation());
+          player.addEventListener('ended', () => this.checkStopAnimation());
+        }
+      });
+
+      // Also check for live radio stream
+      const radioWaveform = document.querySelector('.live-radio-waveform');
+      if (radioWaveform) {
+        // Start animation when live radio is active
+        const observer = new MutationObserver(() => {
+          if (radioWaveform.classList.contains('active')) {
+            this.startAnimation();
+          } else {
+            this.checkStopAnimation();
+          }
+        });
+        observer.observe(radioWaveform, { attributes: true, attributeFilter: ['class'] });
+      }
+
+      // Monitor microphone activity
+      this.monitorMicrophoneActivity();
+
+    } catch (error) {
+      console.log('🐱 GitHub Cat: Could not set up audio monitoring:', error);
+    }
+  }
+
+  private monitorMicrophoneActivity() {
+    // Check for microphone toggle button
+    const micButton = document.getElementById('mic-toggle');
+    if (micButton) {
+      const observer = new MutationObserver(() => {
+        if (micButton.classList.contains('active')) {
+          this.startAnimation();
+        } else {
+          this.checkStopAnimation();
+        }
+      });
+      observer.observe(micButton, { attributes: true, attributeFilter: ['class'] });
+    }
+  }
+
+  private startAnimation() {
+    if (this.isAnimating || !this.catElement) return;
+    
+    console.log('🐱 GitHub Cat: Starting CRT animation');
+    this.isAnimating = true;
+    this.catElement.classList.add('playing');
+    
+    // Add some randomness to the animation
+    this.addRandomGlitches();
+  }
+
+  private checkStopAnimation() {
+    // Check if any audio is still playing
+    const playerA = document.getElementById('player-a-audio') as HTMLAudioElement;
+    const playerB = document.getElementById('player-b-audio') as HTMLAudioElement;
+    const playerC = document.getElementById('player-c-audio') as HTMLAudioElement;
+    const playerD = document.getElementById('player-d-audio') as HTMLAudioElement;
+    const micButton = document.getElementById('mic-toggle');
+    const radioWaveform = document.querySelector('.live-radio-waveform');
+
+    const anyPlayerPlaying = [playerA, playerB, playerC, playerD]
+      .filter(p => p)
+      .some(player => !player.paused);
+
+    const micActive = micButton?.classList.contains('active') || false;
+    const radioActive = radioWaveform?.classList.contains('active') || false;
+
+    if (!anyPlayerPlaying && !micActive && !radioActive) {
+      this.stopAnimation();
+    }
+  }
+
+  private stopAnimation() {
+    if (!this.isAnimating || !this.catElement) return;
+    
+    console.log('🐱 GitHub Cat: Stopping CRT animation');
+    this.isAnimating = false;
+    this.catElement.classList.remove('playing');
+    
+    if (this.animationFrame) {
+      cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = 0;
+    }
+  }
+
+  private addRandomGlitches() {
+    if (!this.isAnimating || !this.catElement) return;
+
+    // More frequent, irregular glitch intervals (old CRT behavior)
+    const glitchInterval = Math.random() * 2000 + 500; // 0.5-2.5 seconds
+    
+    setTimeout(() => {
+      if (this.isAnimating && this.catElement) {
+        const glitchType = Math.random();
+        
+        if (glitchType < 0.3) {
+          // Power fluctuation glitch
+          this.catElement.style.filter = `
+            brightness(${0.3 + Math.random() * 0.4})
+            contrast(${1.8 + Math.random() * 0.5})
+            drop-shadow(0 0 8px rgba(0, 150, 0, 0.6))
+          `;
+          this.catElement.style.transform = `scaleY(${0.8 + Math.random() * 0.4})`;
+          
+        } else if (glitchType < 0.6) {
+          // Color separation glitch (RGB shift)
+          const redShift = Math.random() * 6 - 3;
+          const blueShift = Math.random() * 6 - 3;
+          this.catElement.style.filter = `
+            drop-shadow(${redShift}px 0 3px rgba(255, 0, 0, 0.7))
+            drop-shadow(${blueShift}px 0 3px rgba(0, 0, 255, 0.7))
+            drop-shadow(0 0 4px rgba(0, 255, 0, 0.4))
+            hue-rotate(${Math.random() * 180 - 90}deg)
+          `;
+          
+        } else if (glitchType < 0.8) {
+          // Horizontal sync issues
+          this.catElement.style.transform = `
+            translateX(${Math.random() * 20 - 10}px)
+            skewX(${Math.random() * 6 - 3}deg)
+            scaleX(${0.7 + Math.random() * 0.6})
+          `;
+          this.catElement.style.filter = `
+            contrast(2)
+            brightness(0.4)
+            saturate(2)
+          `;
+          
+        } else {
+          // Severe interference
+          this.catElement.style.filter = `
+            invert(${Math.random() > 0.5 ? 1 : 0})
+            contrast(${2 + Math.random()})
+            brightness(${0.2 + Math.random() * 0.8})
+            hue-rotate(${Math.random() * 360}deg)
+            drop-shadow(0 0 15px rgba(255, 255, 255, 0.8))
+          `;
+          this.catElement.style.transform = `
+            translate(${Math.random() * 8 - 4}px, ${Math.random() * 8 - 4}px)
+            rotate(${Math.random() * 10 - 5}deg)
+            scale(${0.8 + Math.random() * 0.4})
+          `;
+        }
+
+        // Reset after random short duration
+        const resetTime = 50 + Math.random() * 300;
+        setTimeout(() => {
+          if (this.catElement) {
+            this.catElement.style.filter = '';
+            this.catElement.style.transform = '';
+          }
+        }, resetTime);
+
+        // Schedule next glitch with varying probability
+        if (Math.random() < 0.9) { // 90% chance to continue glitching
+          this.addRandomGlitches();
+        } else {
+          // Sometimes take a longer break
+          setTimeout(() => this.addRandomGlitches(), 2000 + Math.random() * 3000);
+        }
+      }
+    }, glitchInterval);
+  }
+
+  // Public method to manually trigger animation (for testing)
+  public triggerGlitch() {
+    if (this.catElement) {
+      this.startAnimation();
+      setTimeout(() => this.stopAnimation(), 3000);
+    }
+  }
+}
+
+// Initialize GitHub Cat
+const githubCat = new GitHubCat();
+
+// Make it globally available for debugging
+(window as any).githubCat = githubCat;
